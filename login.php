@@ -47,7 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     top: 18px;
     left: 18px;
     z-index: 1000;
-    font-size: 30px;
+    font-size: 32px;
     font-weight: bold;
     color: #1f5ad1;
 }
