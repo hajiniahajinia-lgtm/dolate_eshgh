@@ -1,0 +1,29 @@
+name: Test InfinityFree FTP deployment
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy-dry-run:
+    name: Check FTP deployment (no files uploaded)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Test FTP deployment without uploading
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          server-dir: ${{ secrets.FTP_SERVER_DIR }}
+          local-dir: ./
+          dry-run: true
+          exclude: |
+            **/.git*
+            **/.github/**
+            **/node_modules/**
+            **/*.sql
+            db.php
+            README*
