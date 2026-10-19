@@ -4,34 +4,19 @@ on:
   workflow_dispatch:
 
 jobs:
-  deploy-dry-run:
-    name: Check FTP deployment (no files uploaded)
+  deploy-test-file:
+    name: Upload one harmless test file
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Test FTP deployment without uploading
+      - name: Upload only the test file
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: ${{ secrets.FTP_SERVER }}
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
           server-dir: ${{ secrets.FTP_SERVER_DIR }}
-          local-dir: ./
-          dry-run: true
-          exclude: |
-            **/.git/**
-            **/.git*
-            .git/**
-            .github/**
-            **/.github/**
-            **/node_modules/**
-            **/*.sql
-            db.php
-            README*
-            **/.github/**
-            **/node_modules/**
-            **/*.sql
-            db.php
-            README*
+          local-dir: ./ftp-test/
+          dry-run: false
