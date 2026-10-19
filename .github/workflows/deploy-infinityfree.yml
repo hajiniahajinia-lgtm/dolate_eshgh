@@ -21,7 +21,15 @@ jobs:
           local-dir: ./
           dry-run: true
           exclude: |
+            **/.git/**
             **/.git*
+            .git/**
+            .github/**
+            **/.github/**
+            **/node_modules/**
+            **/*.sql
+            db.php
+            README*
             **/.github/**
             **/node_modules/**
             **/*.sql
