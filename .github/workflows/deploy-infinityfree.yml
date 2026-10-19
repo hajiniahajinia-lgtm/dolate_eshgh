@@ -1,30 +1,25 @@
-name: Deploy InfinityFree website
+name: Test single-file transfer to InfinityFree
 
 on:
   workflow_dispatch:
 
 jobs:
-  deploy-website:
-    name: Deploy website files
+  upload-test-file:
+    name: Upload only the test file
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Upload website files
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
-        with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          server-dir: ${{ secrets.FTP_SERVER_DIR }}
-          local-dir: ./
-          dry-run: false
-          exclude: |
-            **/.git*
-            **/.github/**
-            **/node_modules/**
-            **/*.sql
-            **/db.php
-            **/README*
-            ftp-test/**
+      - name: Upload one test file only
+        env:
+          FTP_SERVER: ${{ secrets.FTP_SERVER }}
+          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+          FTP_SERVER_DIR: ${{ secrets.FTP_SERVER_DIR }}
+        run: |
+          set -eu
+          curl --fail --show-error --silent --ftp-create-dirs \
+            --user "$FTP_USERNAME:$FTP_PASSWORD" \
+            --upload-file "deployment-test/transfer-test.txt" \
+            "ftp://${FTP_SERVER}${FTP_SERVER_DIR%/}/transfer-test.txt"
