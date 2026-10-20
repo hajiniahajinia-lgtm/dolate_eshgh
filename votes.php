@@ -217,7 +217,7 @@ while($row = $finalize_res->fetch_assoc()){
             SELECT id, content, user_id
             FROM ideas
             WHERE topic_id=$tid
-            ORDER BY created_at DESC, id ASC
+            ORDER BY idea_rationality DESC, id ASC
             LIMIT 1
         ");
 
