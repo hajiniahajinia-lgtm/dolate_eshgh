@@ -394,8 +394,8 @@ body{
     padding:8px 12px;
     border-radius:6px;
     border:none;
-    background:#2065d1;
-    color:#fff;
+    background:#f1c40f;
+    color:#333;
     cursor:pointer;
     font-size:14px;
 }
