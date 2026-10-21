@@ -238,29 +238,7 @@ while($row = $finalize_res->fetch_assoc()){
             $best_data = $best->fetch_assoc();
             $idea_id = (int)$best_data['id'];
 
-            // محاسبهٔ آمار رأی ایدهٔ برنده برای سازگاری با ستون‌های اجباری topic_winners
-            $winner_stats = $conn->query("
-                SELECT
-                    COUNT(*) AS total_votes,
-                    COALESCE(SUM(vote_type = 'yes'), 0) AS yes_votes
-                FROM topic_voting_ballots
-                WHERE topic_id = $tid AND idea_id = $idea_id
-            ")->fetch_assoc();
-            $winner_total_votes = (int)$winner_stats['total_votes'];
-            $winner_percent = $winner_total_votes > 0
-                ? round(((int)$winner_stats['yes_votes'] / $winner_total_votes) * 100, 2)
-                : 0;
-            $winner_enforce_stats = $conn->query("
-                SELECT
-                    COALESCE(SUM(enforceable = 1), 0) AS enforce_count,
-                    COALESCE(SUM(enforceable = 0), 0) AS non_enforce_count
-                FROM topic_enforce_votes
-                WHERE topic_id = $tid AND idea_id = $idea_id
-            ")->fetch_assoc();
-            $winner_enforceable = ((int)$winner_enforce_stats['enforce_count'] > (int)$winner_enforce_stats['non_enforce_count']) ? 1 : 0;
-
-            // topic_winners در نسخهٔ فعلی ستون‌های percent و total_votes اجباری دارد؛
-            // ابتدا بررسی می‌کنیم برنده‌ای برای این موضوع ثبت شده است یا نه.
+            // جدول topic_winners در پایگاه دادهٔ فعلی فقط ستون‌های id, topic_id, idea_id و selected_at را دارد.
             $winner_check = $conn->prepare("SELECT id FROM topic_winners WHERE topic_id=? LIMIT 1");
             $winner_check->bind_param("i", $tid);
             $winner_check->execute();
@@ -268,18 +246,17 @@ while($row = $finalize_res->fetch_assoc()){
             $winner_check->close();
 
             if ($existing_winner) {
-                $winner_update = $conn->prepare("UPDATE topic_winners SET idea_id=?, percent=?, total_votes=?, decided_at=NOW(), enforceable=? WHERE id=?");
                 $winner_row_id = (int)$existing_winner['id'];
-                $winner_update->bind_param("idiii", $idea_id, $winner_percent, $winner_total_votes, $winner_enforceable, $winner_row_id);
+                $winner_update = $conn->prepare("UPDATE topic_winners SET idea_id=?, selected_at=NOW() WHERE id=?");
+                $winner_update->bind_param("ii", $idea_id, $winner_row_id);
                 $winner_update->execute();
                 $winner_update->close();
             } else {
-                $winner_insert = $conn->prepare("INSERT INTO topic_winners (topic_id, idea_id, percent, total_votes, decided_at, enforceable) VALUES (?, ?, ?, ?, NOW(), ?)");
-                $winner_insert->bind_param("iidii", $tid, $idea_id, $winner_percent, $winner_total_votes, $winner_enforceable);
+                $winner_insert = $conn->prepare("INSERT INTO topic_winners (topic_id, idea_id, selected_at) VALUES (?, ?, NOW())");
+                $winner_insert->bind_param("ii", $tid, $idea_id);
                 $winner_insert->execute();
                 $winner_insert->close();
-            }
-        }
+            }        }
 
         // ==========================
         // 3️⃣ — نهایی‌سازی meta
