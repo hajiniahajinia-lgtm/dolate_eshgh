@@ -250,7 +250,14 @@ while($row = $finalize_res->fetch_assoc()){
             $winner_percent = $winner_total_votes > 0
                 ? round(((int)$winner_stats['yes_votes'] / $winner_total_votes) * 100, 2)
                 : 0;
-            $winner_enforceable = ($enforce_count > $non_enforce_count) ? 1 : 0;
+            $winner_enforce_stats = $conn->query("
+                SELECT
+                    COALESCE(SUM(enforceable = 1), 0) AS enforce_count,
+                    COALESCE(SUM(enforceable = 0), 0) AS non_enforce_count
+                FROM topic_enforce_votes
+                WHERE topic_id = $tid AND idea_id = $idea_id
+            ")->fetch_assoc();
+            $winner_enforceable = ((int)$winner_enforce_stats['enforce_count'] > (int)$winner_enforce_stats['non_enforce_count']) ? 1 : 0;
 
             // topic_winners در نسخهٔ فعلی ستون‌های percent و total_votes اجباری دارد؛
             // ابتدا بررسی می‌کنیم برنده‌ای برای این موضوع ثبت شده است یا نه.
