@@ -30,6 +30,19 @@ CREATE TABLE IF NOT EXISTS topic_enforce_votes (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ");
 
+// جدول آمار لازم‌الاجرا؛ در نسخهٔ پایگاه دادهٔ قدیمی ممکن است هنوز وجود نداشته باشد.
+$conn->query("
+CREATE TABLE IF NOT EXISTS topic_enforce_stats (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  topic_id INT NOT NULL,
+  idea_id INT NOT NULL,
+  enforce_count INT NOT NULL DEFAULT 0,
+  non_enforce_count INT NOT NULL DEFAULT 0,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_topic_idea_enforce_stats (topic_id, idea_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+");
+
 // (existing tables creation in your code were left intact — ensure they exist)
 // if topic_voting_ballots/topic_voting_meta/topic_winners not present, previous code creates them
 
@@ -225,12 +238,40 @@ while($row = $finalize_res->fetch_assoc()){
             $best_data = $best->fetch_assoc();
             $idea_id = (int)$best_data['id'];
 
-            // ذخیره برنده در جدول topic_winners
-            $conn->query("
-                INSERT INTO topic_winners (topic_id, idea_id)
-                VALUES ($tid, $idea_id)
-                ON DUPLICATE KEY UPDATE idea_id = VALUES(idea_id)
-            ");
+            // محاسبهٔ آمار رأی ایدهٔ برنده برای سازگاری با ستون‌های اجباری topic_winners
+            $winner_stats = $conn->query("
+                SELECT
+                    COUNT(*) AS total_votes,
+                    COALESCE(SUM(vote_type = 'yes'), 0) AS yes_votes
+                FROM topic_voting_ballots
+                WHERE topic_id = $tid AND idea_id = $idea_id
+            ")->fetch_assoc();
+            $winner_total_votes = (int)$winner_stats['total_votes'];
+            $winner_percent = $winner_total_votes > 0
+                ? round(((int)$winner_stats['yes_votes'] / $winner_total_votes) * 100, 2)
+                : 0;
+            $winner_enforceable = ($enforce_count > $non_enforce_count) ? 1 : 0;
+
+            // topic_winners در نسخهٔ فعلی ستون‌های percent و total_votes اجباری دارد؛
+            // ابتدا بررسی می‌کنیم برنده‌ای برای این موضوع ثبت شده است یا نه.
+            $winner_check = $conn->prepare("SELECT id FROM topic_winners WHERE topic_id=? LIMIT 1");
+            $winner_check->bind_param("i", $tid);
+            $winner_check->execute();
+            $existing_winner = $winner_check->get_result()->fetch_assoc();
+            $winner_check->close();
+
+            if ($existing_winner) {
+                $winner_update = $conn->prepare("UPDATE topic_winners SET idea_id=?, percent=?, total_votes=?, decided_at=NOW(), enforceable=? WHERE id=?");
+                $winner_row_id = (int)$existing_winner['id'];
+                $winner_update->bind_param("idiii", $idea_id, $winner_percent, $winner_total_votes, $winner_enforceable, $winner_row_id);
+                $winner_update->execute();
+                $winner_update->close();
+            } else {
+                $winner_insert = $conn->prepare("INSERT INTO topic_winners (topic_id, idea_id, percent, total_votes, decided_at, enforceable) VALUES (?, ?, ?, ?, NOW(), ?)");
+                $winner_insert->bind_param("iidii", $tid, $idea_id, $winner_percent, $winner_total_votes, $winner_enforceable);
+                $winner_insert->execute();
+                $winner_insert->close();
+            }
         }
 
         // ==========================
