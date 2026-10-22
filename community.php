@@ -77,6 +77,17 @@ $topics_check->close();
 body{font-family:tahoma, Arial, sans-serif;background:#eef3f8;margin:0;padding:12px;}
 .container{max-width:960px;margin:0 auto;padding:0 6px;}
 .box, .card-form, .card{background:#fff;border:1px solid #ccc;border-radius:10px;padding:14px;margin-bottom:16px;box-shadow:0 2px 5px rgba(0,0,0,0.05);}
+/* پس‌زمینه رنگین‌کمانی ملایم برای سربرگ جامعه */
+.community-header{
+    background:linear-gradient(125deg,
+        #fff7f8 0%,
+        #fff9ef 20%,
+        #f7fff2 40%,
+        #f0fbff 60%,
+        #f6f2ff 80%,
+        #fff5fb 100%);
+    border-color:#e2dff0;
+}
 
 h2,h3{margin-top:0;}
 input,select,textarea,button{box-sizing:border-box;}
