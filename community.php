@@ -107,6 +107,18 @@ textarea{resize:vertical;}
 .tooltip-box{position:absolute;top:26px;left:0;background:#fff;border:1px solid #ccc;border-radius:8px;padding:8px;min-width:180px;z-index:1000;box-shadow:0 2px 6px rgba(0,0,0,0.15);font-size:13px;display:none;}
 
 .card-form h3{margin-top:0;margin-bottom:8px;}
+.topic-picker{position:relative;margin-top:6px}
+.topic-picker-button{width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;text-align:right;background:#fff;color:#263238;border:1px solid #bbb;padding:10px 12px;border-radius:7px;font:inherit;line-height:1.8;margin:0;min-height:44px}
+.topic-picker-button:focus,.topic-picker-option:focus{outline:2px solid #2065d1;outline-offset:2px}
+.topic-picker-arrow{flex:0 0 auto;color:#2065d1}
+.topic-picker-list{position:absolute;top:calc(100% + 4px);right:0;left:0;z-index:1200;max-height:280px;overflow-y:auto;background:#fff;border:1px solid #aebbb0;border-radius:8px;box-shadow:0 5px 16px rgba(0,0,0,.14);padding:5px}
+.topic-picker-list[hidden]{display:none}
+.topic-picker-option{display:flex;align-items:flex-start;gap:9px;width:100%;text-align:right;white-space:normal;overflow-wrap:anywhere;word-break:normal;line-height:1.9;background:#fff;color:#26352b;border:0;border-radius:5px;padding:9px 8px;margin:0;font:inherit;cursor:pointer}
+.topic-picker-option:hover,.topic-picker-option:focus{background:#eef7ff;color:#164e9a}
+.topic-picker-marker{flex:0 0 auto;color:#2065d1;font-size:12px;padding-top:4px}
+.topic-picker-title{display:block;flex:1;min-width:0;white-space:normal;overflow-wrap:anywhere}
+.topic-picker-error{color:#c0392b;font-size:13px;margin:5px 0 0}
+
 .card-form input,.card-form select,.card-form textarea,.card-form button{margin-top:6px;}
 .card{background:#f7f8fa;border:1px solid #ccc;text-align:center;padding:14px;border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,0.04);}
 
@@ -173,9 +185,14 @@ textarea{resize:vertical;}
   <h3>ثبت ایده</h3>
   <form action="add_idea.php" method="post">
     <input type="hidden" name="community_id" value="<?= (int)$community['id'] ?>">
-    <label>انتخاب موضوع*</label>
-    <select name="topic_id" required>
-      <option value="">انتخاب موضوع...</option>
+    <label for="topic-picker-button">انتخاب موضوع*</label>
+    <div class="topic-picker" id="topic-picker">
+      <input type="hidden" name="topic_id" id="selected-topic-id" value="">
+      <button type="button" class="topic-picker-button" id="topic-picker-button" aria-haspopup="listbox" aria-expanded="false">
+        <span id="selected-topic-label">انتخاب موضوع...</span>
+        <span class="topic-picker-arrow" aria-hidden="true">▾</span>
+      </button>
+      <div class="topic-picker-list" id="topic-picker-list" role="listbox" aria-label="موضوع‌ها" hidden>
       <?php
       $tq = $conn->prepare("SELECT id,title FROM topics WHERE community_id=? ORDER BY id DESC");
       $tq->bind_param("i",$community['id']);
@@ -183,9 +200,14 @@ textarea{resize:vertical;}
       $tres = $tq->get_result();
       while($tt = $tres->fetch_assoc()):
       ?>
-      <option value="<?= (int)$tt['id'] ?>"><?= htmlspecialchars($tt['title']) ?></option>
+        <button type="button" class="topic-picker-option" role="option" data-topic-id="<?= (int)$tt['id'] ?>">
+          <span class="topic-picker-marker" aria-hidden="true">◆</span>
+          <span class="topic-picker-title"><?= htmlspecialchars($tt['title'], ENT_QUOTES, 'UTF-8') ?></span>
+        </button>
       <?php endwhile; $tq->close(); ?>
-    </select>
+      </div>
+      <p class="topic-picker-error" id="topic-picker-error" role="alert" hidden>لطفاً یک موضوع انتخاب کنید.</p>
+    </div>
     <label>متن ایده</label>
     <textarea name="idea_text" rows="4" required placeholder="ایده خود را بنویسید..."></textarea>
     <button type="submit">✅ ثبت ایده</button>
@@ -397,6 +419,57 @@ $losers_count  = (int)$arch_stats['losers'];
 
 <script>
 document.addEventListener("DOMContentLoaded", function() {
+    // ===== انتخاب موضوع با علامت و متن چندسطری =====
+    const topicPicker = document.getElementById('topic-picker');
+    if (topicPicker) {
+        const pickerButton = document.getElementById('topic-picker-button');
+        const pickerList = document.getElementById('topic-picker-list');
+        const selectedId = document.getElementById('selected-topic-id');
+        const selectedLabel = document.getElementById('selected-topic-label');
+        const pickerError = document.getElementById('topic-picker-error');
+        const ideaForm = topicPicker.closest('form');
+
+        pickerButton.addEventListener('click', function() {
+            const willOpen = pickerList.hidden;
+            pickerList.hidden = !willOpen;
+            pickerButton.setAttribute('aria-expanded', String(willOpen));
+        });
+
+        pickerList.querySelectorAll('.topic-picker-option').forEach(function(option) {
+            option.addEventListener('click', function() {
+                selectedId.value = option.dataset.topicId;
+                selectedLabel.textContent = option.querySelector('.topic-picker-title').textContent;
+                pickerList.querySelectorAll('.topic-picker-option').forEach(function(item) {
+                    item.setAttribute('aria-selected', String(item === option));
+                });
+                pickerError.hidden = true;
+                pickerList.hidden = true;
+                pickerButton.setAttribute('aria-expanded', 'false');
+                pickerButton.focus();
+            });
+        });
+
+        document.addEventListener('click', function(event) {
+            if (!topicPicker.contains(event.target)) {
+                pickerList.hidden = true;
+                pickerButton.setAttribute('aria-expanded', 'false');
+            }
+        });
+
+        if (ideaForm) {
+            ideaForm.addEventListener('submit', function(event) {
+                if (!selectedId.value) {
+                    event.preventDefault();
+                    pickerError.hidden = false;
+                    pickerList.hidden = false;
+                    pickerButton.setAttribute('aria-expanded', 'true');
+                    pickerButton.focus();
+                }
+            });
+        }
+    }
+
+
     // ===== شمارش معکوس =====
     document.querySelectorAll(".countdown").forEach(function(el) {
         let initial = parseInt(el.dataset.remaining, 10) || 0;
