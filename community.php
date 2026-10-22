@@ -100,6 +100,9 @@ textarea{resize:vertical;}
 .topic-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
 .topic-actions form{display:inline-flex;align-items:center;gap:6px;}
 .priority-btn, .urgency-btn{padding:6px 10px;font-size:13px;border-radius:6px;cursor:pointer;}
+.action-tooltip{position:relative;display:inline-flex;align-items:center;}
+.action-tooltip-text{display:none;position:absolute;top:calc(100% + 7px);right:0;width:270px;max-width:calc(100vw - 48px);padding:9px 11px;background:#fff;color:#263238;border:1px solid #b8c7d8;border-radius:8px;box-shadow:0 4px 14px rgba(0,0,0,.16);font-size:12px;line-height:1.9;font-weight:normal;text-align:right;white-space:normal;z-index:2000;}
+.action-tooltip:hover .action-tooltip-text,.action-tooltip:focus-within .action-tooltip-text{display:block;}
 .urgency-input{width:60px;text-align:center;padding:6px;font-size:13px;}
 .ideas-box{margin-top:10px;background:#fff;padding:10px;border-radius:8px;border:1px solid #ddd;max-height:200px;overflow-y:auto;}
 .idea{background:#fff;border:1px solid #e0f0ff;border-radius:8px;padding:10px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:flex-start;gap:8px;}
@@ -286,15 +289,21 @@ if ($remaining_seconds < 0) $remaining_seconds = 0;
       <form action="toggle_priority.php" method="POST" style="display:inline;">
           <input type="hidden" name="topic_id" value="<?= $tid ?>">
           <input type="hidden" name="community_id" value="<?= $community['id'] ?>">
-          <button type="submit" style="background:<?= $user_has_priority ? '#f1c40f' : '#ccc' ?>;">
-              ⭐ اولویت
-          </button>
+          <span class="action-tooltip">
+            <button type="submit" title="اولویت موضوع را ثبت یا لغو می‌کند؛ مجموع اولویت اعضا در مرتب‌سازی موضوعات اثر دارد." style="background:<?= $user_has_priority ? '#f1c40f' : '#ccc' ?>;">
+                ⭐ اولویت
+            </button>
+            <span class="action-tooltip-text" role="tooltip">با ثبت اولویت، اهمیت این موضوع را برای جامعه نشان می‌دهید. موضوع‌ها بر اساس مجموع اولویت اعضا مرتب می‌شوند؛ با کلیک دوباره می‌توانید اولویت خود را لغو کنید.</span>
+          </span>
       </form>
       <form action="update_urgency.php" method="post">
         <input type="hidden" name="topic_id" value="<?= $tid ?>">
         <input type="hidden" name="community_id" value="<?= $community['id'] ?>">
         <input class="urgency-input" type="number" name="urgency_days" min="1" max="360" value="<?= $urgency ?>" required>
-        <button class="urgency-btn" title="ثبت فوریت">⏱ فوریت</button>
+        <span class="action-tooltip">
+          <button class="urgency-btn" type="submit" title="فوریت را بر حسب روز ثبت می‌کند؛ میانگین پیشنهادهای اعضا زمان موضوع را تعیین می‌کند.">⏱ فوریت</button>
+          <span class="action-tooltip-text" role="tooltip">تعداد روزهای پیشنهادی تا پایان فرصت بحث را در کادر وارد کنید و روی این دکمه بزنید. زمان فوریت موضوع بر اساس میانگین پیشنهادهای ثبت‌شدهٔ اعضا محاسبه می‌شود.</span>
+        </span>
       </form>
     </div>
   </div>
