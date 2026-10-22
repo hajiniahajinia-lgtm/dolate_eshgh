@@ -57,7 +57,22 @@ jobs:
           SITE_URL="${SITE_URL%/}"
           # Prefer the canonical non-www host when the supplied URL starts with www.
           SITE_URL="$(printf '%s' "$SITE_URL" | sed -E 's#^(https?://)www\.#\1#')"
-          curl --fail --show-error --silent \
+          echo "Checking migration endpoint at: ${SITE_URL}/migration_runner.php"
+
+          # A GET request must return 405 from the runner and does not execute SQL.
+          probe_status="$(curl --connect-timeout 10 --max-time 20 --silent --show-error \
+            --output /tmp/migration-probe-body --write-out '%{http_code}' \
+            --request GET "${SITE_URL}/migration_runner.php")" || {
+              echo "::error::The migration endpoint did not return a valid HTTP response to a harmless GET probe."
+              exit 1
+            }
+
+          if [ "$probe_status" != "405" ]; then
+            echo "::error::Expected HTTP 405 from migration runner GET probe, received HTTP ${probe_status}. No SQL migration was attempted."
+            exit 1
+          fi
+
+          curl --fail --show-error --silent --connect-timeout 10 --max-time 45 \
             --request POST \
             --header "X-Migration-Token: ${MIGRATION_TOKEN}" \
             "${SITE_URL}/migration_runner.php"
