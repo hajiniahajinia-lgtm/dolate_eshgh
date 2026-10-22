@@ -182,7 +182,20 @@ textarea{resize:vertical;}
     .idea .text{max-width:100%;}
 }
 </style>
-</      $mem_q = $conn->prepare("SELECT users.username, users.age, users.gender, users.education, users.job, users.city, users.resume FROM community_members JOIN users ON users.id = community_members.user_id WHERE community_members.community_id = ?");
+</head>
+<body>
+<div class="container">
+
+<?php if ($community): ?>
+<div class="box community-header">
+  <h2><?=htmlspecialchars($community['name'])?></h2>
+  <p><strong>وظایف و رویکردها:</strong> <?=nl2br(htmlspecialchars($community['approach'] ?? 'بدون توضیحات'))?></p>
+  <p><strong>تعداد اعضا:</strong> <?= (int)$community['members_count'] ?></p>
+  <div class="members-dropdown">
+    <button class="members-button">👥 مشاهده اعضا</button>
+    <div class="members-list">
+      <?php
+      $mem_q = $conn->prepare("SELECT users.username, users.age, users.gender, users.education, users.job, users.city, users.resume FROM community_members JOIN users ON users.id = community_members.user_id WHERE community_members.community_id = ?");
       $mem_q->bind_param("i", $community['id']);
       $mem_q->execute();
       $mem_res = $mem_q->get_result();
