@@ -361,7 +361,7 @@ if ($remaining_seconds < 0) $remaining_seconds = 0;
   $user_has_priority = ($priority_res->num_rows>0);
   $priority_check->close();
 ?>
-<div class="topic" style="<?= $is_closed ? 'opacity:0.6;' : '' ?>">
+<div class="topic" id="topic-<?= (int)$tid ?>" style="<?= $is_closed ? 'opacity:0.6;' : '' ?>">
   <div class="topic-header">
     <div class="topic-title-wrap">
       <h2><?= htmlspecialchars($t2['title']) ?></h2>
@@ -530,23 +530,76 @@ $losers_count  = (int)$arch_stats['losers'];
 
 <script>
 document.addEventListener("DOMContentLoaded", function() {
-    // نگه داشتن موقعیت صفحه پس از ثبت اولویت یا فوریت
-    const scrollKey = "community_scroll_position";
-    const savedScroll = sessionStorage.getItem(scrollKey);
-    if (savedScroll !== null) {
-        sessionStorage.removeItem(scrollKey);
-        const restoreScroll = function() {
-            window.scrollTo(0, parseInt(savedScroll, 10) || 0);
-        };
-        requestAnimationFrame(function() {
-            restoreScroll();
-            requestAnimationFrame(restoreScroll);
-        });
-    }
-
+    // ثبت اولویت و فوریت بدون بارگذاری مجدد صفحه
     document.querySelectorAll('form[action="toggle_priority.php"], form[action="update_urgency.php"]').forEach(function(form) {
-        form.addEventListener("submit", function() {
-            sessionStorage.setItem(scrollKey, String(window.scrollY || window.pageYOffset || 0));
+        form.addEventListener("submit", async function(event) {
+            event.preventDefault();
+            const submitButton = form.querySelector('button[type="submit"]') || form.querySelector('button');
+            if (form.dataset.sending === "1") return;
+            form.dataset.sending = "1";
+            if (submitButton) submitButton.disabled = true;
+
+            try {
+                const response = await fetch(form.action, {
+                    method: "POST",
+                    body: new FormData(form),
+                    credentials: "same-origin",
+                    headers: { "X-Requested-With": "XMLHttpRequest" }
+                });
+                if (!response.ok) throw new Error("ثبت انجام نشد");
+                const html = await response.text();
+                const parsed = new DOMParser().parseFromString(html, "text/html");
+                const topicId = form.querySelector('input[name="topic_id"]')?.value;
+                const freshTopic = topicId ? parsed.getElementById("topic-" + topicId) : null;
+                const currentTopic = topicId ? document.getElementById("topic-" + topicId) : null;
+                if (!freshTopic || !currentTopic) throw new Error("پاسخ صفحه قابل شناسایی نیست");
+
+                const freshSummary = freshTopic.querySelector(".topic-summary");
+                const currentSummary = currentTopic.querySelector(".topic-summary");
+                if (freshSummary && currentSummary) currentSummary.innerHTML = freshSummary.innerHTML;
+
+                const freshPriorityButton = freshTopic.querySelector('form[action="toggle_priority.php"] button');
+                const currentPriorityButton = currentTopic.querySelector('form[action="toggle_priority.php"] button');
+                if (freshPriorityButton && currentPriorityButton) {
+                    currentPriorityButton.style.backgroundColor = freshPriorityButton.style.backgroundColor;
+                    currentPriorityButton.disabled = false;
+                }
+
+                const freshUrgencyInput = freshTopic.querySelector('.urgency-input');
+                const currentUrgencyInput = currentTopic.querySelector('.urgency-input');
+                if (freshUrgencyInput && currentUrgencyInput) currentUrgencyInput.value = freshUrgencyInput.value;
+
+                const freshCountdown = freshTopic.querySelector('.countdown');
+                const currentCountdown = currentTopic.querySelector('.countdown');
+                if (freshCountdown && currentCountdown) {
+                    currentCountdown.dataset.remaining = freshCountdown.dataset.remaining;
+                    let diff = parseInt(freshCountdown.dataset.remaining, 10) || 0;
+                    const endTime = Date.now() + diff * 1000;
+                    function updateCountdown() {
+                        const remaining = Math.max(0, Math.ceil((endTime - Date.now()) / 1000));
+                        if (remaining <= 0) {
+                            currentCountdown.textContent = "⏰ زمان به پایان رسید";
+                            currentCountdown.style.color = "#c0392b";
+                            return;
+                        }
+                        const days = Math.floor(remaining / 86400);
+                        const hours = Math.floor((remaining % 86400) / 3600);
+                        const minutes = Math.floor((remaining % 3600) / 60);
+                        const seconds = remaining % 60;
+                        currentCountdown.textContent = (days > 0 ? days + " روز " : "") + hours + " ساعت " + minutes + " دقیقه " + seconds + " ثانیه";
+                        setTimeout(updateCountdown, 1000);
+                    }
+                    updateCountdown();
+                }
+            } catch (error) {
+                // در صورت خطای ارتباط، روش معمول فرم را حفظ کن.
+                form.removeEventListener("submit", arguments.callee);
+                form.submit();
+                return;
+            } finally {
+                form.dataset.sending = "0";
+                if (submitButton) submitButton.disabled = false;
+            }
         });
     });
 
