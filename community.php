@@ -92,9 +92,11 @@ textarea{resize:vertical;}
 .members-dropdown:hover .members-list{display:block;}
 
 .topic{background:#eef7ff;border:1px solid #9ac7ff;border-radius:10px;padding:12px;margin-bottom:14px;word-wrap:break-word;}
-.topic-description{margin:8px 0 10px;color:#374151;font-size:14px;line-height:1.9;white-space:pre-wrap;overflow-wrap:anywhere;}
+.topic-title-wrap{position:relative;flex:1 1 auto;min-width:0;}
+.topic-header h2{margin:0;font-size:16px;word-break:break-word;}
+.topic-description{display:none;position:absolute;top:calc(100% + 6px);right:0;width:360px;max-width:calc(100vw - 60px);margin:0;padding:10px 12px;background:#fff;color:#374151;font-size:14px;line-height:1.9;white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid #9ac7ff;border-radius:8px;box-shadow:0 5px 16px rgba(0,0,0,.16);z-index:1500;font-weight:normal;}
+.topic-title-wrap:hover .topic-description,.topic-title-wrap:focus-within .topic-description{display:block;}
 .topic-header{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;}
-.topic-header h2{margin:0;font-size:16px;flex:1 1 auto;word-break:break-word;}
 .topic-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
 .topic-actions form{display:inline-flex;align-items:center;gap:6px;}
 .priority-btn, .urgency-btn{padding:6px 10px;font-size:13px;border-radius:6px;cursor:pointer;}
@@ -266,7 +268,12 @@ if ($remaining_seconds < 0) $remaining_seconds = 0;
 ?>
 <div class="topic" style="<?= $is_closed ? 'opacity:0.6;' : '' ?>">
   <div class="topic-header">
-    <h2><?= htmlspecialchars($t2['title']) ?></h2>
+    <div class="topic-title-wrap">
+      <h2><?= htmlspecialchars($t2['title']) ?></h2>
+      <?php if (trim((string)($t2['description'] ?? '')) !== ''): ?>
+        <div class="topic-description"><?= htmlspecialchars($t2['description'], ENT_QUOTES, 'UTF-8') ?></div>
+      <?php endif; ?>
+    </div>
     <div class="topic-meta" style="font-size:13px;color:#333;margin-top:4px;">
         ⏱ ثبت شده در: <?= date("Y-m-d H:i", strtotime($t2['created_at'])) ?>
     </div>
@@ -291,10 +298,6 @@ if ($remaining_seconds < 0) $remaining_seconds = 0;
       </form>
     </div>
   </div>
-  <?php if (trim((string)($t2['description'] ?? '')) !== ''): ?>
-    <div class="topic-description"><?= htmlspecialchars($t2['description'], ENT_QUOTES, 'UTF-8') ?></div>
-  <?php endif; ?>
-
   <div class="ideas-box">
     <?php
     $ideas_q2 = $conn->prepare("SELECT ideas.id, ideas.content, ideas.idea_rationality, ideas.created_at, users.username, users.id AS uid FROM ideas JOIN users ON ideas.user_id = users.id WHERE topic_id=? ORDER BY ideas.idea_rationality DESC, ideas.id ASC");
