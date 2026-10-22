@@ -116,20 +116,20 @@ if($_SERVER['REQUEST_METHOD'] === 'POST'){
 
         // ساخت جدول با همان نام ستون‌های نسخه SQL؛ هر کاربر برای هر موضوع یک رأی دارد.
         $conn->query("
-            CREATE TABLE IF NOT EXISTS topic_urgency_votes (
+            CREATE TABLE IF NOT EXISTS topic_voting_urgency_votes (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 topic_id INT NOT NULL,
                 user_id INT NOT NULL,
                 urgency_days INT NOT NULL DEFAULT 1,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE KEY uq_topic_user (topic_id, user_id),
+                UNIQUE KEY uq_voting_topic_user (topic_id, user_id),
                 KEY idx_topic_id (topic_id),
                 KEY idx_user_id (user_id)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
         ");
 
         $save_vote = $conn->prepare("
-            INSERT INTO topic_urgency_votes (topic_id, user_id, urgency_days)
+            INSERT INTO topic_voting_urgency_votes (topic_id, user_id, urgency_days)
             VALUES (?, ?, ?)
             ON DUPLICATE KEY UPDATE urgency_days = VALUES(urgency_days)
         ");
@@ -140,7 +140,7 @@ if($_SERVER['REQUEST_METHOD'] === 'POST'){
         // میانگین فوریت‌های ثبت‌شده توسط کاربران برای همین موضوع.
         $avg_sql = $conn->prepare("
             SELECT AVG(urgency_days) AS avg_days, COUNT(*) AS vote_count
-            FROM topic_urgency_votes
+            FROM topic_voting_urgency_votes
             WHERE topic_id = ?
         ");
         $avg_sql->bind_param("i", $topic_id);
