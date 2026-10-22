@@ -42,16 +42,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-.test-greeting {
-    position: fixed;
-    top: 18px;
-    left: 18px;
-    z-index: 1000;
-    font-size: 32px;
-    font-weight: bold;
-    color: #1f5ad1;
-}
-
 body {
     font-family: Tahoma, sans-serif;
     background:#eef1f4;
@@ -137,7 +127,6 @@ a:hover {
 
 <body>
 
-<div class="test-greeting">سلام</div>
 
 <div class="container">
     <h2>ورود به سامانه</h2>
