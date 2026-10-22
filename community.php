@@ -593,8 +593,8 @@ document.addEventListener("DOMContentLoaded", function() {
                 }
             } catch (error) {
                 // در صورت خطای ارتباط، روش معمول فرم را حفظ کن.
-                form.removeEventListener("submit", arguments.callee);
-                form.submit();
+                form.dataset.sending = "0";
+                HTMLFormElement.prototype.submit.call(form);
                 return;
             } finally {
                 form.dataset.sending = "0";
