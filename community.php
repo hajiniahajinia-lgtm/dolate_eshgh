@@ -80,12 +80,12 @@ body{font-family:tahoma, Arial, sans-serif;background:#eef3f8;margin:0;padding:1
 /* پس‌زمینه رنگین‌کمانی ملایم برای سربرگ جامعه */
 .community-header{
     background:linear-gradient(125deg,
-        #fff7f8 0%,
-        #fff9ef 20%,
-        #f7fff2 40%,
-        #f0fbff 60%,
-        #f6f2ff 80%,
-        #fff5fb 100%);
+        #ffe4eb 0%,
+        #ffefd6 20%,
+        #e7f8d9 40%,
+        #dff4ff 60%,
+        #e9e0ff 80%,
+        #ffe2f3 100%);
     border-color:#e2dff0;
 }
 
