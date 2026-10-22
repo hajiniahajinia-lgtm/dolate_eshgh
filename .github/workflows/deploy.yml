@@ -1,5 +1,7 @@
 name: Deploy to InfinityFree
 
+# Applies newly added, dated SQL migration files after a successful FTP deployment.
+
 on:
   push:
     branches:
