@@ -546,6 +546,18 @@ body{
         align-items:stretch;
     }
 
+    /* در موبایل راهنما زیر دکمه باز شود تا از لبهٔ صفحه بیرون نزند. */
+    .urgency-help-wrap{
+        align-self:flex-start;
+    }
+    .urgency-tooltip{
+        top:calc(100% + 8px);
+        right:0;
+        transform:none;
+        width:280px;
+        max-width:75vw;
+    }
+
     .vote-btn{
         font-size:16px;
         padding:10px;
