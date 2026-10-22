@@ -62,13 +62,14 @@ jobs:
           # Verify the public web root matches the directory receiving FTP uploads.
           root_status="$(curl --http1.1 --user-agent "Mozilla/5.0 (compatible; DolateEshghMigration/1.0)" \
             --connect-timeout 10 --max-time 20 --silent --show-error \
-            --output /tmp/deployment-root-probe --write-out '%{http_code}' \
+            --output /tmp/deployment-root-probe --write-out '%{http_code}|%{content_type}|%{url_effective}' \
             "${SITE_URL}/deployment_test.txt")" || {
               echo "::error::The public web root did not return a valid HTTP response."
               exit 1
             }
 
-          if [ "$root_status" != "200" ] || ! grep -q 'GitHub' /tmp/deployment-root-probe; then
+          echo "Deployment test file probe: $root_status"
+          if [ "${root_status%%|*}" != "200" ] || ! grep -q 'GitHub' /tmp/deployment-root-probe; then
             echo "::error::The FTP directory does not appear to match the public web root, or deployment_test.txt is not publicly served. No SQL migration was attempted."
             exit 1
           fi
