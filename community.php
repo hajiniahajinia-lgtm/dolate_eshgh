@@ -181,6 +181,8 @@ textarea{resize:vertical;}
     .idea{flex-direction:column;align-items:flex-start;}
     .idea .text{max-width:100%;}
 }
+
+</style>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     document.querySelectorAll('.member-entry').forEach(function (entry) {
@@ -206,7 +208,7 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 });
 </script>
-</style>
+
 </head>
 <body>
 <div class="container">
@@ -528,6 +530,26 @@ $losers_count  = (int)$arch_stats['losers'];
 
 <script>
 document.addEventListener("DOMContentLoaded", function() {
+    // نگه داشتن موقعیت صفحه پس از ثبت اولویت یا فوریت
+    const scrollKey = "community_scroll_position";
+    const savedScroll = sessionStorage.getItem(scrollKey);
+    if (savedScroll !== null) {
+        sessionStorage.removeItem(scrollKey);
+        const restoreScroll = function() {
+            window.scrollTo(0, parseInt(savedScroll, 10) || 0);
+        };
+        requestAnimationFrame(function() {
+            restoreScroll();
+            requestAnimationFrame(restoreScroll);
+        });
+    }
+
+    document.querySelectorAll('form[action="toggle_priority.php"], form[action="update_urgency.php"]').forEach(function(form) {
+        form.addEventListener("submit", function() {
+            sessionStorage.setItem(scrollKey, String(window.scrollY || window.pageYOffset || 0));
+        });
+    });
+
     // ===== جای‌گذاری توضیحات دکمه‌ها خارج از محدوده برش کادرها =====
     document.querySelectorAll('.action-tooltip').forEach(function(wrapper) {
         const tip = wrapper.querySelector('.action-tooltip-text');
