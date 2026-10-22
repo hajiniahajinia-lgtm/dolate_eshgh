@@ -455,6 +455,44 @@ body{
     font-size:14px;
 }
 
+/* راهنمای توضیحی دکمهٔ ثبت فوریت */
+.urgency-help-wrap{
+    position:relative;
+    display:inline-flex;
+    align-items:center;
+}
+.urgency-tooltip{
+    display:none;
+    position:absolute;
+    z-index:1000;
+    top:50%;
+    right:calc(100% + 10px);
+    transform:translateY(-50%);
+    width:300px;
+    max-width:min(300px, 75vw);
+    padding:11px 13px;
+    border:1px solid #d7b64a;
+    border-radius:9px;
+    background:#fffbea;
+    color:#343434;
+    box-shadow:0 4px 14px rgba(0,0,0,0.16);
+    font-size:13px;
+    line-height:1.9;
+    text-align:right;
+    direction:rtl;
+    white-space:normal;
+}
+.urgency-help-wrap:hover .urgency-tooltip,
+.urgency-help-wrap:focus-within .urgency-tooltip{
+    display:block;
+}
+.urgency-tooltip strong{
+    display:block;
+    margin-bottom:4px;
+    color:#665000;
+    font-size:14px;
+}
+
 /* دکمه رأی */
 .vote-btn{
     background:#27ae60;
@@ -615,7 +653,13 @@ body{
           <input type="hidden" name="topic_id" value="<?= $tid ?>">
           <label for="urgency-days-<?= $tid ?>">فوریت انتخابی شما (روز):</label>
           <input id="urgency-days-<?= $tid ?>" type="number" name="urgency_days" min="1" max="365" value="<?= $my_urgency_days ?>" title="فوریت انتخابی شما بر حسب روز">
-          <button type="submit" name="set_urgency">ثبت فوریت</button>
+          <span class="urgency-help-wrap">
+            <button type="submit" name="set_urgency" aria-describedby="urgency-help-<?= $tid ?>">ثبت فوریت</button>
+            <span class="urgency-tooltip" id="urgency-help-<?= $tid ?>" role="tooltip">
+              <strong>چرا فوریت را ثبت می‌کنیم؟</strong>
+              در «دولت عشق»، مدت رأی‌گیری با مشارکت اعضا تعیین می‌شود. هر عضو زمان مورد نیاز خود را انتخاب می‌کند و همهٔ رأی‌ها وزن یکسان دارند. سامانه میانگین انتخاب‌ها را محاسبه می‌کند و آن را به روز کامل بالاتر گرد می‌کند. اگر انتخابتان را تغییر دهید، رأی قبلی شما جایگزین می‌شود. با تغییر میانگین، زمان باقی‌مانده دوباره محاسبه می‌شود؛ شمارش از ابتدا آغاز نمی‌شود.
+            </span>
+          </span>
           <div class="small urgency-own-status"><?= $has_urgency_vote ? 'انتخاب قبلی شما ثبت شده است.' : 'هنوز انتخابی ثبت نکرده‌اید؛ با ثبت فرم، مقدار این کادر به‌عنوان رأی شما ذخیره می‌شود.' ?></div>
         </form>
       </div>
