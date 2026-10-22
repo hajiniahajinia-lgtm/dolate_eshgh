@@ -96,13 +96,13 @@ button{background:#2065d1;color:#fff;cursor:pointer;border:none;margin-top:10px;
 a{text-decoration:none;color:#2065d1;font-weight:bold;}
 textarea{resize:vertical;}
 
-.members-dropdown{position:relative;display:inline-block;margin-top:8px;}
+.members-dropdown{position:relative;display:inline-block;margin-top:8px;z-index:1100;}
 .members-button{background:#2065d1;color:#fff;border:none;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:13px;}
-.members-list{display:none;position:absolute;background:#fff;min-width:180px;max-height:150px;overflow-y:auto;border:1px solid #ccc;border-radius:8px;z-index:1000;padding:8px;box-shadow:0 2px 6px rgba(0,0,0,0.1);}
+.members-list{display:none;position:absolute;top:100%;right:0;background:#fff;min-width:200px;max-height:220px;overflow-y:auto;overflow-x:visible;border:1px solid #ccc;border-radius:8px;z-index:1101;padding:8px;box-shadow:0 2px 10px rgba(0,0,0,0.14);}
 .members-list p{margin:4px 0;font-size:13px;color:#333;}
-.member-entry{padding:5px 4px;border-bottom:1px solid #eee;}
+.member-entry{position:relative;padding:5px 4px;border-bottom:1px solid #eee;}
 .member-name{display:block;color:#2065d1;font-weight:bold;cursor:default;}
-.member-profile{display:none;margin-top:5px;padding:7px;background:#f4f8ff;border:1px solid #d7e5f7;border-radius:6px;color:#333;font-size:12px;line-height:1.9;white-space:normal;overflow-wrap:anywhere;}
+.member-profile{display:none;position:fixed;top:0;right:12px;width:260px;max-width:calc(100vw - 24px);max-height:60vh;overflow:auto;box-sizing:border-box;margin:0;padding:10px;background:#f4f8ff;border:1px solid #9bbbe0;border-radius:8px;color:#333;font-size:12px;line-height:1.9;white-space:normal;overflow-wrap:anywhere;box-shadow:0 5px 18px rgba(0,0,0,.2);z-index:99999;}
 .member-entry:hover .member-profile,.member-entry:focus-within .member-profile{display:block;}
 .members-dropdown:hover .members-list,.members-dropdown:focus-within .members-list{display:block;}
 
@@ -181,6 +181,31 @@ textarea{resize:vertical;}
     .idea{flex-direction:column;align-items:flex-start;}
     .idea .text{max-width:100%;}
 }
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('.member-entry').forEach(function (entry) {
+        const name = entry.querySelector('.member-name');
+        const profile = entry.querySelector('.member-profile');
+        if (!name || !profile) return;
+        function positionProfile() {
+            const rect = name.getBoundingClientRect();
+            const width = Math.min(260, window.innerWidth - 24);
+            let top = rect.bottom + 6;
+            if (top + Math.min(profile.scrollHeight, window.innerHeight * 0.6) > window.innerHeight - 12) {
+                top = rect.top - Math.min(profile.scrollHeight, window.innerHeight * 0.6) - 6;
+            }
+            top = Math.max(12, Math.min(top, window.innerHeight - 80));
+            let right = Math.max(12, window.innerWidth - rect.right);
+            if (right + width > window.innerWidth - 12) right = 12;
+            profile.style.top = top + 'px';
+            profile.style.right = right + 'px';
+        }
+        name.addEventListener('mouseenter', positionProfile);
+        name.addEventListener('focus', positionProfile);
+        entry.addEventListener('mouseenter', positionProfile);
+    });
+});
+</script>
 </style>
 </head>
 <body>
