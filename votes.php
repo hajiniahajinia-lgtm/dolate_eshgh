@@ -546,6 +546,28 @@ body{
     $mstmt->bind_param("i",$tid); $mstmt->execute();
     $meta = $mstmt->get_result()->fetch_assoc(); $mstmt->close();
     $urg_days = ($meta && $meta['urgency_days']) ? (int)$meta['urgency_days'] : X;
+
+    // نمایش انتخاب شخصی کاربر جدا از میانگین جمعی فوریت.
+    $my_urgency_days = X;
+    $has_urgency_vote = false;
+    $urgency_vote_count = 0;
+
+    $my_urgency_stmt = $conn->prepare("SELECT urgency_days FROM topic_voting_urgency_votes WHERE topic_id=? AND user_id=? LIMIT 1");
+    $my_urgency_stmt->bind_param("ii", $tid, $user_id);
+    $my_urgency_stmt->execute();
+    $my_urgency_row = $my_urgency_stmt->get_result()->fetch_assoc();
+    $my_urgency_stmt->close();
+    if ($my_urgency_row) {
+        $my_urgency_days = (int)$my_urgency_row['urgency_days'];
+        $has_urgency_vote = true;
+    }
+
+    $urgency_count_stmt = $conn->prepare("SELECT COUNT(*) AS vote_count FROM topic_voting_urgency_votes WHERE topic_id=?");
+    $urgency_count_stmt->bind_param("i", $tid);
+    $urgency_count_stmt->execute();
+    $urgency_vote_count = (int)$urgency_count_stmt->get_result()->fetch_assoc()['vote_count'];
+    $urgency_count_stmt->close();
+
     if($meta && $meta['voting_started']){
         $vs_unix = sql_date_to_unix($meta['voting_started']);
         if($vs_unix) $voting_started_unix = $vs_unix;
@@ -577,7 +599,11 @@ body{
     <div class="header-row">
       <div style="flex:1 1 60%;">
         <h4 style="margin:0 0 6px 0"><?= htmlspecialchars($topic_title) ?></h4>
-        <div class="meta">آغاز رأی‌گیری: <?= date('Y-m-d H:i', $voting_started_unix) ?> — مدت (روز): <?= $urg_days ?></div>
+        <div class="meta">
+          آغاز رأی‌گیری: <?= date('Y-m-d H:i', $voting_started_unix) ?> —
+          میانگین فعلی فوریت: <strong class="urgency-average"><?= $urg_days ?></strong> روز
+          (<span class="urgency-vote-count"><?= $urgency_vote_count ?></span> رأی فوریت)
+        </div>
       </div>
       <div style="min-width:240px;text-align:left">
         <div class="small">آراء ثبت‌شده: <strong><?= $total_votes ?></strong></div>
@@ -587,8 +613,10 @@ body{
 </div>
         <form class="form-inline" method="post" data-topic="<?= $tid ?>">
           <input type="hidden" name="topic_id" value="<?= $tid ?>">
-          <input type="number" name="urgency_days" min="1" max="365" value="<?= $urg_days ?>" title="فوریت (روز)">
+          <label for="urgency-days-<?= $tid ?>">فوریت انتخابی شما (روز):</label>
+          <input id="urgency-days-<?= $tid ?>" type="number" name="urgency_days" min="1" max="365" value="<?= $my_urgency_days ?>" title="فوریت انتخابی شما بر حسب روز">
           <button type="submit" name="set_urgency">ثبت فوریت</button>
+          <div class="small urgency-own-status"><?= $has_urgency_vote ? 'انتخاب قبلی شما ثبت شده است.' : 'هنوز انتخابی ثبت نکرده‌اید؛ با ثبت فرم، مقدار این کادر به‌عنوان رأی شما ذخیره می‌شود.' ?></div>
         </form>
       </div>
     </div>
@@ -748,10 +776,21 @@ document.addEventListener('DOMContentLoaded', function(){
                 body: data.toString()
             }).then(r=>r.json()).then(resp=>{
                 if(resp && resp.success){
-                    alert("فوریت بروزرسانی شد: " + resp.urgency + " روز");
+                    const topicCard = this.closest('.topic');
+                    const averageLabel = topicCard ? topicCard.querySelector('.urgency-average') : null;
+                    const voteCountLabel = topicCard ? topicCard.querySelector('.urgency-vote-count') : null;
+                    const ownStatus = this.querySelector('.urgency-own-status');
+
+                    // میانگین جمعی و تعداد رأی‌های فوریت را بدون بارگذاری مجدد به‌روز کن.
+                    if(averageLabel) averageLabel.textContent = resp.urgency;
+                    if(voteCountLabel) voteCountLabel.textContent = resp.vote_count;
+                    if(ownStatus) ownStatus.textContent = 'انتخاب شما ثبت شد.';
+
+                    const chosenInput = this.querySelector('[name="urgency_days"]');
+                    const chosenDays = chosenInput ? chosenInput.value : '';
+                    alert("انتخاب شما: " + chosenDays + " روز؛ میانگین فعلی: " + resp.urgency + " روز (" + resp.vote_count + " رأی فوریت)");
 
                     // اعمال مدت میانگین جدید بدون تغییر زمان شروع رأی‌گیری
-                    const topicCard = this.closest('.topic');
                     const countdown = topicCard ? topicCard.querySelector('.countdown') : null;
                     if(countdown){
                         const votingStartedUnix = parseInt(countdown.dataset.start, 10) || Math.floor(Date.now()/1000);
