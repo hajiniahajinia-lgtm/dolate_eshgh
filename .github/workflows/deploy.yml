@@ -8,14 +8,14 @@ on:
 
 jobs:
   deploy:
-    name: Upload website files via FTP
+    name: Upload website files and apply database migrations
     runs-on: ubuntu-latest
 
     steps:
       - name: Get repository files
         uses: actions/checkout@v4
 
-      - name: Deploy to InfinityFree
+      - name: Deploy website files via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: ${{ secrets.FTP_SERVER }}
@@ -31,7 +31,27 @@ jobs:
             **/.github/**
             **/README*
             **/db.php
-            **/*.sql
+            **/migration_config.php
+            **/dolate_eshgh1.sql
             **/*backup*.php
             **/full_backup.php
             **/.env
+
+      - name: Apply new database migrations
+        env:
+          SITE_URL: ${{ secrets.SITE_URL }}
+          MIGRATION_TOKEN: ${{ secrets.MIGRATION_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -z "${SITE_URL:-}" ] || [ -z "${MIGRATION_TOKEN:-}" ]; then
+            echo "::notice::FTP deployment completed. Database migrations were skipped because SITE_URL and/or MIGRATION_TOKEN repository secrets are not configured yet."
+            exit 0
+          fi
+
+          SITE_URL="${SITE_URL%/}"
+          curl --fail --show-error --silent \
+            --request POST \
+            --header "X-Migration-Token: ${MIGRATION_TOKEN}" \
+            "${SITE_URL}/migration_runner.php"
