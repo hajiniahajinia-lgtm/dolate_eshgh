@@ -15,6 +15,7 @@ if (!isset($_POST['topic_title']) || !isset($_POST['community_id'])) {
 
 // ⬅️ محدودیت 100 کاراکتر
 $title = mb_substr(trim($_POST['topic_title']), 0, 100);
+$description = mb_substr(trim($_POST['topic_description'] ?? ''), 0, 500);
 
 if ($title === "") {
     die("⚠️ عنوان موضوع نمی‌تواند خالی باشد");
@@ -36,14 +37,15 @@ $urgency_updated_at = date("Y-m-d H:i:s");
 
 $stmt = $conn->prepare("
     INSERT INTO topics 
-    (community_id, title, user_id, priority, urgency, urgency_minutes, urgency_default_minutes, deadline, created_at, urgency_updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    (community_id, title, description, user_id, priority, urgency, urgency_minutes, urgency_default_minutes, deadline, created_at, urgency_updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ");
 
 $stmt->bind_param(
-    "issiiiisss",
+    "issiiiiisss",
     $community_id,
     $title,
+    $description,
     $user_id,
     $priority,
     $urgency,
