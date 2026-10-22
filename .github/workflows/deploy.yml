@@ -56,7 +56,7 @@ jobs:
 
           SITE_URL="${SITE_URL%/}"
           # Prefer the canonical non-www host when the supplied URL starts with www.
-          SITE_URL="$(printf '%s' "$SITE_URL" | sed -E 's#^(https?://)www\\.#\\1#')"
+          SITE_URL="$(printf '%s' "$SITE_URL" | sed -E 's#^(https?://)www\.#\1#')"
           curl --fail --show-error --silent \
             --request POST \
             --header "X-Migration-Token: ${MIGRATION_TOKEN}" \
