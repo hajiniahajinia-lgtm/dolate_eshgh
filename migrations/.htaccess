@@ -1,0 +1,2 @@
+# SQL migration files are consumed by migration_runner.php only.
+Require all denied
