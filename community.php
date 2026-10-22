@@ -128,6 +128,36 @@ textarea{resize:vertical;}
 .card-form input,.card-form select,.card-form textarea,.card-form button{margin-top:6px;}
 .card{background:#f7f8fa;border:1px solid #ccc;text-align:center;padding:14px;border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,0.04);}
 
+@media (min-width:721px){
+    /* چیدمان منظم اطلاعات موضوع فقط در صفحه‌نمایش کامپیوتر */
+    .topic-header{
+        display:grid;
+        grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) minmax(0,1fr);
+        align-items:center;
+        column-gap:16px;
+        row-gap:10px;
+    }
+    .topic-title-wrap{grid-column:1 / -1;}
+    .topic-header .topic-meta,
+    .topic-header .countdown{
+        margin-top:0 !important;
+        min-width:0;
+    }
+    .topic-summary{
+        text-align:right !important;
+        min-width:0;
+        line-height:1.9;
+    }
+    .topic-actions{
+        grid-column:1 / -1;
+        border-top:1px solid #d6e7f8;
+        padding-top:8px;
+        justify-content:flex-start;
+        align-items:center;
+    }
+    .topic-actions form{align-items:center;}
+}
+
 @media (max-width:720px){
     .container{padding:8px;}
     .topic-header{flex-direction:column;align-items:flex-start;}
@@ -281,7 +311,7 @@ if ($remaining_seconds < 0) $remaining_seconds = 0;
         ⏱ ثبت شده در: <?= date("Y-m-d H:i", strtotime($t2['created_at'])) ?>
     </div>
     <div class="countdown" data-remaining="<?= $remaining_seconds ?>" style="font-size:13px;color:#555;margin-top:6px;">در حال محاسبه...</div>
-    <div style="text-align:left;font-size:13px;">
+    <div class="topic-summary" style="text-align:left;font-size:13px;">
       <div>✅ مجموع اولویت: <?= (int)$t2['total_priority'] ?></div>
       <div>⏱ فوریت: <?= $urgency ?>روز</div>
     </div>
