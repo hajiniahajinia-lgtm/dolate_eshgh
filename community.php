@@ -101,7 +101,7 @@ textarea{resize:vertical;}
 .topic-actions form{display:inline-flex;align-items:center;gap:6px;}
 .priority-btn, .urgency-btn{padding:6px 10px;font-size:13px;border-radius:6px;cursor:pointer;}
 .action-tooltip{position:relative;display:inline-flex;align-items:center;}
-.action-tooltip-text{display:none;position:absolute;top:calc(100% + 7px);right:0;width:270px;max-width:calc(100vw - 48px);padding:9px 11px;background:#fff;color:#263238;border:1px solid #b8c7d8;border-radius:8px;box-shadow:0 4px 14px rgba(0,0,0,.16);font-size:12px;line-height:1.9;font-weight:normal;text-align:right;white-space:normal;z-index:2000;}
+.action-tooltip-text{display:none;position:fixed;top:0;left:0;width:270px;max-width:calc(100vw - 24px);box-sizing:border-box;padding:9px 11px;background:#fff;color:#263238;border:1px solid #b8c7d8;border-radius:8px;box-shadow:0 4px 14px rgba(0,0,0,.16);font-size:12px;line-height:1.9;font-weight:normal;text-align:right;white-space:normal;z-index:99999;}
 .action-tooltip:hover .action-tooltip-text,.action-tooltip:focus-within .action-tooltip-text{display:block;}
 .urgency-input{width:60px;text-align:center;padding:6px;font-size:13px;}
 .ideas-box{margin-top:10px;background:#fff;padding:10px;border-radius:8px;border:1px solid #ddd;max-height:200px;overflow-y:auto;}
@@ -438,6 +438,46 @@ $losers_count  = (int)$arch_stats['losers'];
 
 <script>
 document.addEventListener("DOMContentLoaded", function() {
+    // ===== جای‌گذاری توضیحات دکمه‌ها خارج از محدوده برش کادرها =====
+    document.querySelectorAll('.action-tooltip').forEach(function(wrapper) {
+        const tip = wrapper.querySelector('.action-tooltip-text');
+        const button = wrapper.querySelector('button');
+        if (!tip || !button) return;
+
+        function placeTip() {
+            tip.style.display = 'block';
+            const buttonRect = button.getBoundingClientRect();
+            const tipRect = tip.getBoundingClientRect();
+            const margin = 8;
+            let left = Math.min(
+                Math.max(margin, buttonRect.right - tipRect.width),
+                window.innerWidth - tipRect.width - margin
+            );
+            let top = buttonRect.bottom + 7;
+            if (top + tipRect.height > window.innerHeight - margin) {
+                top = buttonRect.top - tipRect.height - 7;
+            }
+            top = Math.max(margin, Math.min(top, window.innerHeight - tipRect.height - margin));
+            tip.style.left = left + 'px';
+            tip.style.top = top + 'px';
+        }
+
+        wrapper.addEventListener('mouseenter', placeTip);
+        wrapper.addEventListener('focusin', placeTip);
+        wrapper.addEventListener('mouseleave', function() {
+            tip.style.display = '';
+        });
+        wrapper.addEventListener('focusout', function() {
+            tip.style.display = '';
+        });
+        window.addEventListener('resize', function() {
+            if (wrapper.matches(':hover') || wrapper.contains(document.activeElement)) placeTip();
+        });
+        window.addEventListener('scroll', function() {
+            if (wrapper.matches(':hover') || wrapper.contains(document.activeElement)) placeTip();
+        }, true);
+    });
+
     // ===== انتخاب موضوع با علامت و متن چندسطری =====
     const topicPicker = document.getElementById('topic-picker');
     if (topicPicker) {
