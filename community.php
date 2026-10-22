@@ -100,7 +100,11 @@ textarea{resize:vertical;}
 .members-button{background:#2065d1;color:#fff;border:none;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:13px;}
 .members-list{display:none;position:absolute;background:#fff;min-width:180px;max-height:150px;overflow-y:auto;border:1px solid #ccc;border-radius:8px;z-index:1000;padding:8px;box-shadow:0 2px 6px rgba(0,0,0,0.1);}
 .members-list p{margin:4px 0;font-size:13px;color:#333;}
-.members-dropdown:hover .members-list{display:block;}
+.member-entry{padding:5px 4px;border-bottom:1px solid #eee;}
+.member-name{display:block;color:#2065d1;font-weight:bold;cursor:default;}
+.member-profile{display:none;margin-top:5px;padding:7px;background:#f4f8ff;border:1px solid #d7e5f7;border-radius:6px;color:#333;font-size:12px;line-height:1.9;white-space:normal;overflow-wrap:anywhere;}
+.member-entry:hover .member-profile,.member-entry:focus-within .member-profile{display:block;}
+.members-dropdown:hover .members-list,.members-dropdown:focus-within .members-list{display:block;}
 
 .topic{background:#eef7ff;border:1px solid #9ac7ff;border-radius:10px;padding:12px;margin-bottom:14px;word-wrap:break-word;}
 .topic-title-wrap{position:relative;flex:1 1 auto;min-width:0;}
@@ -178,26 +182,33 @@ textarea{resize:vertical;}
     .idea .text{max-width:100%;}
 }
 </style>
-</head>
-<body>
-<div class="container">
-
-<?php if ($community): ?>
-<div class="box community-header">
-  <h2><?=htmlspecialchars($community['name'])?></h2>
-  <p><strong>وظایف و رویکردها:</strong> <?=nl2br(htmlspecialchars($community['approach'] ?? 'بدون توضیحات'))?></p>
-  <p><strong>تعداد اعضا:</strong> <?= (int)$community['members_count'] ?></p>
-  <div class="members-dropdown">
-    <button class="members-button">👥 مشاهده اعضا</button>
-    <div class="members-list">
-      <?php
-      $mem_q = $conn->prepare("SELECT username FROM community_members JOIN users ON users.id = community_members.user_id WHERE community_members.community_id = ?");
+</      $mem_q = $conn->prepare("SELECT users.username, users.age, users.gender, users.education, users.job, users.city, users.resume FROM community_members JOIN users ON users.id = community_members.user_id WHERE community_members.community_id = ?");
       $mem_q->bind_param("i", $community['id']);
       $mem_q->execute();
       $mem_res = $mem_q->get_result();
       if ($mem_res->num_rows > 0) {
           while ($m = $mem_res->fetch_assoc()) {
-              echo "<p>".htmlspecialchars($m['username'])."</p>";
+              $profile_fields = [
+                  'سن' => $m['age'] ?? '',
+                  'جنسیت' => $m['gender'] ?? '',
+                  'تحصیلات' => $m['education'] ?? '',
+                  'شغل' => $m['job'] ?? '',
+                  'شهر' => $m['city'] ?? '',
+                  'معرفی' => $m['resume'] ?? ''
+              ];
+              echo "<div class='member-entry'>";
+              echo "<span class='member-name' tabindex='0'>".htmlspecialchars($m['username'], ENT_QUOTES, 'UTF-8')."</span>";
+              echo "<div class='member-profile'>";
+              foreach ($profile_fields as $label => $value) {
+                  $value = trim((string)$value);
+                  if ($value !== '') {
+                      echo "<div><strong>".htmlspecialchars($label, ENT_QUOTES, 'UTF-8').":</strong> ".nl2br(htmlspecialchars($value, ENT_QUOTES, 'UTF-8'))."</div>";
+                  }
+              }
+              if (count(array_filter($profile_fields, function($value) { return trim((string)$value) !== ''; })) === 0) {
+                  echo "<span style='color:#777'>اطلاعات پروفایل ثبت نشده است.</span>";
+              }
+              echo "</div></div>";
           }
       } else {
           echo "<p style='color:#777'>عضوی وجود ندارد</p>";
