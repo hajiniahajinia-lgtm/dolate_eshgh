@@ -60,7 +60,8 @@ jobs:
           echo "Checking migration endpoint at: ${SITE_URL}/migration_runner.php"
 
           # A GET request must return 405 from the runner and does not execute SQL.
-          probe_status="$(curl --connect-timeout 10 --max-time 20 --silent --show-error \
+          probe_status="$(curl --http1.1 --user-agent "Mozilla/5.0 (compatible; DolateEshghMigration/1.0)" \
+            --connect-timeout 10 --max-time 20 --silent --show-error \
             --output /tmp/migration-probe-body --write-out '%{http_code}' \
             --request GET "${SITE_URL}/migration_runner.php")" || {
               echo "::error::The migration endpoint did not return a valid HTTP response to a harmless GET probe."
@@ -72,7 +73,8 @@ jobs:
             exit 1
           fi
 
-          curl --fail --show-error --silent --connect-timeout 10 --max-time 45 \
+          curl --http1.1 --user-agent "Mozilla/5.0 (compatible; DolateEshghMigration/1.0)" \
+            --fail --show-error --silent --connect-timeout 10 --max-time 45 \
             --request POST \
             --header "X-Migration-Token: ${MIGRATION_TOKEN}" \
             "${SITE_URL}/migration_runner.php"
