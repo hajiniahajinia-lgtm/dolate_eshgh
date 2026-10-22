@@ -59,11 +59,37 @@ body {
     padding: 25px;
 }
 
-/* ریسپانسیو بهتر در موبایل */
-@media(max-width:480px){
-    .container{
-        margin:20px;
-        padding:20px;
+/* بهبود خوانایی در موبایل؛ اندازه‌های دسکتاپ بدون تغییر می‌مانند */
+@media (max-width: 480px) {
+    body {
+        padding: 12px;
+    }
+
+    .container {
+        width: auto;
+        max-width: 430px;
+        margin: 20px auto;
+        padding: 22px 18px;
+    }
+
+    h2 {
+        font-size: 26px;
+    }
+
+    label {
+        font-size: 16px;
+        margin-top: 10px;
+    }
+
+    input[type="text"], input[type="password"] {
+        padding: 15px 12px;
+        font-size: 17px;
+        margin-bottom: 16px;
+    }
+
+    button {
+        padding: 15px 12px;
+        font-size: 18px;
     }
 }
 
