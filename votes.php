@@ -104,21 +104,76 @@ if($_SERVER['REQUEST_METHOD'] === 'POST'){
         exit;
     }
 
-    // ---------- ثبت فوریت (unchanged) ----------
+    // ---------- ثبت فوریت کاربر، محاسبه میانگین و به‌روزرسانی مدت رأی‌گیری ----------
     if(isset($_POST['set_urgency'])){
-        $topic_id = (int)$_POST['topic_id'];
-        $urg = max(1,min(365,(int)$_POST['urgency_days']));
+        $topic_id = (int)($_POST['topic_id'] ?? 0);
+        $urg = max(1, min(365, (int)($_POST['urgency_days'] ?? 5)));
+
+        if($topic_id <= 0){
+            echo json_encode(['success'=>false,'message'=>'موضوع نامعتبر است']);
+            exit;
+        }
+
+        // ساخت جدول با همان نام ستون‌های نسخه SQL؛ هر کاربر برای هر موضوع یک رأی دارد.
+        $conn->query("
+            CREATE TABLE IF NOT EXISTS topic_urgency_votes (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                topic_id INT NOT NULL,
+                user_id INT NOT NULL,
+                urgency_days INT NOT NULL DEFAULT 1,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY uq_topic_user (topic_id, user_id),
+                KEY idx_topic_id (topic_id),
+                KEY idx_user_id (user_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        ");
+
+        $save_vote = $conn->prepare("
+            INSERT INTO topic_urgency_votes (topic_id, user_id, urgency_days)
+            VALUES (?, ?, ?)
+            ON DUPLICATE KEY UPDATE urgency_days = VALUES(urgency_days)
+        ");
+        $save_vote->bind_param("iii", $topic_id, $user_id, $urg);
+        $save_vote->execute();
+        $save_vote->close();
+
+        // میانگین فوریت‌های ثبت‌شده توسط کاربران برای همین موضوع.
+        $avg_sql = $conn->prepare("
+            SELECT AVG(urgency_days) AS avg_days, COUNT(*) AS vote_count
+            FROM topic_urgency_votes
+            WHERE topic_id = ?
+        ");
+        $avg_sql->bind_param("i", $topic_id);
+        $avg_sql->execute();
+        $avg_result = $avg_sql->get_result()->fetch_assoc();
+        $avg_sql->close();
+
+        $avg_days = max(1, min(365, (int)ceil((float)($avg_result['avg_days'] ?? $urg))));
+
+        // ثبت مدت نهایی در جدول مخصوص رأی‌گیری نهایی؛ زمان شروع رأی‌گیری تغییر نمی‌کند.
         $check = $conn->prepare("SELECT topic_id FROM topic_voting_meta WHERE topic_id=? LIMIT 1");
-        $check->bind_param("i",$topic_id); $check->execute();
-        $exists = $check->get_result()->fetch_assoc(); $check->close();
+        $check->bind_param("i", $topic_id);
+        $check->execute();
+        $exists = $check->get_result()->fetch_assoc();
+        $check->close();
+
         if($exists){
             $upd = $conn->prepare("UPDATE topic_voting_meta SET urgency_days=? WHERE topic_id=?");
-            $upd->bind_param("ii",$urg,$topic_id); $upd->execute(); $upd->close();
+            $upd->bind_param("ii", $avg_days, $topic_id);
+            $upd->execute();
+            $upd->close();
         } else {
-            $ins = $conn->prepare("INSERT INTO topic_voting_meta (topic_id, urgency_days, voting_started, finalized) VALUES (?,?,NOW(),0)");
-            $ins->bind_param("ii",$topic_id,$urg); $ins->execute(); $ins->close();
+            $ins = $conn->prepare("INSERT INTO topic_voting_meta (topic_id, urgency_days, voting_started, finalized) VALUES (?, ?, NOW(), 0)");
+            $ins->bind_param("ii", $topic_id, $avg_days);
+            $ins->execute();
+            $ins->close();
         }
-        echo json_encode(['success'=>true,'urgency'=>$urg]);
+
+        echo json_encode([
+            'success'=>true,
+            'urgency'=>$avg_days,
+            'vote_count'=>(int)($avg_result['vote_count'] ?? 1)
+        ]);
         exit;
     }
 
@@ -518,7 +573,7 @@ body{
         $participation = participation_percent($conn,$tid);
     }
 ?>
-  <div class="topic" style="<?= $is_finalized ? 'opacity:0.7;' : '' ?>">
+  <div class="topic" data-topic="<?= $tid ?>" style="<?= $is_finalized ? 'opacity:0.7;' : '' ?>">
     <div class="header-row">
       <div style="flex:1 1 60%;">
         <h4 style="margin:0 0 6px 0"><?= htmlspecialchars($topic_title) ?></h4>
@@ -608,11 +663,13 @@ document.addEventListener('DOMContentLoaded', function(){
 
     // ---------- توابع ----------
     function startCountdown(el){
+        if(el._countdownTimer) clearTimeout(el._countdownTimer);
         let remaining = parseInt(el.dataset.remaining, 10) || 0;
         function tick(){
             if(remaining <= 0){
                 el.textContent = "⏰ زمان به پایان رسید";
                 el.style.color = "#c0392b";
+                if(el._countdownTimer) clearTimeout(el._countdownTimer);
                 return;
             }
             const days = Math.floor(remaining / (24*3600));
@@ -625,7 +682,7 @@ document.addEventListener('DOMContentLoaded', function(){
             el.textContent = txt;
             remaining--;
             el.dataset.remaining = remaining;
-            setTimeout(tick, 1000);
+            el._countdownTimer = setTimeout(tick, 1000);
         }
         tick();
     }
@@ -693,12 +750,16 @@ document.addEventListener('DOMContentLoaded', function(){
                 if(resp && resp.success){
                     alert("فوریت بروزرسانی شد: " + resp.urgency + " روز");
 
-                    // بروزرسانی remaining_seconds و اجرای شمارش معکوس مجدد
-                    const topicId = this.dataset.topic;
-                    const countdown = document.querySelector('.topic[data-topic="'+topicId+'"] .countdown');
+                    // اعمال مدت میانگین جدید بدون تغییر زمان شروع رأی‌گیری
+                    const topicCard = this.closest('.topic');
+                    const countdown = topicCard ? topicCard.querySelector('.countdown') : null;
                     if(countdown){
-                        const votingStartedUnix = parseInt(countdown.dataset.start) || Math.floor(Date.now()/1000);
-                        countdown.dataset.remaining = resp.urgency*24*3600 - (Math.floor(Date.now()/1000) - votingStartedUnix);
+                        const votingStartedUnix = parseInt(countdown.dataset.start, 10) || Math.floor(Date.now()/1000);
+                        const elapsed = Math.max(0, Math.floor(Date.now()/1000) - votingStartedUnix);
+                        countdown.dataset.remaining = Math.max(0, resp.urgency*24*3600 - elapsed);
+                        if(countdown._countdownTimer) clearTimeout(countdown._countdownTimer);
+                        countdown.textContent = '';
+                        countdown.style.color = '';
                         startCountdown(countdown);
                     }
                 }
