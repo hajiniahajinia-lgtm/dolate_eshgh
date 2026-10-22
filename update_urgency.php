@@ -12,7 +12,7 @@ $user_id = (int)$_SESSION['user_id'];
 // دریافت و اعتبارسنجی داده‌های فرم
 $topic_id = isset($_POST['topic_id']) ? (int)$_POST['topic_id'] : 0;
 $community_id = isset($_POST['community_id']) ? (int)$_POST['community_id'] : 0;
-$urgency_units = isset($_POST['urgency_units']) ? (int)$_POST['urgency_units'] : 1;
+$urgency_units = isset($_POST['urgency_days']) ? (int)$_POST['urgency_days'] : 1;
 $urgency_units = max(1, min(360, $urgency_units));
 
 if ($topic_id <= 0 || $community_id <= 0) {
