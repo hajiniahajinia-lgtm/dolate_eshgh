@@ -92,6 +92,7 @@ textarea{resize:vertical;}
 .members-dropdown:hover .members-list{display:block;}
 
 .topic{background:#eef7ff;border:1px solid #9ac7ff;border-radius:10px;padding:12px;margin-bottom:14px;word-wrap:break-word;}
+.topic-description{margin:8px 0 10px;color:#374151;font-size:14px;line-height:1.9;white-space:pre-wrap;overflow-wrap:anywhere;}
 .topic-header{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;}
 .topic-header h2{margin:0;font-size:16px;flex:1 1 auto;word-break:break-word;}
 .topic-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
@@ -175,7 +176,10 @@ textarea{resize:vertical;}
   <form action="add_topic.php" method="post">
     <input type="hidden" name="community_id" value="<?= (int)$community['id'] ?>">
     <label>عنوان موضوع*</label>
-   <textarea name="topic_title" rows="2" maxlength="100" placeholder="حداکثر 100 کاراکتر..." required></textarea>
+    <textarea name="topic_title" rows="2" maxlength="100" placeholder="حداکثر 100 کاراکتر..." required></textarea>
+    <label for="topic-description">شرح موضوع (اختیاری)</label>
+    <textarea id="topic-description" name="topic_description" rows="3" maxlength="500" placeholder="شرح کوتاهی از موضوع بنویسید؛ حداکثر 500 کاراکتر..."></textarea>
+    <small style="display:block;color:#666;margin-top:4px;">پر کردن این بخش اختیاری است.</small>
     <button type="submit">✅ ثبت موضوع</button>
   </form>
 </div>
@@ -287,6 +291,9 @@ if ($remaining_seconds < 0) $remaining_seconds = 0;
       </form>
     </div>
   </div>
+  <?php if (trim((string)($t2['description'] ?? '')) !== ''): ?>
+    <div class="topic-description"><?= htmlspecialchars($t2['description'], ENT_QUOTES, 'UTF-8') ?></div>
+  <?php endif; ?>
 
   <div class="ideas-box">
     <?php
