@@ -28,6 +28,8 @@ jobs:
           dangerous-clean-slate: false
           exclude: |
             **/.git*
+            **/.git*/**
+            **/node_modules/**
             **/.github/**
             **/README*
             **/db.php
