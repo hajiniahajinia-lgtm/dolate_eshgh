@@ -1,7 +1,6 @@
 name: Deploy to InfinityFree
 
-# Applies newly added, dated SQL migration files after a successful FTP deployment.
-# The SITE_URL secret must point at the exact public site root.
+# Uploads dated SQL migration files; the hosting-side executor applies them on the next normal page request.
 
 on:
   push:
@@ -11,7 +10,7 @@ on:
 
 jobs:
   deploy:
-    name: Upload website files and apply database migrations
+    name: Upload website files and stage database migrations
     runs-on: ubuntu-latest
 
     steps:
@@ -42,60 +41,13 @@ jobs:
             **/full_backup.php
             **/.env
 
-      - name: Apply new database migrations
-        env:
-          SITE_URL: ${{ secrets.SITE_URL }}
-          MIGRATION_TOKEN: ${{ secrets.MIGRATION_TOKEN }}
+      - name: Verify migration files are staged for host-side execution
         shell: bash
         run: |
           set -euo pipefail
-
-          if [ -z "${SITE_URL:-}" ] || [ -z "${MIGRATION_TOKEN:-}" ]; then
-            echo "::notice::FTP deployment completed. Database migrations were skipped because SITE_URL and/or MIGRATION_TOKEN repository secrets are not configured yet."
-            exit 0
-          fi
-
-          SITE_URL="${SITE_URL%/}"
-          # Prefer the canonical non-www host when the supplied URL starts with www.
-          SITE_URL="$(printf '%s' "$SITE_URL" | sed -E 's#^(https?://)www\.#\1#')"
-          echo "Checking deployed website root at: ${SITE_URL}"
-
-          # Verify the public web root matches the directory receiving FTP uploads.
-          root_status="$(curl --http1.1 --user-agent "Mozilla/5.0 (compatible; DolateEshghMigration/1.0)" \
-            --connect-timeout 10 --max-time 20 --silent --show-error \
-            --output /tmp/deployment-root-probe --write-out '%{http_code}|%{content_type}|%{url_effective}' \
-            "${SITE_URL}/deployment_test.txt")" || {
-              echo "::error::The public web root did not return a valid HTTP response."
-              exit 1
-            }
-
-          echo "Deployment test file probe: $root_status"
-          if [ "${root_status%%|*}" != "200" ] || ! grep -q 'GitHub' /tmp/deployment-root-probe; then
-            echo "Response preview (first 300 chars; public test-file request only):"
-            head -c 300 /tmp/deployment-root-probe | tr '\n' ' ' | sed -E 's/[[:space:]]+/ /g'
-            echo
-            echo "::error::The FTP directory does not appear to match the public web root, or deployment_test.txt is not publicly served. No SQL migration was attempted."
+          if ! find migrations -maxdepth 1 -type f -name '[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]_*.sql' -print -quit | grep -q .; then
+            echo "::error::No dated SQL migration files were found."
             exit 1
           fi
-
-          echo "Checking migration endpoint at: ${SITE_URL}/migration_runner.php"
-
-          # A GET request must return 405 from the runner and does not execute SQL.
-          probe_status="$(curl --http1.1 --user-agent "Mozilla/5.0 (compatible; DolateEshghMigration/1.0)" \
-            --connect-timeout 10 --max-time 20 --silent --show-error \
-            --output /tmp/migration-probe-body --write-out '%{http_code}' \
-            --request GET "${SITE_URL}/migration_runner.php")" || {
-              echo "::error::The migration endpoint did not return a valid HTTP response to a harmless GET probe."
-              exit 1
-            }
-
-          if [ "$probe_status" != "405" ]; then
-            echo "::error::Expected HTTP 405 from migration runner GET probe, received HTTP ${probe_status}. No SQL migration was attempted."
-            exit 1
-          fi
-
-          curl --http1.1 --user-agent "Mozilla/5.0 (compatible; DolateEshghMigration/1.0)" \
-            --fail --show-error --silent --connect-timeout 10 --max-time 45 \
-            --request POST \
-            --header "X-Migration-Token: ${MIGRATION_TOKEN}" \
-            "${SITE_URL}/migration_runner.php"
+          echo "Dated SQL migrations are included in the FTP deployment."
+          echo "The hosting-side executor applies pending migrations when a normal website page loads."
