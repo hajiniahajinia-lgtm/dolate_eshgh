@@ -71,6 +71,9 @@ jobs:
 
           echo "Deployment test file probe: $root_status"
           if [ "${root_status%%|*}" != "200" ] || ! grep -q 'GitHub' /tmp/deployment-root-probe; then
+            echo "Response preview (first 300 chars; public test-file request only):"
+            head -c 300 /tmp/deployment-root-probe | tr '\n' ' ' | sed -E 's/[[:space:]]+/ /g'
+            echo
             echo "::error::The FTP directory does not appear to match the public web root, or deployment_test.txt is not publicly served. No SQL migration was attempted."
             exit 1
           fi
