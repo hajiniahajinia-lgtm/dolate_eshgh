@@ -511,6 +511,19 @@ ALTER TABLE `topic_final_votes`
 ALTER TABLE `topic_priority_votes`
   ADD CONSTRAINT `topic_priority_votes_ibfk_1` FOREIGN KEY (`topic_id`) REFERENCES `topics` (`id`),
   ADD CONSTRAINT `topic_priority_votes_ibfk_2` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`);
+-- Separate urgency votes for the final voting period (not discussion-phase urgency).
+CREATE TABLE IF NOT EXISTS `topic_voting_urgency_votes` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `topic_id` int(11) NOT NULL,
+  `user_id` int(11) NOT NULL,
+  `urgency_days` int(11) NOT NULL DEFAULT 1,
+  `created_at` datetime DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_voting_topic_user` (`topic_id`,`user_id`),
+  KEY `idx_topic_id` (`topic_id`),
+  KEY `idx_user_id` (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
