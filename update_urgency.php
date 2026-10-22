@@ -9,30 +9,30 @@ if (!isset($_SESSION['user_id'])) {
 
 $user_id = (int)$_SESSION['user_id'];
 
-// گرفتن داده‌ها از فرم
+// دریافت و اعتبارسنجی داده‌های فرم
 $topic_id = isset($_POST['topic_id']) ? (int)$_POST['topic_id'] : 0;
-$urgency_days = isset($_POST['urgency_days']) ? (int)$_POST['urgency_days'] : 3; // پیش‌فرض 3 روز
+$community_id = isset($_POST['community_id']) ? (int)$_POST['community_id'] : 0;
+$urgency_days = isset($_POST['urgency_days']) ? (int)$_POST['urgency_days'] : 1;
+$urgency_days = max(1, min(360, $urgency_days));
 
-if ($topic_id <= 0) {
-    die("موضوع نامعتبر است.");
+if ($topic_id <= 0 || $community_id <= 0) {
+    http_response_code(400);
+    exit("موضوع یا جامعه نامعتبر است.");
 }
 
-// تبدیل روز به دقیقه (اگر واحد شما دقیقه است)
-$urgency_minutes = $urgency_days * 24 * 60;
-
-// ---- ۱. ذخیره فوریت کاربر در جدول topic_urgency_votes ----
+// ثبت فوریت کاربر با نام ستون واقعی جدول: urgency_days
 $save_vote = $conn->prepare("
-    INSERT INTO topic_urgency_votes (topic_id, user_id, urgency_minutes)
+    INSERT INTO topic_urgency_votes (topic_id, user_id, urgency_days)
     VALUES (?, ?, ?)
-    ON DUPLICATE KEY UPDATE urgency_minutes = VALUES(urgency_minutes)
+    ON DUPLICATE KEY UPDATE urgency_days = VALUES(urgency_days)
 ");
-$save_vote->bind_param("iii", $topic_id, $user_id, $urgency_minutes);
+$save_vote->bind_param("iii", $topic_id, $user_id, $urgency_days);
 $save_vote->execute();
 $save_vote->close();
 
-// ---- ۲. محاسبه میانگین فوریت کل اعضا ----
+// محاسبه میانگین فوریت ثبت‌شده توسط اعضا (واحد: روز)
 $avg_sql = $conn->prepare("
-    SELECT AVG(urgency_minutes) AS avg_urgency
+    SELECT AVG(urgency_days) AS avg_urgency
     FROM topic_urgency_votes
     WHERE topic_id = ?
 ");
@@ -41,20 +41,19 @@ $avg_sql->execute();
 $avg_result = $avg_sql->get_result()->fetch_assoc();
 $avg_sql->close();
 
-$avg_urgency_minutes = round($avg_result['avg_urgency']); // دقیقه
-$avg_urgency_days = ceil($avg_urgency_minutes / (24*60)); // تبدیل به روز برای نمایش
+$avg_urgency_days = max(1, min(360, (int)round((float)($avg_result['avg_urgency'] ?? $urgency_days))));
 
-// ---- ۳. آپدیت فوریت میانگین در جدول topics ----
+// به‌روزرسانی فوریت موضوع بر اساس میانگین روزها
 $update_topic = $conn->prepare("
     UPDATE topics
     SET urgency = ?
-    WHERE id = ?
+    WHERE id = ? AND community_id = ?
 ");
-$update_topic->bind_param("ii", $avg_urgency_days, $topic_id);
+$update_topic->bind_param("iii", $avg_urgency_days, $topic_id, $community_id);
 $update_topic->execute();
+$updated = $update_topic->affected_rows;
 $update_topic->close();
 
-// ---- ۴. بازگشت به صفحه قبلی ----
-$redirect = isset($_POST['redirect']) ? $_POST['redirect'] : "community.php?id=" . (int)$_POST['community_id'];
-header("Location: $redirect");
+// بازگشت به جامعه انتخاب‌شده
+header("Location: community.php?id=" . $community_id);
 exit;
