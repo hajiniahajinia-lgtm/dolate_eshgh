@@ -9,6 +9,12 @@ if (!isset($_SESSION['user_id'])) {
 
 $user_id = (int)$_SESSION['user_id'];
 
+// توکن امنیتی فرم‌های وظایف و رویکردهای جامعه
+if (empty($_SESSION['community_duty_csrf'])) {
+    $_SESSION['community_duty_csrf'] = bin2hex(random_bytes(32));
+}
+$community_duty_csrf = $_SESSION['community_duty_csrf'];
+
 // مشخصات کاربر
 $ust = $conn->prepare("SELECT username, phone, national_id FROM users WHERE id=?");
 $ust->bind_param("i", $user_id);
@@ -96,6 +102,22 @@ button{background:#2065d1;color:#fff;cursor:pointer;border:none;margin-top:10px;
 a{text-decoration:none;color:#2065d1;font-weight:bold;}
 textarea{resize:vertical;}
 
+.community-duties{margin:12px 0 8px;padding:12px;background:rgba(255,255,255,.76);border:1px solid #d9d6e9;border-radius:9px;text-align:right;}
+.community-duties h3{margin:0 0 6px;font-size:15px;color:#344054;}
+.community-duties-help,.community-duties-empty,.community-duties-notice{font-size:12px;line-height:1.9;color:#596579;margin:5px 0 9px;}
+.community-duties-notice{background:#fff8e1;padding:8px;border-radius:6px;}
+.community-duty-list{display:flex;flex-direction:column;gap:8px;margin:10px 0;}
+.community-duty-item{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px;background:#fff;border:1px solid #e2e8f0;border-radius:8px;}
+.community-duty-content{min-width:0;flex:1;line-height:1.9;overflow-wrap:anywhere;font-size:13px;}
+.community-duty-content small{display:block;color:#667085;font-size:11px;margin-top:4px;}
+.community-duty-top{display:block;color:#946200;margin-bottom:4px;font-size:12px;}
+.community-duty-type{display:inline-block;background:#eaf2ff;color:#2456a6;border-radius:5px;padding:1px 7px;font-size:11px;margin-bottom:5px;}
+.community-duty-vote-form{flex:0 0 auto;margin:0;}
+.community-duty-vote-form button,.community-duty-form button{margin:0;padding:8px 10px;font-size:12px;white-space:nowrap;}
+.community-duty-vote-form button.voted{background:#d9a514;color:#222;}
+.community-duty-form{margin-top:10px;padding-top:10px;border-top:1px solid #e4e7ec;}
+.community-duty-form label{display:block;font-size:12px;margin-top:7px;}
+.community-duty-form select,.community-duty-form textarea{width:100%;box-sizing:border-box;margin-top:5px;padding:8px;border:1px solid #c5cbd3;border-radius:6px;font:inherit;font-size:13px;background:#fff;}
 .members-dropdown{position:relative;display:inline-block;margin-top:8px;z-index:1100;}
 .members-button{background:#2065d1;color:#fff;border:none;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:13px;}
 .members-list{display:none;position:absolute;top:100%;right:0;background:#fff;min-width:200px;max-height:220px;overflow-y:auto;overflow-x:visible;border:1px solid #ccc;border-radius:8px;z-index:1101;padding:8px;box-shadow:0 2px 10px rgba(0,0,0,0.14);}
@@ -123,7 +145,10 @@ textarea{resize:vertical;}
 .idea-action-tooltip-text{display:none;position:fixed;top:0;left:0;width:280px;max-width:calc(100vw - 24px);box-sizing:border-box;padding:10px 12px;background:#fff;color:#263238;border:1px solid #b8c7d8;border-radius:8px;box-shadow:0 5px 18px rgba(0,0,0,.2);font-size:12px;line-height:1.9;font-weight:normal;text-align:right;white-space:normal;overflow-wrap:anywhere;z-index:99999;pointer-events:none;}
 .idea-action-tooltip:hover .idea-action-tooltip-text,
 .idea-action-tooltip:focus-within .idea-action-tooltip-text{display:block;}
-@media (max-width:720px){.idea-action-tooltip-text{display:none !important;}}
+@media (max-width:720px){
+    .community-duty-item{align-items:flex-start;flex-direction:column;}
+    .community-duty-vote-form{align-self:flex-start;}
+.idea-action-tooltip-text{display:none !important;}}
 .urgency-input{width:60px;text-align:center;padding:6px;font-size:13px;}
 .ideas-box{margin-top:10px;background:#fff;padding:10px;border-radius:8px;border:1px solid #ddd;max-height:200px;overflow-y:auto;}
 .idea{background:#fff;border:1px solid #e0f0ff;border-radius:8px;padding:10px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:flex-start;gap:8px;}
@@ -292,7 +317,105 @@ document.addEventListener('DOMContentLoaded', function () {
 <?php if ($community): ?>
 <div class="box community-header">
   <h2><?=htmlspecialchars($community['name'])?></h2>
-  <p><strong>وظایف و رویکردها:</strong> <?=nl2br(htmlspecialchars($community['approach'] ?? 'بدون توضیحات'))?></p>
+  <p><strong>توضیحات اولیه جامعه:</strong> <?=nl2br(htmlspecialchars($community['approach'] ?? 'بدون توضیحات'))?></p>
+
+  <?php
+  // قابلیت وظایف و رویکردهای پیشنهادی فقط در صورت نصب جدول‌های افزوده‌شده فعال می‌شود.
+  $community_duties_ready = false;
+  $duty_tables_check = $conn->query("SHOW TABLES LIKE 'community_duties'");
+  $vote_tables_check = $conn->query("SHOW TABLES LIKE 'community_duty_votes'");
+  if ($duty_tables_check && $vote_tables_check) {
+      $community_duties_ready = ($duty_tables_check->num_rows > 0 && $vote_tables_check->num_rows > 0);
+  }
+  if ($duty_tables_check) $duty_tables_check->close();
+  if ($vote_tables_check) $vote_tables_check->close();
+
+  $is_community_member = false;
+  $member_check = $conn->prepare("SELECT 1 FROM community_members WHERE community_id=? AND user_id=? LIMIT 1");
+  if ($member_check) {
+      $member_check->bind_param("ii", $community['id'], $user_id);
+      $member_check->execute();
+      $is_community_member = (bool)$member_check->get_result()->fetch_row();
+      $member_check->close();
+  }
+
+  $duty_proposals = [];
+  if ($community_duties_ready) {
+      $duty_query = $conn->prepare("
+          SELECT d.id, d.proposal_type, d.content, d.created_at, u.username,
+                 COUNT(v.user_id) AS vote_count,
+                 MAX(CASE WHEN v.user_id = ? THEN 1 ELSE 0 END) AS current_user_voted
+          FROM community_duties d
+          JOIN users u ON u.id = d.user_id
+          LEFT JOIN community_duty_votes v ON v.proposal_id = d.id
+          WHERE d.community_id = ?
+          GROUP BY d.id, d.proposal_type, d.content, d.created_at, u.username
+          ORDER BY vote_count DESC, d.id ASC
+          LIMIT 10
+      ");
+      if ($duty_query) {
+          $duty_query->bind_param("ii", $user_id, $community['id']);
+          $duty_query->execute();
+          $duty_result = $duty_query->get_result();
+          while ($duty_row = $duty_result->fetch_assoc()) $duty_proposals[] = $duty_row;
+          $duty_query->close();
+      }
+  }
+  ?>
+  <div class="community-duties">
+    <h3>🌱 وظایف و رویکردها</h3>
+    <p class="community-duties-help">اعضای جامعه پیشنهاد می‌دهند و با رأی معقولیت، مناسب‌ترین پیشنهادها در صدر قرار می‌گیرند.</p>
+    <?php if (!$community_duties_ready): ?>
+      <p class="community-duties-notice">برای فعال‌شدن این بخش، یک‌بار فایل <strong>community_duties.sql</strong> موجود در مخزن را روی پایگاه داده هاست اجرا کنید. هیچ داده‌ای حذف یا بازنویسی نمی‌شود.</p>
+    <?php else: ?>
+      <?php if (count($duty_proposals) > 0): ?>
+        <div class="community-duty-list">
+          <?php foreach ($duty_proposals as $idx => $proposal): ?>
+            <div class="community-duty-item">
+              <div class="community-duty-content">
+                <?php if ($idx === 0): ?><strong class="community-duty-top">★ معقول‌ترین پیشنهاد فعلی</strong><?php endif; ?>
+                <span class="community-duty-type"><?= $proposal['proposal_type'] === 'duty' ? 'وظیفه' : 'رویکرد' ?></span>
+                <div><?= nl2br(htmlspecialchars($proposal['content'], ENT_QUOTES, 'UTF-8')) ?></div>
+                <small>پیشنهاددهنده: <?= htmlspecialchars($proposal['username'], ENT_QUOTES, 'UTF-8') ?> · رأی معقولیت: <?= (int)$proposal['vote_count'] ?></small>
+              </div>
+              <?php if ($is_community_member): ?>
+                <form method="post" action="community_duty_action.php" class="community-duty-vote-form">
+                  <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($community_duty_csrf, ENT_QUOTES, 'UTF-8') ?>">
+                  <input type="hidden" name="action" value="vote">
+                  <input type="hidden" name="community_id" value="<?= (int)$community['id'] ?>">
+                  <input type="hidden" name="proposal_id" value="<?= (int)$proposal['id'] ?>">
+                  <button type="submit" class="<?= (int)$proposal['current_user_voted'] === 1 ? 'voted' : '' ?>">
+                    <?= (int)$proposal['current_user_voted'] === 1 ? '✓ رأی شما' : 'رأی معقولیت' ?>
+                  </button>
+                </form>
+              <?php endif; ?>
+            </div>
+          <?php endforeach; ?>
+        </div>
+        <?php if (count($duty_proposals) === 10): ?><small class="community-duties-help">۱۰ پیشنهاد برتر نمایش داده شده‌اند.</small><?php endif; ?>
+      <?php else: ?>
+        <p class="community-duties-empty">هنوز پیشنهادی ثبت نشده است.</p>
+      <?php endif; ?>
+
+      <?php if ($is_community_member): ?>
+        <form method="post" action="community_duty_action.php" class="community-duty-form">
+          <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($community_duty_csrf, ENT_QUOTES, 'UTF-8') ?>">
+          <input type="hidden" name="action" value="submit">
+          <input type="hidden" name="community_id" value="<?= (int)$community['id'] ?>">
+          <label for="community-duty-type">نوع پیشنهاد</label>
+          <select id="community-duty-type" name="proposal_type" required>
+            <option value="duty">وظیفه جامعه</option>
+            <option value="approach">رویکرد انجام وظیفه</option>
+          </select>
+          <label for="community-duty-content">متن پیشنهاد</label>
+          <textarea id="community-duty-content" name="content" rows="3" maxlength="600" required placeholder="پیشنهاد روشن و قابل‌فهم خود را بنویسید؛ حداکثر ۶۰۰ نویسه."></textarea>
+          <button type="submit">➕ ثبت پیشنهاد</button>
+        </form>
+      <?php else: ?>
+        <p class="community-duties-notice">برای ثبت پیشنهاد یا رأی‌دادن، ابتدا باید عضو این جامعه باشید.</p>
+      <?php endif; ?>
+    <?php endif; ?>
+  </div>
   <p><strong>تعداد اعضا:</strong> <?= (int)$community['members_count'] ?></p>
   <div class="members-dropdown">
     <button class="members-button">👥 مشاهده اعضا</button>
