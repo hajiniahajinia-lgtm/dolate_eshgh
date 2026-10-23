@@ -760,8 +760,11 @@ body{
             $author_person_score_votes = 0;
             if ($author_id > 0) {
                 $person_score_q = $conn->prepare("SELECT
-                    COALESCE(AVG((lawfulness + ethics + honesty + executive_skill) / 4.0), 0) AS score,
-                    COUNT(scorer_user_id) AS score_votes
+                    AVG(NULLIF(lawfulness, 0)) AS avg_lawfulness,
+                    AVG(NULLIF(ethics, 0)) AS avg_ethics,
+                    AVG(NULLIF(honesty, 0)) AS avg_honesty,
+                    AVG(NULLIF(executive_skill, 0)) AS avg_executive,
+                    COUNT(CASE WHEN COALESCE(lawfulness, 0) > 0 OR COALESCE(ethics, 0) > 0 OR COALESCE(honesty, 0) > 0 OR COALESCE(executive_skill, 0) > 0 THEN scorer_user_id END) AS score_votes
                     FROM user_scores
                     WHERE target_user_id = ?
                       AND scorer_user_id <> ?
@@ -772,7 +775,16 @@ body{
                     $person_score_row = $person_score_q->get_result()->fetch_assoc();
                     $author_person_score_votes = (int)($person_score_row['score_votes'] ?? 0);
                     if ($author_person_score_votes > 0) {
-                        $author_person_score = round((float)($person_score_row['score'] ?? 0), 2);
+                        $criterion_scores = [
+                            $person_score_row['avg_lawfulness'],
+                            $person_score_row['avg_ethics'],
+                            $person_score_row['avg_honesty'],
+                            $person_score_row['avg_executive']
+                        ];
+                        $valid_scores = array_filter($criterion_scores, function($value) { return $value !== null; });
+                        if (count($valid_scores) > 0) {
+                            $author_person_score = round(array_sum($valid_scores) / count($valid_scores), 2);
+                        }
                     }
                     $person_score_q->close();
                 }
