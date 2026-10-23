@@ -755,6 +755,29 @@ body{
             $author_total = $author_yes + $author_no;
             $author_popularity = $author_total > 0 ? round(($author_yes / $author_total) * 100) : null;
 
+            // محبوبیت خود شخص بر اساس امتیازدهی اعضای همین جامعه؛ هم‌راستا با صفحهٔ بایگانی.
+            $author_person_score = null;
+            $author_person_score_votes = 0;
+            if ($author_id > 0) {
+                $person_score_q = $conn->prepare("SELECT
+                    COALESCE(AVG((lawfulness + ethics + honesty + executive_skill) / 4.0), 0) AS score,
+                    COUNT(scorer_user_id) AS score_votes
+                    FROM user_scores
+                    WHERE target_user_id = ?
+                      AND scorer_user_id <> ?
+                      AND scorer_user_id IN (SELECT user_id FROM community_members WHERE community_id = ?)");
+                if ($person_score_q) {
+                    $person_score_q->bind_param("iii", $author_id, $author_id, $community_id);
+                    $person_score_q->execute();
+                    $person_score_row = $person_score_q->get_result()->fetch_assoc();
+                    $author_person_score_votes = (int)($person_score_row['score_votes'] ?? 0);
+                    if ($author_person_score_votes > 0) {
+                        $author_person_score = round((float)($person_score_row['score'] ?? 0), 2);
+                    }
+                    $person_score_q->close();
+                }
+            }
+
             // counts
             $yes_count = (int)$conn->query("SELECT COUNT(*) AS c FROM topic_voting_ballots WHERE topic_id=$tid AND idea_id=$iid AND vote_type='yes'")->fetch_assoc()['c'];
             $no_count  = (int)$conn->query("SELECT COUNT(*) AS c FROM topic_voting_ballots WHERE topic_id=$tid AND idea_id=$iid AND vote_type='no'")->fetch_assoc()['c'];
@@ -782,7 +805,11 @@ body{
           <hr style="border:0;border-top:1px solid #e2e8f0;margin:5px 0">
           <strong>محبوبیت ایده‌ها:</strong><br>
           آری: <?= $author_yes ?> — نه: <?= $author_no ?><br>
-          درصد آری: <?= $author_popularity === null ? 'هنوز رأیی ثبت نشده' : $author_popularity . '%' ?>
+          درصد آری: <?= $author_popularity === null ? 'هنوز رأیی ثبت نشده' : $author_popularity . '%' ?><br>
+          <hr style="border:0;border-top:1px solid #e2e8f0;margin:5px 0">
+          <strong>محبوبیت خود شخص در این جامعه:</strong><br>
+          میانگین امتیاز اعضا: <?= $author_person_score === null ? 'هنوز امتیازی ثبت نشده' : number_format($author_person_score, 2) ?><br>
+          تعداد امتیازدهی‌ها: <?= $author_person_score_votes ?>
         </span>
       </span></strong><br>
       <?= nl2br(htmlspecialchars($icontent, ENT_QUOTES, 'UTF-8')) ?>
