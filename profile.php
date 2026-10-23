@@ -407,6 +407,7 @@ if($user_comms->num_rows>0):
                 LEFT JOIN community_duty_votes v ON v.proposal_id=d.id AND v.community_id=d.community_id
                 WHERE d.community_id=?
                 GROUP BY d.id, d.content, d.created_at
+                HAVING COUNT(v.user_id) > 0
                 ORDER BY vote_count DESC, d.id ASC
                 LIMIT 1
             ");
