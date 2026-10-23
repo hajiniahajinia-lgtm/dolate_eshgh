@@ -588,7 +588,19 @@ document.addEventListener('DOMContentLoaded', function () {
   </section>
   </details>
 
-  <p><strong>تعداد اعضا:</strong> <?= (int)$community['members_count'] ?></p>
+  <?php
+  // تعداد واقعی اعضا از جدول عضویت خوانده می‌شود تا با شمارندهٔ ذخیره‌شدهٔ قدیمی اختلاف نداشته باشد.
+  $actual_member_count = 0;
+  $member_count_query = $conn->prepare("SELECT COUNT(*) AS total FROM community_members WHERE community_id=?");
+  if ($member_count_query) {
+      $member_count_query->bind_param("i", $community_id);
+      $member_count_query->execute();
+      $member_count_result = $member_count_query->get_result()->fetch_assoc();
+      $actual_member_count = (int)($member_count_result['total'] ?? 0);
+      $member_count_query->close();
+  }
+  ?>
+  <p><strong>تعداد اعضا:</strong> <?= community_persian_digits($actual_member_count) ?></p>
   <div class="members-dropdown">
     <button class="members-button">👥 مشاهده اعضا</button>
     <div class="members-list">
