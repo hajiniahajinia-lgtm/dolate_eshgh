@@ -53,6 +53,8 @@ h2,h3 {margin-top:0;}
 input, select, textarea, button {width:100%;padding:10px;margin-top:8px;border-radius:6px;border:1px solid #bbb;box-sizing:border-box;font-size:14px;}
 button {background:#2065d1;color:#fff;cursor:pointer;border:none;margin-top:10px;font-size:15px;}
 button.leave {background:#e63946;}
+.enter-community {display:block;width:100%;padding:10px;margin-top:10px;border-radius:6px;box-sizing:border-box;background:#bdecc8;color:#185c2b;text-align:center;font-size:15px;font-weight:bold;}
+.enter-community:hover {background:#a9e2b7;}
 button.edit {background:#2a9d8f;margin-bottom:10px;}
 a {text-decoration:none;color:#2065d1;font-weight:bold;}
 /* --- آکاردئون جوامع --- */
@@ -388,13 +390,13 @@ if($user_comms->num_rows>0):
 <p><strong>وظایف و رویکردها:</strong> <?= nl2br(htmlspecialchars((string)$uc['approach'], ENT_QUOTES, 'UTF-8')) ?></p>
 <?php endif; ?>
 <p><strong>تعداد اعضا:</strong> <?= (int)$uc['members_count'] ?></p>
-<p>
-<a href="community.php?id=<?= (int)$uc['id'] ?>">ورود به جامعه</a>
+<div style="margin-top:8px;">
+<a href="community.php?id=<?= (int)$uc['id'] ?>" class="enter-community">ورود به جامعه</a>
 <form action="leave_community.php" method="post" onsubmit="return confirm('آیا مطمئن هستید؟');">
 <input type="hidden" name="community_id" value="<?= (int)$uc['id'] ?>">
 <button type="submit" class="leave">🚫 ترک جامعه</button>
 </form>
-</p>
+</div>
 </div>
 <?php endwhile; else: ?>
 <p>هنوز عضو هیچ جامعه‌ای نیستید.</p>
