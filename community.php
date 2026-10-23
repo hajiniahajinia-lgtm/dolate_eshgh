@@ -121,6 +121,8 @@ textarea{resize:vertical;}
 /* توضیح‌های دکمه‌های ایده؛ جای‌گذاری ثابت برای جلوگیری از بریده‌شدن زیر حاشیه‌ها */
 .idea-action-tooltip{position:relative;display:inline-flex;align-items:center;}
 .idea-action-tooltip-text{display:none;position:fixed;top:0;left:0;width:280px;max-width:calc(100vw - 24px);box-sizing:border-box;padding:10px 12px;background:#fff;color:#263238;border:1px solid #b8c7d8;border-radius:8px;box-shadow:0 5px 18px rgba(0,0,0,.2);font-size:12px;line-height:1.9;font-weight:normal;text-align:right;white-space:normal;overflow-wrap:anywhere;z-index:99999;pointer-events:none;}
+.idea-action-tooltip:hover .idea-action-tooltip-text,
+.idea-action-tooltip:focus-within .idea-action-tooltip-text{display:block;}
 @media (max-width:720px){.idea-action-tooltip-text{display:none !important;}}
 .urgency-input{width:60px;text-align:center;padding:6px;font-size:13px;}
 .ideas-box{margin-top:10px;background:#fff;padding:10px;border-radius:8px;border:1px solid #ddd;max-height:200px;overflow-y:auto;}
@@ -701,7 +703,12 @@ document.addEventListener("DOMContentLoaded", function() {
         const tip = wrapper.querySelector('.action-tooltip-text');
         const button = wrapper.querySelector('button, a, span');
         if (!tip || !button) return;
-        if (wrapper.classList.contains('idea-action-tooltip') && window.innerWidth <= 720) return;
+        const isIdeaTooltip = wrapper.classList.contains('idea-action-tooltip');
+        if (isIdeaTooltip && window.innerWidth <= 720) return;
+        // انتقال توضیح به body تا overflow کادر ایده‌ها نتواند آن را ببُرد.
+        if (isIdeaTooltip && tip.parentElement !== document.body) {
+            document.body.appendChild(tip);
+        }
 
         function placeTip() {
             tip.style.display = 'block';
