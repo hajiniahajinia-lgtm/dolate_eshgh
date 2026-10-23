@@ -165,6 +165,30 @@ textarea{resize:vertical;}
         white-space:nowrap !important;
     }
 
+    /* هم‌اندازه‌کردن فیلد عدد فوریت با دکمه‌ها و نگه‌داشتن آن در همان ردیف، فقط در کامپیوتر */
+    .topic-actions form[action="update_urgency.php"]{
+        display:inline-flex !important;
+        flex-direction:row !important;
+        align-items:center !important;
+        gap:6px !important;
+        margin:0 !important;
+    }
+    .topic-actions form[action="update_urgency.php"] .urgency-input{
+        box-sizing:border-box !important;
+        width:92px !important;
+        min-width:92px !important;
+        max-width:92px !important;
+        height:36px !important;
+        min-height:36px !important;
+        max-height:36px !important;
+        padding:0 6px !important;
+        margin:0 !important;
+        font-family:Tahoma, Arial, sans-serif !important;
+        font-size:13px !important;
+        line-height:1 !important;
+        text-align:center !important;
+    }
+
     /* چیدمان منظم اطلاعات موضوع فقط در صفحه‌نمایش کامپیوتر */
     .topic-header{
         display:grid;
