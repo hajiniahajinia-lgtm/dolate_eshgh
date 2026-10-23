@@ -346,17 +346,69 @@ $mq->execute();
 $user_comms = $mq->get_result();
 $mq->close();
 
+// اگر سامانهٔ پیشنهادها فعال باشد، پروفایل هم آخرین پیشنهاد و هم معقول‌ترین پیشنهاد را از داده‌های زنده نشان می‌دهد.
+$duties_tables_ready = false;
+$duties_table_check = $conn->query("SHOW TABLES LIKE 'community_duties'");
+$duty_votes_table_check = $conn->query("SHOW TABLES LIKE 'community_duty_votes'");
+if ($duties_table_check && $duty_votes_table_check) {
+    $duties_tables_ready = ($duties_table_check->num_rows > 0 && $duty_votes_table_check->num_rows > 0);
+}
+if ($duties_table_check) $duties_table_check->close();
+if ($duty_votes_table_check) $duty_votes_table_check->close();
+
 if($user_comms->num_rows>0):
     while($uc=$user_comms->fetch_assoc()):
+        $top_duty = null;
+        $latest_duty = null;
+        if ($duties_tables_ready) {
+            $top_q = $conn->prepare("
+                SELECT d.id, d.content, d.created_at, COUNT(v.user_id) AS vote_count
+                FROM community_duties d
+                LEFT JOIN community_duty_votes v ON v.proposal_id=d.id AND v.community_id=d.community_id
+                WHERE d.community_id=?
+                GROUP BY d.id, d.content, d.created_at
+                ORDER BY vote_count DESC, d.id ASC
+                LIMIT 1
+            ");
+            if ($top_q) {
+                $top_q->bind_param("i", $uc['id']);
+                $top_q->execute();
+                $top_duty = $top_q->get_result()->fetch_assoc();
+                $top_q->close();
+            }
+
+            $latest_q = $conn->prepare("
+                SELECT id, content, created_at
+                FROM community_duties
+                WHERE community_id=?
+                ORDER BY created_at DESC, id DESC
+                LIMIT 1
+            ");
+            if ($latest_q) {
+                $latest_q->bind_param("i", $uc['id']);
+                $latest_q->execute();
+                $latest_duty = $latest_q->get_result()->fetch_assoc();
+                $latest_q->close();
+            }
+        }
 ?>
-<div class="accordion"><?= htmlspecialchars($uc['name']) ?></div>
+<div class="accordion"><?= htmlspecialchars($uc['name'], ENT_QUOTES, 'UTF-8') ?></div>
 <div class="panel">
-<p><strong>وظایف و رویکردها:</strong> <?= htmlspecialchars($uc['approach']) ?></p>
+<?php if ($top_duty): ?>
+<p><strong>★ معقول‌ترین وظایف و رویکردها:</strong><br><?= nl2br(htmlspecialchars($top_duty['content'], ENT_QUOTES, 'UTF-8')) ?><br><small>رأی معقولیت: <?= (int)$top_duty['vote_count'] ?></small></p>
+<?php else: ?>
+<p><strong>وظایف و رویکردها:</strong> <?= nl2br(htmlspecialchars((string)$uc['approach'], ENT_QUOTES, 'UTF-8')) ?></p>
+<?php endif; ?>
+<?php if ($latest_duty && (!$top_duty || (int)$latest_duty['id'] !== (int)$top_duty['id'])): ?>
+<p><strong>🆕 آخرین تغییر / پیشنهاد:</strong><br><?= nl2br(htmlspecialchars($latest_duty['content'], ENT_QUOTES, 'UTF-8')) ?></p>
+<?php elseif (!$latest_duty && !$top_duty): ?>
+<p style="font-size:12px;color:#667085;">هنوز پیشنهاد تازه‌ای برای وظایف و رویکردها ثبت نشده است.</p>
+<?php endif; ?>
 <p><strong>تعداد اعضا:</strong> <?= (int)$uc['members_count'] ?></p>
 <p>
-<a href="community.php?id=<?= $uc['id'] ?>">ورود به جامعه</a>
+<a href="community.php?id=<?= (int)$uc['id'] ?>">ورود به جامعه</a>
 <form action="leave_community.php" method="post" onsubmit="return confirm('آیا مطمئن هستید؟');">
-<input type="hidden" name="community_id" value="<?= $uc['id'] ?>">
+<input type="hidden" name="community_id" value="<?= (int)$uc['id'] ?>">
 <button type="submit" class="leave">🚫 ترک جامعه</button>
 </form>
 </p>
