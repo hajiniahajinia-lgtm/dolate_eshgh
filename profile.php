@@ -56,7 +56,8 @@ button.leave {background:#e63946;}
 .community-action {display:flex;align-items:center;justify-content:center;width:100%;height:44px;min-height:44px;padding:0 10px;margin-top:10px;border:0;border-radius:6px;box-sizing:border-box;font-family:tahoma,sans-serif;font-size:15px;font-weight:bold;line-height:1;text-align:center;}
 .enter-community {background:#bdecc8;color:#185c2b;cursor:pointer;}
 .enter-community:hover {background:#a9e2b7;}
-button.leave {height:44px;min-height:44px;padding:0 10px;margin-top:10px;line-height:1;}
+.leave-community-form {display:block !important;width:100%;margin:0 !important;padding:0;}
+.leave-community-form button.leave {display:flex;width:100%;height:44px;min-height:44px;padding:0 10px;margin-top:10px;align-items:center;justify-content:center;box-sizing:border-box;line-height:1;}
 button.edit {background:#2a9d8f;margin-bottom:10px;}
 a {text-decoration:none;color:#2065d1;font-weight:bold;}
 /* --- آکاردئون جوامع --- */
@@ -395,7 +396,7 @@ if($user_comms->num_rows>0):
 <p><strong>تعداد اعضا:</strong> <?= (int)$uc['members_count'] ?></p>
 <div style="margin-top:8px;">
 <a href="community.php?id=<?= (int)$uc['id'] ?>" class="community-action enter-community">🚪 ورود به جامعه</a>
-<form action="leave_community.php" method="post" onsubmit="return confirm('آیا مطمئن هستید؟');">
+<form class="leave-community-form" action="leave_community.php" method="post" onsubmit="return confirm('آیا مطمئن هستید؟');">
 <input type="hidden" name="community_id" value="<?= (int)$uc['id'] ?>">
 <button type="submit" class="community-action leave">🚫 ترک جامعه</button>
 </form>
