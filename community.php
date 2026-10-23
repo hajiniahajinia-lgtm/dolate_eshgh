@@ -402,7 +402,7 @@ document.addEventListener('DOMContentLoaded', function () {
           <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($community_duty_csrf, ENT_QUOTES, 'UTF-8') ?>">
           <input type="hidden" name="action" value="submit">
           <input type="hidden" name="community_id" value="<?= (int)$community['id'] ?>">
-          <label for="community-duty-content">متن پیشنهاد</label>
+          <label for="community-duty-content">متن پیشنهادی برای رویکرد و وظایف</label>
           <textarea id="community-duty-content" name="content" rows="3" maxlength="600" required placeholder="پیشنهاد روشن و قابل‌فهم خود را بنویسید؛ حداکثر ۶۰۰ نویسه."></textarea>
           <button type="submit">➕ ثبت پیشنهاد</button>
         </form>
