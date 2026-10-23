@@ -83,6 +83,14 @@ function toggleEditForm() {
     const form = document.getElementById('editForm');
     form.style.display = (form.style.display === 'block') ? 'none' : 'block';
 }
+function toggleCommunityTree() {
+    const panel = document.getElementById('communityTreePanel');
+    const button = document.getElementById('communityTreeToggle');
+    const isOpen = panel.style.display === 'block';
+    panel.style.display = isOpen ? 'none' : 'block';
+    button.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
+    button.textContent = isOpen ? '🌳 نمایش درخت جوامع' : '🌳 بستن درخت جوامع';
+}
 document.addEventListener("DOMContentLoaded", function() {
     const acc = document.getElementsByClassName("accordion");
     for (let i=0;i<acc.length;i++){
@@ -150,9 +158,10 @@ document.addEventListener("DOMContentLoaded", function() {
 <?php if($user['resume']): ?><p><strong>رزومه:</strong> <?= nl2br(htmlspecialchars($user['resume'])) ?></p><?php endif; ?>
 </div>
 
-<!-- درخت ساختار همه جوامع -->
+<!-- درخت ساختار همه جوامع؛ بسته به‌صورت پیش‌فرض برای صرفه‌جویی در فضا -->
 <div class="box">
-<h3>🌳 درخت جوامع</h3>
+<button type="button" id="communityTreeToggle" class="tree-toggle" aria-expanded="false" aria-controls="communityTreePanel" onclick="toggleCommunityTree()">🌳 نمایش درخت جوامع</button>
+<div id="communityTreePanel" style="display:none">
 <p style="font-size:13px;color:#667085;line-height:1.9">جوامع مستقل در سطح اصلی و جوامع زیرمجموعه در زیر جامعهٔ مادر نمایش داده می‌شوند. برای ورود به هر جامعه، روی نام آن بزنید.</p>
 <div class="communities-box">
 <?php
@@ -201,6 +210,7 @@ if (empty($tree_rows)) {
     $render_community_tree(0);
 }
 ?>
+</div>
 </div>
 </div>
 
