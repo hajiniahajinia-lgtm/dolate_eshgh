@@ -427,6 +427,11 @@ body{
 .topic-description{display:none;position:absolute;top:calc(100% + 5px);right:0;width:360px;max-width:calc(100vw - 48px);box-sizing:border-box;padding:10px 12px;background:#fff;color:#374151;font-size:13px;line-height:1.9;white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid #9ac7ff;border-radius:8px;box-shadow:0 5px 16px rgba(0,0,0,.18);z-index:1500;font-weight:normal;}
 .topic-title-wrap:hover .topic-description,.topic-title-wrap:focus-within .topic-description{display:block;}
 
+/* اطلاعات و محبوبیت ایده‌دهنده */
+.idea-author-wrap{position:relative;display:inline-block;cursor:help;color:#174ea6;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:3px;outline-offset:3px;}
+.idea-author-tooltip{display:none;position:absolute;right:0;top:calc(100% + 5px);width:270px;max-width:calc(100vw - 56px);box-sizing:border-box;padding:10px 12px;background:#fff;color:#263445;font-size:13px;line-height:1.9;white-space:normal;overflow-wrap:anywhere;border:1px solid #9ac7ff;border-radius:8px;box-shadow:0 5px 16px rgba(0,0,0,.18);z-index:1600;font-weight:normal;text-decoration:none;}
+.idea-author-wrap:hover .idea-author-tooltip,.idea-author-wrap:focus .idea-author-tooltip,.idea-author-wrap:focus-within .idea-author-tooltip{display:block;}
+
 /* ایده */
 .idea{
     background:#fff9e5;
@@ -657,7 +662,8 @@ body{
 
     // دریافت ایده‌هایی که در topic_final_votes برای این موضوع مشخص شده‌اند
     $ideas_q = $conn->prepare("
-        SELECT tfv.idea_id, i.content, u.username
+        SELECT tfv.idea_id, i.content, i.user_id AS author_id,
+               u.username, u.age, u.gender, u.job, u.education, u.city
         FROM topic_final_votes tfv
         JOIN ideas i ON i.id = tfv.idea_id
         LEFT JOIN users u ON u.id = i.user_id
@@ -720,6 +726,34 @@ body{
             $iid = (int)$idea['idea_id'];
             $icontent = $idea['content'];
             $iauthor = $idea['username'] ?? 'ناشناس';
+            $author_id = (int)($idea['author_id'] ?? 0);
+            $author_age = trim((string)($idea['age'] ?? ''));
+            $author_gender = trim((string)($idea['gender'] ?? ''));
+            $author_job = trim((string)($idea['job'] ?? ''));
+            $author_education = trim((string)($idea['education'] ?? ''));
+            $author_city = trim((string)($idea['city'] ?? ''));
+
+            // محبوبیت ایده‌دهنده بر اساس رأی‌های آری و نه به تمام ایده‌های او
+            $author_yes = 0;
+            $author_no = 0;
+            if ($author_id > 0) {
+                $pop_q = $conn->prepare("SELECT
+                    SUM(CASE WHEN b.vote_type='yes' THEN 1 ELSE 0 END) AS yes_count,
+                    SUM(CASE WHEN b.vote_type='no' THEN 1 ELSE 0 END) AS no_count
+                    FROM ideas ai
+                    LEFT JOIN topic_voting_ballots b ON b.idea_id=ai.id
+                    WHERE ai.user_id=?");
+                if ($pop_q) {
+                    $pop_q->bind_param("i", $author_id);
+                    $pop_q->execute();
+                    $pop_row = $pop_q->get_result()->fetch_assoc();
+                    $author_yes = (int)($pop_row['yes_count'] ?? 0);
+                    $author_no = (int)($pop_row['no_count'] ?? 0);
+                    $pop_q->close();
+                }
+            }
+            $author_total = $author_yes + $author_no;
+            $author_popularity = $author_total > 0 ? round(($author_yes / $author_total) * 100) : null;
 
             // counts
             $yes_count = (int)$conn->query("SELECT COUNT(*) AS c FROM topic_voting_ballots WHERE topic_id=$tid AND idea_id=$iid AND vote_type='yes'")->fetch_assoc()['c'];
@@ -736,8 +770,22 @@ body{
      <div class="idea" data-idea="<?= $iid ?>">
   <button class="show-hide-btn" onclick="toggleIdea(<?= $iid ?>)">💡 نمایش/مخفی کردن ایده</button>
   <div class="idea-box" id="idea-box-<?= $iid ?>" style="display:none; margin-top:6px; padding:6px; border:1px solid #f0c86e; border-radius:6px; background:#fff9e5;">
-      <strong>👤 <?= htmlspecialchars($iauthor) ?></strong><br>
-      <?= nl2br(htmlspecialchars($icontent)) ?>
+      <strong>👤 <span class="idea-author-wrap" tabindex="0" aria-label="نمایش اطلاعات و محبوبیت ایده‌دهنده"><?= htmlspecialchars($iauthor, ENT_QUOTES, 'UTF-8') ?>
+        <span class="idea-author-tooltip" role="tooltip">
+          <strong>اطلاعات ایده‌دهنده</strong><br>
+          نام کاربری: <?= htmlspecialchars($iauthor, ENT_QUOTES, 'UTF-8') ?><br>
+          <?php if ($author_age !== ''): ?>سن: <?= htmlspecialchars($author_age, ENT_QUOTES, 'UTF-8') ?><br><?php endif; ?>
+          <?php if ($author_gender !== ''): ?>جنسیت: <?= htmlspecialchars($author_gender, ENT_QUOTES, 'UTF-8') ?><br><?php endif; ?>
+          <?php if ($author_job !== ''): ?>شغل: <?= htmlspecialchars($author_job, ENT_QUOTES, 'UTF-8') ?><br><?php endif; ?>
+          <?php if ($author_education !== ''): ?>تحصیلات: <?= htmlspecialchars($author_education, ENT_QUOTES, 'UTF-8') ?><br><?php endif; ?>
+          <?php if ($author_city !== ''): ?>شهر: <?= htmlspecialchars($author_city, ENT_QUOTES, 'UTF-8') ?><br><?php endif; ?>
+          <hr style="border:0;border-top:1px solid #e2e8f0;margin:5px 0">
+          <strong>محبوبیت ایده‌ها:</strong><br>
+          آری: <?= $author_yes ?> — نه: <?= $author_no ?><br>
+          درصد آری: <?= $author_popularity === null ? 'هنوز رأیی ثبت نشده' : $author_popularity . '%' ?>
+        </span>
+      </span></strong><br>
+      <?= nl2br(htmlspecialchars($icontent, ENT_QUOTES, 'UTF-8')) ?>
   </div>
 
   <div class="small" style="margin-top:6px">
