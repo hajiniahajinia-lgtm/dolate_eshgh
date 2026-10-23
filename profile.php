@@ -329,9 +329,11 @@ if (empty($tree_rows)) {
 </div>
 </div>
 
-<!-- جوامع من -->
-<div class="box">
-<h3>جوامع من</h3>
+<!-- جوامع من؛ بسته به‌صورت پیش‌فرض برای صرفه‌جویی در فضا -->
+<div class="box" id="my-communities">
+<details>
+<summary style="display:block;cursor:pointer;background:#2065d1;color:#fff;border-radius:7px;padding:12px;text-align:center;font-weight:bold;list-style:none;">👥 جوامع من</summary>
+<div style="padding-top:10px;">
 <div class="communities-box">
 <?php
 $mq = $conn->prepare("
@@ -398,6 +400,8 @@ if($user_comms->num_rows>0):
 <p>هنوز عضو هیچ جامعه‌ای نیستید.</p>
 <?php endif; ?>
 </div>
+</div>
+</details>
 </div>
 
 <!-- عضویت در جوامع موجود -->
