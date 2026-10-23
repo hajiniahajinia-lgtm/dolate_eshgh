@@ -531,7 +531,7 @@ $losers_count  = (int)$arch_stats['losers'];
 <script>
 document.addEventListener("DOMContentLoaded", function() {
     // ثبت اولویت و فوریت بدون بارگذاری مجدد صفحه
-    document.querySelectorAll('form[action="toggle_priority.php"], form[action="update_urgency.php"]').forEach(function(form) {
+    document.querySelectorAll('form[action="toggle_priority.php"], form[action="update_urgency.php"], form[action="update_idea.php"]').forEach(function(form) {
         form.addEventListener("submit", async function(event) {
             event.preventDefault();
             const submitButton = form.querySelector('button[type="submit"]') || form.querySelector('button');
@@ -549,10 +549,19 @@ document.addEventListener("DOMContentLoaded", function() {
                 if (!response.ok) throw new Error("ثبت انجام نشد");
                 const html = await response.text();
                 const parsed = new DOMParser().parseFromString(html, "text/html");
-                const topicId = form.querySelector('input[name="topic_id"]')?.value;
+                const topicId = form.querySelector('input[name="topic_id"]')?.value || (form.closest('.topic')?.id || '').replace(/^topic-/, '');
                 const freshTopic = topicId ? parsed.getElementById("topic-" + topicId) : null;
                 const currentTopic = topicId ? document.getElementById("topic-" + topicId) : null;
                 if (!freshTopic || !currentTopic) throw new Error("پاسخ صفحه قابل شناسایی نیست");
+
+                // برای رأی معقولیت، فقط بخش ایده‌های همان موضوع را به‌روز کن تا صفحه بالا نپرد.
+                if (form.action.includes("update_idea.php")) {
+                    const freshIdeasBox = freshTopic.querySelector(".ideas-box");
+                    const currentIdeasBox = currentTopic.querySelector(".ideas-box");
+                    if (!freshIdeasBox || !currentIdeasBox) throw new Error("بخش ایده‌ها در پاسخ پیدا نشد");
+                    currentIdeasBox.innerHTML = freshIdeasBox.innerHTML;
+                    return;
+                }
 
                 const freshSummary = freshTopic.querySelector(".topic-summary");
                 const currentSummary = currentTopic.querySelector(".topic-summary");
