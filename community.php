@@ -42,9 +42,6 @@ function community_gregorian_to_jalali($gy, $gm, $gd) {
     for ($i = 0; $i < $gm - 1; $i++) {
         $days += $g_days_in_month[$i];
     }
-    if ($gm > 2 && (($gy2 % 4 === 0 && $gy2 % 100 !== 0) || $gy2 % 400 === 0)) {
-        $days++;
-    }
     $jy += 33 * (int)($days / 12053);
     $days %= 12053;
     $jy += 4 * (int)($days / 1461);
