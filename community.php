@@ -317,7 +317,6 @@ document.addEventListener('DOMContentLoaded', function () {
 <?php if ($community): ?>
 <div class="box community-header">
   <h2><?=htmlspecialchars($community['name'])?></h2>
-  <p><strong>توضیحات اولیه جامعه:</strong> <?=nl2br(htmlspecialchars($community['approach'] ?? 'بدون توضیحات'))?></p>
 
   <?php
   // قابلیت وظایف و رویکردهای پیشنهادی فقط در صورت نصب جدول‌های افزوده‌شده فعال می‌شود.
@@ -362,6 +361,14 @@ document.addEventListener('DOMContentLoaded', function () {
       }
   }
   ?>
+  <p style="margin:10px 0 14px;line-height:1.9;"><strong>معقول‌ترین وظایف و رویکردهای جامعه:</strong>
+    <?php if (!empty($duty_proposals)): ?>
+      <?= nl2br(htmlspecialchars($duty_proposals[0]['content'])) ?>
+      <span style="display:inline-block;color:#946200;font-size:12px;">(<?= (int)$duty_proposals[0]['vote_count'] ?> رأی معقولیت)</span>
+    <?php else: ?>
+      هنوز پیشنهادی ثبت نشده است.
+    <?php endif; ?>
+  </p>
   <div class="community-duties" id="community-duties">
     <h3>🌱 وظایف و رویکردها</h3>
     <p class="community-duties-help">اعضای جامعه پیشنهاد می‌دهند و با رأی معقولیت، مناسب‌ترین پیشنهادها در صدر قرار می‌گیرند.</p>
