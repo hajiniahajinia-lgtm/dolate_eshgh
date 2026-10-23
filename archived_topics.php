@@ -21,7 +21,7 @@ if($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['vote_for_candidate'])){
  $ms=$conn->prepare("SELECT 1 FROM community_members WHERE community_id=? AND user_id=? LIMIT 1");$ms->bind_param("ii",$community_id,$user_id);$ms->execute();$is_member=(bool)$ms->get_result()->fetch_assoc();$ms->close();
  $ws=$conn->prepare("SELECT 1 FROM topics t JOIN topic_voting_meta m ON m.topic_id=t.id JOIN topic_winners w ON w.topic_id=t.id AND w.idea_id=? WHERE t.id=? AND t.community_id=? AND m.finalized=1 LIMIT 1");$ws->bind_param("iii",$idea_id,$topic_id,$community_id);$ws->execute();$is_winner=(bool)$ws->get_result()->fetch_assoc();$ws->close();
  $cs=$conn->prepare("SELECT 1 FROM topic_execution_candidates WHERE topic_id=? AND idea_id=? AND user_id=? LIMIT 1");$cs->bind_param("iii",$topic_id,$idea_id,$candidate_uid);$cs->execute();$is_candidate=(bool)$cs->get_result()->fetch_assoc();$cs->close();
- if(!$is_member||!$is_winner||!$is_candidate||$candidate_uid===$user_id){header('Location: archived_topics.php?community_id='.$community_id.'&candidate_vote_status=invalid');exit;}
+ if(!$is_member||!$is_winner||!$is_candidate){header('Location: archived_topics.php?community_id='.$community_id.'&candidate_vote_status=invalid');exit;}
  $ps=$conn->prepare("SELECT candidate_user_id FROM topic_execution_candidate_votes WHERE topic_id=? AND idea_id=? AND voter_user_id=? LIMIT 1");$ps->bind_param("iii",$topic_id,$idea_id,$user_id);$ps->execute();$prior=$ps->get_result()->fetch_assoc();$ps->close();
  $sv=$conn->prepare("INSERT INTO topic_execution_candidate_votes (topic_id,idea_id,candidate_user_id,voter_user_id) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE candidate_user_id=VALUES(candidate_user_id),created_at=CURRENT_TIMESTAMP");$sv->bind_param("iiii",$topic_id,$idea_id,$candidate_uid,$user_id);$sv->execute();$sv->close();
  header('Location: archived_topics.php?community_id='.$community_id.'&candidate_vote_status='.($prior?'changed':'saved'));exit;
@@ -157,7 +157,7 @@ while($row=$result->fetch_assoc()){
 
     $status = ($votes['pct_yes']>=50) ? 'winner' : 'loser';
     $execution_candidates=[];
-    if($candidate_tables_ready && !empty($winner_idea['idea_id'])){
+    if($status==='winner' && $candidate_tables_ready && !empty($winner_idea['idea_id'])){
       $winner_idea_id=(int)$winner_idea['idea_id'];
       $cl=$conn->prepare("SELECT c.user_id,u.username FROM topic_execution_candidates c JOIN users u ON u.id=c.user_id JOIN community_members cm ON cm.user_id=c.user_id AND cm.community_id=? WHERE c.topic_id=? AND c.idea_id=? ORDER BY u.username ASC");
       $cl->bind_param("iii",$community_id,$topic_id,$winner_idea_id);$cl->execute();$clr=$cl->get_result();
@@ -260,7 +260,7 @@ function toggleIdea(id){
                 <div style="padding:9px;margin-top:7px;border:1px solid #d9e7dc;border-radius:8px;background:#fff"><div><strong><?= htmlspecialchars($candidate['username'],ENT_QUOTES,'UTF-8') ?></strong></div>
                   <div class="meta">محبوبیت: <strong><?= number_format($candidate['popularity'],2) ?></strong> از <?= (int)$candidate['popularity_votes'] ?> امتیازدهی</div>
                   <div class="meta">رأی مستقل برای انتخاب مجری: <strong><?= (int)$candidate['election_votes'] ?></strong></div>
-                  <?php if((int)$candidate['user_id']!==$user_id): ?><form method="post" style="margin-top:7px"><input type="hidden" name="vote_for_candidate" value="1"><input type="hidden" name="topic_id" value="<?= (int)$row['id'] ?>"><input type="hidden" name="idea_id" value="<?= (int)$row['idea']['idea_id'] ?>"><input type="hidden" name="candidate_user_id" value="<?= (int)$candidate['user_id'] ?>"><button type="submit" style="width:100%;padding:8px;border:0;border-radius:6px;background:<?= $candidate['my_vote']?'#218838':'#dceeff' ?>;color:<?= $candidate['my_vote']?'#fff':'#173b63' ?>;font-weight:bold;cursor:pointer"><?= $candidate['my_vote']?'✓ رأی شما برای این نامزد ثبت شده':'انتخاب این نامزد به‌عنوان مجری' ?></button></form><?php else: ?><div class="meta" style="margin-top:6px">برای جلوگیری از رأی به خود، نمی‌توانید به نام خودتان رأی بدهید.</div><?php endif; ?>
+                  <form method="post" style="margin-top:7px"><input type="hidden" name="vote_for_candidate" value="1"><input type="hidden" name="topic_id" value="<?= (int)$row['id'] ?>"><input type="hidden" name="idea_id" value="<?= (int)$row['idea']['idea_id'] ?>"><input type="hidden" name="candidate_user_id" value="<?= (int)$candidate['user_id'] ?>"><button type="submit" style="width:100%;padding:8px;border:0;border-radius:6px;background:<?= $candidate['my_vote']?'#218838':'#dceeff' ?>;color:<?= $candidate['my_vote']?'#fff':'#173b63' ?>;font-weight:bold;cursor:pointer"><?= $candidate['my_vote']?'✓ رأی شما برای این نامزد ثبت شده':'انتخاب این نامزد به‌عنوان مجری' ?></button></form>
                 </div>
               <?php endforeach; ?>
             </div>
