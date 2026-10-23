@@ -362,7 +362,7 @@ document.addEventListener('DOMContentLoaded', function () {
       }
   }
   ?>
-  <div class="community-duties">
+  <div class="community-duties" id="community-duties">
     <h3>🌱 وظایف و رویکردها</h3>
     <p class="community-duties-help">اعضای جامعه پیشنهاد می‌دهند و با رأی معقولیت، مناسب‌ترین پیشنهادها در صدر قرار می‌گیرند.</p>
     <?php if (!$community_duties_ready): ?>
