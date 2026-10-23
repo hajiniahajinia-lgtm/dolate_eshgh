@@ -255,7 +255,8 @@ function toggleIdea(id){
 
             <?php if(!empty($row['execution_candidates'])): ?>
             <div style="width:100%;margin-top:8px;padding:12px;border:1px solid #a9d4b0;background:#f2fff4;border-radius:10px;box-sizing:border-box">
-              <strong>🙋 داوطلبان اجرای طرح برنده</strong><div class="meta" style="margin:5px 0 10px">محبوبیت و رأی انتخاب مجری جداگانه نمایش داده می‌شوند. هر عضو می‌تواند برای این طرح یک نامزد انتخاب کند و رأی خود را تغییر دهد.</div>
+              <strong>🙋 داوطلبان اجرای طرح برنده</strong>
+              <div class="meta" style="margin:5px 0 10px">نام داوطلبان زیر نمایش داده شده است. محبوبیت و رأی انتخاب مجری جداگانه نمایش داده می‌شوند. هر عضو می‌تواند برای این طرح یک نامزد انتخاب کند و رأی خود را تغییر دهد.</div>
               <?php foreach($row['execution_candidates'] as $candidate): ?>
                 <div style="padding:9px;margin-top:7px;border:1px solid #d9e7dc;border-radius:8px;background:#fff"><div><strong><?= htmlspecialchars($candidate['username'],ENT_QUOTES,'UTF-8') ?></strong></div>
                   <div class="meta">محبوبیت: <strong><?= number_format($candidate['popularity'],2) ?></strong> از <?= (int)$candidate['popularity_votes'] ?> امتیازدهی</div>
