@@ -53,8 +53,10 @@ h2,h3 {margin-top:0;}
 input, select, textarea, button {width:100%;padding:10px;margin-top:8px;border-radius:6px;border:1px solid #bbb;box-sizing:border-box;font-size:14px;}
 button {background:#2065d1;color:#fff;cursor:pointer;border:none;margin-top:10px;font-size:15px;}
 button.leave {background:#e63946;}
-.enter-community {display:block;width:100%;padding:10px;margin-top:10px;border:0;border-radius:6px;box-sizing:border-box;background:#bdecc8;color:#185c2b;text-align:center;font-family:inherit;font-size:15px;font-weight:bold;line-height:normal;cursor:pointer;}
+.community-action {display:flex;align-items:center;justify-content:center;width:100%;height:44px;min-height:44px;padding:0 10px;margin-top:10px;border:0;border-radius:6px;box-sizing:border-box;font-family:tahoma,sans-serif;font-size:15px;font-weight:bold;line-height:1;text-align:center;}
+.enter-community {background:#bdecc8;color:#185c2b;cursor:pointer;}
 .enter-community:hover {background:#a9e2b7;}
+button.leave {height:44px;min-height:44px;padding:0 10px;margin-top:10px;line-height:1;}
 button.edit {background:#2a9d8f;margin-bottom:10px;}
 a {text-decoration:none;color:#2065d1;font-weight:bold;}
 /* --- آکاردئون جوامع --- */
@@ -80,7 +82,7 @@ a {text-decoration:none;color:#2065d1;font-weight:bold;}
 @media (max-width:600px){
     .container{padding:8px;}
     input, select, textarea, button{font-size:16px;padding:12px;}
-    .enter-community{font-size:16px;padding:12px;}
+    .community-action{height:44px;min-height:44px;font-size:16px;padding:0 10px;}
     h2,h3{font-size:18px;}
     .accordion{font-size:16px;}
 }
@@ -392,10 +394,10 @@ if($user_comms->num_rows>0):
 <?php endif; ?>
 <p><strong>تعداد اعضا:</strong> <?= (int)$uc['members_count'] ?></p>
 <div style="margin-top:8px;">
-<a href="community.php?id=<?= (int)$uc['id'] ?>" class="enter-community">🚪 ورود به جامعه</a>
+<a href="community.php?id=<?= (int)$uc['id'] ?>" class="community-action enter-community">🚪 ورود به جامعه</a>
 <form action="leave_community.php" method="post" onsubmit="return confirm('آیا مطمئن هستید؟');">
 <input type="hidden" name="community_id" value="<?= (int)$uc['id'] ?>">
-<button type="submit" class="leave">🚫 ترک جامعه</button>
+<button type="submit" class="community-action leave">🚫 ترک جامعه</button>
 </form>
 </div>
 </div>
