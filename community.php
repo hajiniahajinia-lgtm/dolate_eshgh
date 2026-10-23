@@ -487,25 +487,9 @@ document.addEventListener('DOMContentLoaded', function () {
           این جامعه در حال حاضر <strong>مستقل</strong> است.
         <?php endif; ?>
       </p>
-      <?php if ($hierarchy_status === 'saved'): ?>
-        <p style="color:#18794e;font-size:13px;margin:6px 0;">رأی شما ثبت شد. جایگاه بر اساس بیشترین رأی یکتا تعیین می‌شود؛ در تساوی جایگاه فعلی حفظ می‌شود.</p>
-      <?php elseif ($hierarchy_status === 'cycle' || $hierarchy_status === 'invalid'): ?>
-        <p style="color:#b42318;font-size:13px;margin:6px 0;">این ارتباط قابل ثبت نیست؛ جامعه را نمی‌توان زیرمجموعهٔ خودش یا یکی از زیرمجموعه‌هایش قرار داد.</p>
-      <?php elseif ($hierarchy_status === 'csrf'): ?>
-        <p style="color:#b42318;font-size:13px;margin:6px 0;">فرم منقضی شده است؛ صفحه را تازه‌سازی و دوباره تلاش کنید.</p>
-      <?php endif; ?>
-      <form method="post" action="set_community_parent.php" style="margin-top:10px;">
-        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['community_hierarchy_csrf'], ENT_QUOTES, 'UTF-8') ?>">
-        <input type="hidden" name="community_id" value="<?= (int)$community['id'] ?>">
-        <label for="parent-community-select" style="display:block;font-size:13px;">رأی شما دربارهٔ جایگاه این جامعه (هر کاربر می‌تواند یک رأی ثبت کند)</label>
-        <select id="parent-community-select" name="parent_community_id" style="margin-top:6px;">
-          <option value="0" <?= !$community_parent ? 'selected' : '' ?>>جامعهٔ مستقل؛ بدون جامعهٔ بالادست</option>
-          <?php foreach ($other_communities as $other_community): ?>
-            <option value="<?= (int)$other_community['id'] ?>" <?= $community_parent && (int)$community_parent['id'] === (int)$other_community['id'] ? 'selected' : '' ?>>زیرمجموعهٔ <?= htmlspecialchars($other_community['name'], ENT_QUOTES, 'UTF-8') ?></option>
-          <?php endforeach; ?>
-        </select>
-        <button type="submit" style="margin-top:8px;">ثبت / تغییر رأی</button>
-      </form>
+      <p style="font-size:13px;line-height:1.9;margin:8px 0;color:#596579;">
+        برای مشارکت در تعیین جایگاه این جامعه، به صفحهٔ پروفایل بروید و از بخش «رأی‌گیری دربارهٔ جایگاه جوامع» رأی خود را ثبت یا تغییر دهید. جایگاه نهایی بر اساس نتیجهٔ رأی‌گیری تعیین می‌شود.
+      </p>
       <?php if (!empty($community_children)): ?>
         <div style="margin-top:10px;font-size:13px;line-height:1.9;">
           <strong>جوامع زیرمجموعهٔ این جامعه:</strong>
