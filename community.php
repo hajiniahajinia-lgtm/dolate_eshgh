@@ -631,9 +631,26 @@ document.addEventListener('DOMContentLoaded', function () {
       $mem_q->execute();
       $mem_res = $mem_q->get_result();
       if ($mem_res->num_rows > 0) {
-          $member_rank = 0;
-          while ($m = $mem_res->fetch_assoc()) {
-              $member_rank++;
+          // رتبهٔ این فهرست با رتبهٔ کادر اطلاعات یکسان است؛ اعضای بدون امتیاز رتبه نمی‌گیرند.
+          $members_for_ranking = [];
+          while ($member_row = $mem_res->fetch_assoc()) {
+              $members_for_ranking[] = $member_row;
+          }
+
+          foreach ($members_for_ranking as $m) {
+              $score_value = (float)$m['popularity_score'];
+              $score_votes = (int)$m['popularity_votes'];
+              $member_rank = null;
+              if ($score_votes > 0) {
+                  $member_rank = 1;
+                  foreach ($members_for_ranking as $other_member) {
+                      if ((int)$other_member['id'] !== (int)$m['id']
+                          && (int)$other_member['popularity_votes'] > 0
+                          && (float)$other_member['popularity_score'] > $score_value) {
+                          $member_rank++;
+                      }
+                  }
+              }
               $profile_fields = [
                   'سن' => $m['age'] ?? '',
                   'جنسیت' => $m['gender'] ?? '',
@@ -642,12 +659,15 @@ document.addEventListener('DOMContentLoaded', function () {
                   'شهر' => $m['city'] ?? '',
                   'معرفی' => $m['resume'] ?? ''
               ];
-              $score_value = (float)$m['popularity_score'];
               $score_label = number_format($score_value, 2, '.', '');
               echo "<div class='member-entry'>";
-              echo "<span class='member-name' tabindex='0'>".($member_rank === 1 && (int)$m['popularity_votes'] > 0 ? "🥇 " : "").htmlspecialchars($m['username'], ENT_QUOTES, 'UTF-8')."</span>";
+              echo "<span class='member-name' tabindex='0'>".($member_rank === 1 ? "🥇 " : "").htmlspecialchars($m['username'], ENT_QUOTES, 'UTF-8')."</span>";
               echo "<div class='member-profile'>";
-              echo "<div><strong>رتبه محبوبیت در این جامعه:</strong> ".(int)$member_rank."</div>";
+              if ($member_rank !== null) {
+                  echo "<div><strong>رتبه محبوبیت در این جامعه:</strong> ".(int)$member_rank." از ".$actual_member_count." عضو</div>";
+              } else {
+                  echo "<div><strong>رتبه محبوبیت در این جامعه:</strong> هنوز رتبه‌ای ندارد</div>";
+              }
               if ((int)$m['popularity_votes'] > 0) {
                   echo "<div><strong>میانگین محبوبیت:</strong> ".htmlspecialchars($score_label, ENT_QUOTES, 'UTF-8')." از ۵</div>";
                   echo "<div><strong>تعداد ارزیابی‌ها:</strong> ".(int)$m['popularity_votes']."</div>";
