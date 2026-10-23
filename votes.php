@@ -336,7 +336,7 @@ $finalize_q->close();
 
 // --- نمایش HTML و کارت‌ها ---
 $active_q = $conn->prepare("
-  SELECT t.id AS topic_id, t.title AS topic_title,
+  SELECT t.id AS topic_id, t.title AS topic_title, t.description AS topic_description,
          COALESCE(tfv.created_at, t.created_at) AS voting_started
   FROM topics t
   JOIN topic_final_votes tfv ON tfv.topic_id = t.id
@@ -397,6 +397,10 @@ body{
     padding:12px;
     margin-bottom:14px;
 }
+.topic-title-wrap{position:relative;display:inline-block;max-width:100%;}
+.topic-title-wrap h4{cursor:help;}
+.topic-description{display:none;position:absolute;top:calc(100% + 5px);right:0;width:360px;max-width:calc(100vw - 48px);box-sizing:border-box;padding:10px 12px;background:#fff;color:#374151;font-size:13px;line-height:1.9;white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid #9ac7ff;border-radius:8px;box-shadow:0 5px 16px rgba(0,0,0,.18);z-index:1500;font-weight:normal;}
+.topic-title-wrap:hover .topic-description,.topic-title-wrap:focus-within .topic-description{display:block;}
 
 /* ایده */
 .idea{
@@ -648,7 +652,12 @@ body{
   <div class="topic" data-topic="<?= $tid ?>" style="<?= $is_finalized ? 'opacity:0.7;' : '' ?>">
     <div class="header-row">
       <div style="flex:1 1 60%;">
-        <h4 style="margin:0 0 6px 0"><?= htmlspecialchars($topic_title) ?></h4>
+        <div class="topic-title-wrap">
+          <h4 style="margin:0 0 6px 0"><?= htmlspecialchars($topic_title, ENT_QUOTES, 'UTF-8') ?></h4>
+          <?php if (trim((string)($t['topic_description'] ?? '')) !== ''): ?>
+            <div class="topic-description"><?= nl2br(htmlspecialchars($t['topic_description'], ENT_QUOTES, 'UTF-8')) ?></div>
+          <?php endif; ?>
+        </div>
         <div class="meta">
           آغاز رأی‌گیری: <?= date('Y-m-d H:i', $voting_started_unix) ?> —
           میانگین فعلی فوریت: <strong class="urgency-average"><?= $urg_days ?></strong> روز
