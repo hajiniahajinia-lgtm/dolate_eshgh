@@ -346,7 +346,7 @@ $mq->execute();
 $user_comms = $mq->get_result();
 $mq->close();
 
-// اگر سامانهٔ پیشنهادها فعال باشد، پروفایل هم آخرین پیشنهاد و هم معقول‌ترین پیشنهاد را از داده‌های زنده نشان می‌دهد.
+// نمایش پیشنهاد دارای بیشترین رأی معقولیت در بخش جوامع من.
 $duties_tables_ready = false;
 $duties_table_check = $conn->query("SHOW TABLES LIKE 'community_duties'");
 $duty_votes_table_check = $conn->query("SHOW TABLES LIKE 'community_duty_votes'");
@@ -359,7 +359,6 @@ if ($duty_votes_table_check) $duty_votes_table_check->close();
 if($user_comms->num_rows>0):
     while($uc=$user_comms->fetch_assoc()):
         $top_duty = null;
-        $latest_duty = null;
         if ($duties_tables_ready) {
             $top_q = $conn->prepare("
                 SELECT d.id, d.content, d.created_at, COUNT(v.user_id) AS vote_count
@@ -377,32 +376,14 @@ if($user_comms->num_rows>0):
                 $top_q->close();
             }
 
-            $latest_q = $conn->prepare("
-                SELECT id, content, created_at
-                FROM community_duties
-                WHERE community_id=?
-                ORDER BY created_at DESC, id DESC
-                LIMIT 1
-            ");
-            if ($latest_q) {
-                $latest_q->bind_param("i", $uc['id']);
-                $latest_q->execute();
-                $latest_duty = $latest_q->get_result()->fetch_assoc();
-                $latest_q->close();
-            }
         }
 ?>
 <div class="accordion"><?= htmlspecialchars($uc['name'], ENT_QUOTES, 'UTF-8') ?></div>
 <div class="panel">
 <?php if ($top_duty): ?>
-<p><strong>★ معقول‌ترین وظایف و رویکردها:</strong><br><?= nl2br(htmlspecialchars($top_duty['content'], ENT_QUOTES, 'UTF-8')) ?><br><small>رأی معقولیت: <?= (int)$top_duty['vote_count'] ?></small></p>
+<p><strong>وظایف و رویکردها:</strong><br><?= nl2br(htmlspecialchars($top_duty['content'], ENT_QUOTES, 'UTF-8')) ?></p>
 <?php else: ?>
 <p><strong>وظایف و رویکردها:</strong> <?= nl2br(htmlspecialchars((string)$uc['approach'], ENT_QUOTES, 'UTF-8')) ?></p>
-<?php endif; ?>
-<?php if ($latest_duty && (!$top_duty || (int)$latest_duty['id'] !== (int)$top_duty['id'])): ?>
-<p><strong>🆕 آخرین تغییر / پیشنهاد:</strong><br><?= nl2br(htmlspecialchars($latest_duty['content'], ENT_QUOTES, 'UTF-8')) ?></p>
-<?php elseif (!$latest_duty && !$top_duty): ?>
-<p style="font-size:12px;color:#667085;">هنوز پیشنهاد تازه‌ای برای وظایف و رویکردها ثبت نشده است.</p>
 <?php endif; ?>
 <p><strong>تعداد اعضا:</strong> <?= (int)$uc['members_count'] ?></p>
 <p>
