@@ -184,14 +184,20 @@ if($user_comms->num_rows>0):
 <select name="community_id" required>
 <option value="">— انتخاب جامعه —</option>
 <?php
-$sq=$conn->prepare("SELECT c.id, c.name FROM communities c WHERE c.id NOT IN (SELECT community_id FROM community_members WHERE user_id=?) ORDER BY c.name");
+$sq=$conn->prepare("
+SELECT c.id, c.name, c.parent_community_id, p.name AS parent_name
+FROM communities c
+LEFT JOIN communities p ON p.id = c.parent_community_id
+WHERE c.id NOT IN (SELECT community_id FROM community_members WHERE user_id=?)
+ORDER BY COALESCE(p.name, c.name), (c.parent_community_id IS NOT NULL), c.name
+");
 $sq->bind_param("i",$user_id);
 $sq->execute();
 $new_comms=$sq->get_result();
 $sq->close();
 while($nc=$new_comms->fetch_assoc()):
 ?>
-<option value="<?= $nc['id'] ?>"><?= htmlspecialchars($nc['name']) ?></option>
+<option value="<?= (int)$nc['id'] ?>"><?= !empty($nc['parent_community_id']) ? '　↳ ' . htmlspecialchars($nc['name']) . ' — زیرمجموعهٔ ' . htmlspecialchars($nc['parent_name']) : htmlspecialchars($nc['name']) . ' — جامعهٔ مستقل' ?></option>
 <?php endwhile; ?>
 </select>
 <button type="submit">عضویت</button>
