@@ -33,6 +33,23 @@ if ($stmt->execute()) {
     $community_id = $stmt->insert_id;
     $stmt->close();
 
+    // ثبت متن اولیه به‌عنوان پیشنهاد پایه، تا اعضا بتوانند آن را با پیشنهادهای بعدی مقایسه و رأی‌گیری کنند.
+    $duties_table_check = $conn->query("SHOW TABLES LIKE 'community_duties'");
+    $votes_table_check = $conn->query("SHOW TABLES LIKE 'community_duty_votes'");
+    $duties_ready = $duties_table_check && $votes_table_check
+        && $duties_table_check->num_rows > 0 && $votes_table_check->num_rows > 0;
+    if ($duties_table_check) $duties_table_check->close();
+    if ($votes_table_check) $votes_table_check->close();
+
+    if ($duties_ready) {
+        $initial_proposal = $conn->prepare("INSERT INTO community_duties (community_id, user_id, proposal_type, content) VALUES (?, ?, 'approach', ?)");
+        if ($initial_proposal) {
+            $initial_proposal->bind_param("iis", $community_id, $user_id, $approach);
+            $initial_proposal->execute();
+            $initial_proposal->close();
+        }
+    }
+
     // اگر تیک "همین الان عضو شوم" زده شده، اضافه کردن کاربر به members
     if ($join_now) {
         $mem_stmt = $conn->prepare("INSERT INTO community_members (community_id, user_id) VALUES (?, ?)");
