@@ -374,7 +374,7 @@ document.addEventListener('DOMContentLoaded', function () {
             <div class="community-duty-item">
               <div class="community-duty-content">
                 <?php if ($idx === 0): ?><strong class="community-duty-top">★ معقول‌ترین پیشنهاد فعلی</strong><?php endif; ?>
-                <span class="community-duty-type"><?= $proposal['proposal_type'] === 'duty' ? 'وظیفه' : 'رویکرد' ?></span>
+                <span class="community-duty-type">پیشنهاد رویکرد و وظایف</span>
                 <div><?= nl2br(htmlspecialchars($proposal['content'], ENT_QUOTES, 'UTF-8')) ?></div>
                 <small>پیشنهاددهنده: <?= htmlspecialchars($proposal['username'], ENT_QUOTES, 'UTF-8') ?> · رأی معقولیت: <?= (int)$proposal['vote_count'] ?></small>
               </div>
@@ -402,10 +402,9 @@ document.addEventListener('DOMContentLoaded', function () {
           <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($community_duty_csrf, ENT_QUOTES, 'UTF-8') ?>">
           <input type="hidden" name="action" value="submit">
           <input type="hidden" name="community_id" value="<?= (int)$community['id'] ?>">
-          <label for="community-duty-type">نوع پیشنهاد</label>
+          <label for="community-duty-type">پیشنهاد رویکرد و وظایف</label>
           <select id="community-duty-type" name="proposal_type" required>
-            <option value="duty">وظیفه جامعه</option>
-            <option value="approach">رویکرد انجام وظیفه</option>
+            <option value="duty">پیشنهاد رویکرد و وظایف</option>
           </select>
           <label for="community-duty-content">متن پیشنهاد</label>
           <textarea id="community-duty-content" name="content" rows="3" maxlength="600" required placeholder="پیشنهاد روشن و قابل‌فهم خود را بنویسید؛ حداکثر ۶۰۰ نویسه."></textarea>
