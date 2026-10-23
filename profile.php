@@ -8,6 +8,10 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 $user_id = (int)$_SESSION['user_id'];
+if (empty($_SESSION['community_hierarchy_csrf'])) {
+    $_SESSION['community_hierarchy_csrf'] = bin2hex(random_bytes(32));
+}
+$community_hierarchy_csrf = $_SESSION['community_hierarchy_csrf'];
 
 // دریافت مشخصات کاربر
 $ust = $conn->prepare("SELECT username, phone, national_id, gender, education, job, age, city, resume FROM users WHERE id=?");
@@ -156,6 +160,116 @@ document.addEventListener("DOMContentLoaded", function() {
 <?php if($user['age']): ?><p><strong>سن:</strong> <?= (int)$user['age'] ?></p><?php endif; ?>
 <?php if($user['city']): ?><p><strong>شهر:</strong> <?= htmlspecialchars($user['city']) ?></p><?php endif; ?>
 <?php if($user['resume']): ?><p><strong>رزومه:</strong> <?= nl2br(htmlspecialchars($user['resume'])) ?></p><?php endif; ?>
+</div>
+
+<!-- رأی‌گیری عمومی دربارهٔ جایگاه جوامع -->
+<div class="box" id="community-parent-voting">
+<details>
+<summary style="display:block;cursor:pointer;background:#2065d1;color:#fff;border-radius:7px;padding:12px;text-align:center;font-weight:bold;list-style:none;">🗳️ رأی‌گیری دربارهٔ جایگاه جوامع</summary>
+<div style="padding-top:10px;">
+<p style="font-size:13px;line-height:1.9;color:#596579;">هر کاربر می‌تواند برای هر جامعه یک رأی ثبت کند: جامعهٔ مستقل یا زیرمجموعهٔ یک جامعهٔ دیگر. هر رأی‌دهنده می‌تواند نظرش را تغییر دهد. جایگاه برنده فقط وقتی تغییر می‌کند که یک گزینه بیشترین رأی یکتا را داشته باشد؛ در تساوی، جایگاه فعلی حفظ می‌شود.</p>
+<?php
+$hierarchy_schema_check = $conn->query("SHOW TABLES LIKE 'community_parent_votes'");
+$hierarchy_votes_ready = $hierarchy_schema_check && $hierarchy_schema_check->num_rows > 0;
+if ($hierarchy_schema_check) $hierarchy_schema_check->close();
+
+$hierarchy_communities = [];
+$hierarchy_parent_map = [];
+$hierarchy_vote_counts = [];
+$hierarchy_user_votes = [];
+if ($hierarchy_votes_ready) {
+    $hres = $conn->query("SELECT id, name, parent_community_id FROM communities ORDER BY name");
+    if ($hres) {
+        while ($hr = $hres->fetch_assoc()) {
+            $hr['id'] = (int)$hr['id'];
+            $hr['parent_community_id'] = $hr['parent_community_id'] === null ? 0 : (int)$hr['parent_community_id'];
+            $hierarchy_communities[] = $hr;
+            $hierarchy_parent_map[$hr['id']] = $hr['parent_community_id'];
+        }
+        $hres->free();
+    }
+    $vc = $conn->query("SELECT community_id, parent_community_id, COUNT(*) AS vote_count FROM community_parent_votes GROUP BY community_id, parent_community_id");
+    if ($vc) {
+        while ($vr = $vc->fetch_assoc()) {
+            $cid = (int)$vr['community_id'];
+            $pid = $vr['parent_community_id'] === null ? 0 : (int)$vr['parent_community_id'];
+            $hierarchy_vote_counts[$cid][$pid] = (int)$vr['vote_count'];
+        }
+        $vc->free();
+    }
+    $uv = $conn->prepare("SELECT community_id, parent_community_id FROM community_parent_votes WHERE user_id=?");
+    $uv->bind_param("i", $user_id);
+    $uv->execute();
+    $uvr = $uv->get_result();
+    while ($vr = $uvr->fetch_assoc()) {
+        $hierarchy_user_votes[(int)$vr['community_id']] = $vr['parent_community_id'] === null ? 0 : (int)$vr['parent_community_id'];
+    }
+    $uv->close();
+}
+?>
+<?php if (!$hierarchy_votes_ready): ?>
+<p style="font-size:13px;line-height:1.9;color:#b42318;">برای فعال‌شدن رأی‌گیری، فایل <strong>community_parent_votes.sql</strong> را یک‌بار در پایگاه دادهٔ هاست اجرا کنید. این فایل فقط جدول رأی‌ها را اضافه می‌کند و داده‌های موجود را حذف نمی‌کند.</p>
+<?php elseif (empty($hierarchy_communities)): ?>
+<p>هنوز جامعه‌ای برای رأی‌گیری وجود ندارد.</p>
+<?php else: ?>
+<?php if (($_GET['hierarchy_status'] ?? '') === 'voted'): ?>
+<p style="color:#18794e;font-size:13px;">رأی شما ثبت شد. جایگاه جامعه بر اساس بیشترین رأی یکتا به‌روزرسانی می‌شود.</p>
+<?php elseif (($_GET['hierarchy_status'] ?? '') === 'cycle'): ?>
+<p style="color:#b42318;font-size:13px;">این گزینه می‌تواند چرخه در ساختار جوامع ایجاد کند و قابل رأی‌دادن نیست.</p>
+<?php elseif (($_GET['hierarchy_status'] ?? '') === 'schema'): ?>
+<p style="color:#b42318;font-size:13px;">جدول رأی‌گیری هنوز در پایگاه داده آماده نیست.</p>
+<?php endif; ?>
+<?php foreach ($hierarchy_communities as $hc): ?>
+<?php
+$cid = (int)$hc['id'];
+$counts_for_community = $hierarchy_vote_counts[$cid] ?? [];
+$total_community_votes = array_sum($counts_for_community);
+$current_vote = array_key_exists($cid, $hierarchy_user_votes) ? $hierarchy_user_votes[$cid] : $hc['parent_community_id'];
+$current_parent_id = $hc['parent_community_id'];
+$current_parent_name = 'مستقل';
+foreach ($hierarchy_communities as $candidate_row) {
+    if ((int)$candidate_row['id'] === $current_parent_id && $current_parent_id > 0) {
+        $current_parent_name = $candidate_row['name'];
+        break;
+    }
+}
+?>
+<div style="border:1px solid #dce5ef;border-radius:8px;padding:10px;margin:10px 0;background:#fbfdff;">
+<strong><?= htmlspecialchars($hc['name'], ENT_QUOTES, 'UTF-8') ?></strong>
+<div style="font-size:12px;color:#596579;margin:4px 0 8px;line-height:1.8;">
+جایگاه فعلی: <strong><?= htmlspecialchars($current_parent_name, ENT_QUOTES, 'UTF-8') ?></strong>
+— مجموع رأی‌ها: <?= $total_community_votes ?>
+</div>
+<form method="post" action="set_community_parent.php" style="margin:0;">
+<input type="hidden" name="csrf_token" value="<?= htmlspecialchars($community_hierarchy_csrf, ENT_QUOTES, 'UTF-8') ?>">
+<input type="hidden" name="community_id" value="<?= $cid ?>">
+<label style="font-size:13px;display:block;">نظر شما دربارهٔ جایگاه این جامعه</label>
+<select name="parent_community_id" required>
+<option value="0" <?= $current_vote === 0 ? 'selected' : '' ?>>جامعهٔ مستقل (<?= (int)($counts_for_community[0] ?? 0) ?> رأی)</option>
+<?php foreach ($hierarchy_communities as $candidate): ?>
+<?php
+$pid = (int)$candidate['id'];
+if ($pid === $cid) continue;
+$is_descendant = false;
+$cursor = $pid;
+$seen = [];
+while ($cursor > 0 && isset($hierarchy_parent_map[$cursor]) && !isset($seen[$cursor])) {
+    if ($cursor === $cid) { $is_descendant = true; break; }
+    $seen[$cursor] = true;
+    $cursor = (int)$hierarchy_parent_map[$cursor];
+}
+if ($is_descendant) continue;
+?>
+<option value="<?= $pid ?>" <?= $current_vote === $pid ? 'selected' : '' ?>>زیرمجموعهٔ <?= htmlspecialchars($candidate['name'], ENT_QUOTES, 'UTF-8') ?> (<?= (int)($counts_for_community[$pid] ?? 0) ?> رأی)</option>
+<?php endforeach; ?>
+</select>
+<button type="submit" style="margin-top:7px;">ثبت / تغییر رأی</button>
+</form>
+</div>
+<?php endforeach; ?>
+<?php endif; ?>
+</div>
+</details>
 </div>
 
 <!-- درخت ساختار همه جوامع؛ بسته به‌صورت پیش‌فرض برای صرفه‌جویی در فضا -->
