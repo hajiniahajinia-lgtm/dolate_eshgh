@@ -103,6 +103,11 @@ a{text-decoration:none;color:#2065d1;font-weight:bold;}
 textarea{resize:vertical;}
 
 .community-duties{margin:12px 0 8px;padding:12px;background:rgba(255,255,255,.76);border:1px solid #d9d6e9;border-radius:9px;text-align:right;}
+.community-duties-toggle{margin:12px 0 8px;}
+.community-duties-toggle>summary{display:block;list-style:none;background:#2065d1;color:#fff;cursor:pointer;border-radius:7px;padding:10px 14px;text-align:center;font-weight:bold;}
+.community-duties-toggle>summary::-webkit-details-marker{display:none;}
+.community-duties-toggle>summary::marker{content:"";}
+.community-duties-toggle[open]>summary{border-radius:7px 7px 0 0;}
 .community-duties h3{margin:0 0 6px;font-size:15px;color:#344054;}
 .community-duties-help,.community-duties-empty,.community-duties-notice{font-size:12px;line-height:1.9;color:#596579;margin:5px 0 9px;}
 .community-duties-notice{background:#fff8e1;padding:8px;border-radius:6px;}
@@ -369,7 +374,9 @@ document.addEventListener('DOMContentLoaded', function () {
       هنوز پیشنهادی ثبت نشده است.
     <?php endif; ?>
   </p>
-  <div class="community-duties" id="community-duties">
+  <details class="community-duties-toggle">
+    <summary>پیشنهاد برای رویکردها و وظایف</summary>
+    <div class="community-duties" id="community-duties">
     <h3>🌱 وظایف و رویکردها</h3>
     <p class="community-duties-help">اعضای جامعه پیشنهاد می‌دهند و با رأی معقولیت، مناسب‌ترین پیشنهادها در صدر قرار می‌گیرند.</p>
     <?php if (!$community_duties_ready): ?>
@@ -417,7 +424,8 @@ document.addEventListener('DOMContentLoaded', function () {
         <p class="community-duties-notice">برای ثبت پیشنهاد یا رأی‌دادن، ابتدا باید عضو این جامعه باشید.</p>
       <?php endif; ?>
     <?php endif; ?>
-  </div>
+    </div>
+  </details>
   <p><strong>تعداد اعضا:</strong> <?= (int)$community['members_count'] ?></p>
   <div class="members-dropdown">
     <button class="members-button">👥 مشاهده اعضا</button>
