@@ -176,6 +176,10 @@ h1{margin:0 0 18px;font-size:22px;text-align:center}
 .column h2{margin-top:0;font-size:20px;text-align:center;font-weight:700;color:#222}
 .card{background:#fff;border-radius:12px;padding:14px;box-shadow:0 2px 8px rgba(0,0,0,0.06);display:flex;gap:14px;align-items:flex-start;margin-bottom:12px;flex-direction:column; word-break:break-word; overflow-wrap:break-word; min-width:0;}
 .title{font-weight:700;color:#222;font-size:17px;margin-bottom:6px; word-break:break-word;}
+.title-wrap{position:relative;display:inline-block;max-width:100%;}
+.title-wrap>.title{cursor:help;}
+.desc-tooltip{display:none;position:absolute;top:calc(100% + 5px);right:0;width:360px;max-width:calc(100vw - 48px);box-sizing:border-box;padding:10px 12px;background:#fff;color:#333;font-size:14px;line-height:1.9;white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid #9ac7ff;border-radius:8px;box-shadow:0 5px 16px rgba(0,0,0,.18);z-index:1500;font-weight:normal;}
+.title-wrap:hover .desc-tooltip,.title-wrap:focus-within .desc-tooltip{display:block;}
 .desc{color:#333;font-size:14px;white-space:pre-wrap;margin-bottom:6px; word-break:break-word;}
 .votebox{margin-top:6px;padding:10px;background:#fbfeff;border:1px solid #e6f3ff;border-radius:10px;font-size:13px;display:flex;flex-direction:column;gap:5px; word-break:break-word;}
 .idea-box{background:#fff9e5;border:1px solid #f5e2b3;border-radius:10px;padding:12px;font-size:14px;color:#222;margin-top:8px; display:none; word-break:break-word;}
@@ -204,8 +208,12 @@ function toggleIdea(id){
         <h2>🏆 برنده‌ها</h2>
         <?php if(!empty($winners)): foreach($winners as $row): ?>
         <div class="card">
-            <div class="title"><?= htmlspecialchars($row['title']) ?></div>
-            <div class="desc"><?= htmlspecialchars($row['description'] ?: '-') ?></div>
+            <div class="title-wrap">
+              <div class="title" tabindex="0"><?= htmlspecialchars($row['title'], ENT_QUOTES, 'UTF-8') ?></div>
+              <?php if (trim((string)($row['description'] ?? '')) !== ''): ?>
+              <div class="desc-tooltip"><?= nl2br(htmlspecialchars($row['description'], ENT_QUOTES, 'UTF-8')) ?></div>
+              <?php endif; ?>
+            </div>
 
             <?php if(!empty($row['idea']['idea_content'])): ?>
             <button class="show-hide-btn" onclick="toggleIdea(<?= $row['id'] ?>)">💡 نمایش/مخفی کردن ایده</button>
@@ -236,8 +244,12 @@ function toggleIdea(id){
         <h2>❌ بازنده‌ها</h2>
         <?php if(!empty($losers)): foreach($losers as $row): ?>
         <div class="card">
-            <div class="title"><?= htmlspecialchars($row['title']) ?></div>
-            <div class="desc"><?= htmlspecialchars($row['description'] ?: '-') ?></div>
+            <div class="title-wrap">
+              <div class="title" tabindex="0"><?= htmlspecialchars($row['title'], ENT_QUOTES, 'UTF-8') ?></div>
+              <?php if (trim((string)($row['description'] ?? '')) !== ''): ?>
+              <div class="desc-tooltip"><?= nl2br(htmlspecialchars($row['description'], ENT_QUOTES, 'UTF-8')) ?></div>
+              <?php endif; ?>
+            </div>
 
             <?php if(!empty($row['idea']['idea_content'])): ?>
             <button class="show-hide-btn" onclick="toggleIdea(<?= $row['id'] ?>)">💡 نمایش/مخفی کردن ایده</button>
