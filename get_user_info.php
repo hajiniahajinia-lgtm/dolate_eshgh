@@ -66,11 +66,11 @@ if ($community_id > 0) {
     $ranking_stmt = $conn->prepare("
         SELECT
             cm.user_id,
-            AVG(us.lawfulness) AS avg_lawfulness,
-            AVG(us.ethics) AS avg_ethics,
-            AVG(us.honesty) AS avg_honesty,
-            AVG(us.executive_skill) AS avg_executive,
-            COUNT(us.scorer_user_id) AS score_count
+            AVG(NULLIF(us.lawfulness, 0)) AS avg_lawfulness,
+            AVG(NULLIF(us.ethics, 0)) AS avg_ethics,
+            AVG(NULLIF(us.honesty, 0)) AS avg_honesty,
+            AVG(NULLIF(us.executive_skill, 0)) AS avg_executive,
+            COUNT(CASE WHEN COALESCE(us.lawfulness, 0) > 0 OR COALESCE(us.ethics, 0) > 0 OR COALESCE(us.honesty, 0) > 0 OR COALESCE(us.executive_skill, 0) > 0 THEN us.scorer_user_id END) AS score_count
         FROM community_members cm
         LEFT JOIN user_scores us
             ON us.target_user_id = cm.user_id
