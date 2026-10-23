@@ -157,7 +157,7 @@ while($row=$result->fetch_assoc()){
 
     $status = ($votes['pct_yes']>=50) ? 'winner' : 'loser';
     $execution_candidates=[];
-    if($status==='winner' && $candidate_tables_ready && !empty($winner_idea['idea_id'])){
+    if($candidate_tables_ready && !empty($winner_idea['idea_id'])){
       $winner_idea_id=(int)$winner_idea['idea_id'];
       $cl=$conn->prepare("SELECT c.user_id,u.username FROM topic_execution_candidates c JOIN users u ON u.id=c.user_id JOIN community_members cm ON cm.user_id=c.user_id AND cm.community_id=? WHERE c.topic_id=? AND c.idea_id=? ORDER BY u.username ASC");
       $cl->bind_param("iii",$community_id,$topic_id,$winner_idea_id);$cl->execute();$clr=$cl->get_result();
@@ -264,7 +264,7 @@ function toggleIdea(id){
                 </div>
               <?php endforeach; ?>
             </div>
-            <?php elseif($status==='winner' && $candidate_tables_ready && !empty($row['idea']['idea_id'])): ?><div style="width:100%;margin-top:8px;padding:10px;background:#f7fbff;border:1px solid #c8d9f0;border-radius:8px;box-sizing:border-box">برای ایدهٔ برنده هنوز داوطلبی ثبت نشده است.</div><?php endif; ?>
+            <?php elseif($candidate_tables_ready && !empty($row['idea']['idea_id'])): ?><div style="width:100%;margin-top:8px;padding:10px;background:#f7fbff;border:1px solid #c8d9f0;border-radius:8px;box-sizing:border-box">برای ایدهٔ برنده هنوز داوطلبی ثبت نشده است.</div><?php endif; ?>
 
             <div class="votebox">
                 <div>کل آرا: <strong><?= (int)$row['votes']['total'] ?></strong></div>
