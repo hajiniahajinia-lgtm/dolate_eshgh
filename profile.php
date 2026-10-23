@@ -243,6 +243,7 @@ foreach ($hierarchy_communities as $candidate_row) {
 <form method="post" action="set_community_parent.php" style="margin:0;">
 <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($community_hierarchy_csrf, ENT_QUOTES, 'UTF-8') ?>">
 <input type="hidden" name="community_id" value="<?= $cid ?>">
+<input type="hidden" name="return_to" value="profile">
 <label style="font-size:13px;display:block;">نظر شما دربارهٔ جایگاه این جامعه</label>
 <select name="parent_community_id" required>
 <option value="0" <?= $current_vote === 0 ? 'selected' : '' ?>>جامعهٔ مستقل (<?= (int)($counts_for_community[0] ?? 0) ?> رأی)</option>
