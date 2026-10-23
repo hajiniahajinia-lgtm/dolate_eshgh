@@ -521,6 +521,8 @@ document.addEventListener('DOMContentLoaded', function () {
   }
   $hierarchy_status = $_GET['hierarchy_status'] ?? '';
   ?>
+  <details id="community-hierarchy-toggle" style="margin:14px 0;">
+    <summary style="display:block;cursor:pointer;background:#2065d1;color:#fff;padding:10px 14px;border-radius:8px;text-align:center;font-weight:bold;list-style:none;">🌐 جایگاه این جامعه (نمایش درخت)</summary>
   <section id="community-hierarchy" style="margin:14px 0;padding:12px;background:rgba(255,255,255,.82);border:1px solid #d9dfe8;border-radius:9px;text-align:right;">
     <h3 style="margin:0 0 7px;">🌐 جایگاه این جامعه</h3>
     <?php if (!$hierarchy_ready): ?>
@@ -574,6 +576,7 @@ document.addEventListener('DOMContentLoaded', function () {
       <?php endif; ?>
     <?php endif; ?>
   </section>
+  </details>
 
   <p><strong>تعداد اعضا:</strong> <?= (int)$community['members_count'] ?></p>
   <div class="members-dropdown">
