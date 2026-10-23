@@ -698,7 +698,7 @@ document.addEventListener("DOMContentLoaded", function() {
     // ===== جای‌گذاری توضیحات دکمه‌ها خارج از محدوده برش کادرها =====
     document.querySelectorAll('.action-tooltip, .idea-action-tooltip').forEach(function(wrapper) {
         const tip = wrapper.querySelector('.action-tooltip-text');
-        const button = wrapper.querySelector('button, a, > span');
+        const button = wrapper.querySelector('button, a, span');
         if (!tip || !button) return;
         if (wrapper.classList.contains('idea-action-tooltip') && window.innerWidth <= 720) return;
 
