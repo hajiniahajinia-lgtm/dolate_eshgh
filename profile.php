@@ -54,8 +54,13 @@ input, select, textarea, button {width:100%;padding:10px;margin-top:8px;border-r
 button {background:#2065d1;color:#fff;cursor:pointer;border:none;margin-top:10px;font-size:15px;}
 button.leave {background:#e63946;}
 .community-action {display:flex;align-items:center;justify-content:center;width:100%;height:44px;min-height:44px;padding:0 10px;margin-top:10px;border:0;border-radius:6px;box-sizing:border-box;font-family:tahoma,sans-serif;font-size:15px;font-weight:bold;line-height:1;text-align:center;}
-.enter-community {background:#bdecc8;color:#185c2b;cursor:pointer;}
-.enter-community:hover {background:#a9e2b7;}
+.enter-community {background:#7edb95;color:#124d25;cursor:pointer;}
+.enter-community:hover {background:#68cf82;}
+.community-management {margin-bottom:15px;}
+.community-management > summary {display:block;cursor:pointer;list-style:none;padding:12px 14px;border-radius:8px;background:#2065d1;color:#fff;font-weight:bold;text-align:center;}
+.community-management > summary::-webkit-details-marker {display:none;}
+.community-management[open] > summary {margin-bottom:12px;}
+.community-management .box {margin-bottom:10px;}
 .leave-community-form {display:block !important;width:100%;margin:0 !important;padding:0;}
 .leave-community-form button.leave {display:flex;width:100%;height:44px;min-height:44px;padding:0 10px;margin-top:10px;align-items:center;justify-content:center;box-sizing:border-box;line-height:1;}
 button.edit {background:#2a9d8f;margin-bottom:10px;}
@@ -410,6 +415,9 @@ if($user_comms->num_rows>0):
 </details>
 </div>
 
+<details class="community-management">
+<summary>➕ عضویت در جامعه یا ایجاد جامعه جدید</summary>
+
 <!-- عضویت در جوامع موجود -->
 <div class="box">
 <h3>عضویت در جامعه‌های موجود</h3>
@@ -454,6 +462,7 @@ while($nc=$new_comms->fetch_assoc()):
 <button type="submit">✅ ایجاد جامعه</button>
 </form>
 </div>
+</details>
 
 <div style="text-align:center;margin-top:20px;">
 <a href="logout.php">🚪 خروج از حساب</a>
