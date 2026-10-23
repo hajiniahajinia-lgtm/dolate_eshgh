@@ -118,6 +118,10 @@ textarea{resize:vertical;}
 .action-tooltip{position:relative;display:inline-flex;align-items:center;}
 .action-tooltip-text{display:none;position:fixed;top:0;left:0;width:270px;max-width:calc(100vw - 24px);box-sizing:border-box;padding:9px 11px;background:#fff;color:#263238;border:1px solid #b8c7d8;border-radius:8px;box-shadow:0 4px 14px rgba(0,0,0,.16);font-size:12px;line-height:1.9;font-weight:normal;text-align:right;white-space:normal;z-index:99999;}
 .action-tooltip:hover .action-tooltip-text,.action-tooltip:focus-within .action-tooltip-text{display:block;}
+/* توضیح‌های دکمه‌های ایده؛ جای‌گذاری ثابت برای جلوگیری از بریده‌شدن زیر حاشیه‌ها */
+.idea-action-tooltip{position:relative;display:inline-flex;align-items:center;width:160px;max-width:160px;}
+.idea-action-tooltip-text{display:none;position:fixed;top:0;left:0;width:280px;max-width:calc(100vw - 24px);box-sizing:border-box;padding:10px 12px;background:#fff;color:#263238;border:1px solid #b8c7d8;border-radius:8px;box-shadow:0 5px 18px rgba(0,0,0,.2);font-size:12px;line-height:1.9;font-weight:normal;text-align:right;white-space:normal;overflow-wrap:anywhere;z-index:99999;pointer-events:none;}
+@media (max-width:720px){.idea-action-tooltip-text{display:none !important;}}
 .urgency-input{width:60px;text-align:center;padding:6px;font-size:13px;}
 .ideas-box{margin-top:10px;background:#fff;padding:10px;border-radius:8px;border:1px solid #ddd;max-height:200px;overflow-y:auto;}
 .idea{background:#fff;border:1px solid #e0f0ff;border-radius:8px;padding:10px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:flex-start;gap:8px;}
@@ -192,7 +196,8 @@ textarea{resize:vertical;}
     /* هم‌اندازه‌کردن دکمه‌های محبوبیت کاربر و معقول‌ترین ایده فقط در کامپیوتر */
     .idea-actions a[href^="give_score.php"],
     .idea-actions form[action="update_idea.php"] button,
-    .idea-actions > span{
+    .idea-actions > span:not(.idea-action-tooltip),
+    .idea-actions .idea-action-tooltip{
         box-sizing:border-box !important;
         display:inline-flex !important;
         align-items:center !important;
@@ -488,20 +493,29 @@ if ($remaining_seconds < 0) $remaining_seconds = 0;
             <div class="tooltip-box" id="tooltip-<?= (int)$i['uid'] ?>"><p>در حال بارگذاری...</p></div>
         </div>
         <div class="idea-actions" style="display:flex; flex-direction:column; gap:6px; min-width:110px; text-align:right;">
-            <a href="give_score.php?user_id=<?= (int)$i['uid'] ?>&redirect=<?= urlencode($_SERVER['REQUEST_URI']) ?>" 
-               style="display:inline-block; font-size:13px; padding:4px 8px; background:#ff9800; color:#fff; border-radius:5px; text-decoration:none;">
-                ⭐  محبوبیت کاربر
-            </a>
+            <span class="idea-action-tooltip">
+                <a href="give_score.php?user_id=<?= (int)$i['uid'] ?>&redirect=<?= urlencode($_SERVER['REQUEST_URI']) ?>" 
+                   style="display:inline-block; font-size:13px; padding:4px 8px; background:#ff9800; color:#fff; border-radius:5px; text-decoration:none;">
+                    ⭐  محبوبیت کاربر
+                </a>
+                <span class="idea-action-tooltip-text" role="tooltip">با این گزینه به صاحب ایده امتیاز محبوبیت می‌دهید. این امتیاز برای ارزیابی خودِ کاربر است، نه تعیین معقول‌ترین راه‌حل موضوع.</span>
+            </span>
             <?php if(!$is_closed): ?>
             <form action="update_idea.php" method="post">
                 <input type="hidden" name="idea_id" value="<?= (int)$i['id'] ?>">
-                <button type="submit" style="background:#27ae60; color:#fff; padding:6px 8px; font-size:13px; border-radius:6px; border:none;">
-                    ✅  معقول‌ترین ایده  <strong><?= (int)$i['idea_rationality'] ?></strong>
-                </button>
+                <span class="idea-action-tooltip">
+                    <button type="submit" style="background:#27ae60; color:#fff; padding:6px 8px; font-size:13px; border-radius:6px; border:none;">
+                        ✅  معقول‌ترین ایده  <strong><?= (int)$i['idea_rationality'] ?></strong>
+                    </button>
+                    <span class="idea-action-tooltip-text" role="tooltip">اگر این ایده را منطقی‌ترین راه‌حل این موضوع می‌دانید، آن را انتخاب کنید. هر کاربر برای هر موضوع یک رأی معقولیت دارد؛ با انتخاب ایده‌ای دیگر، رأی قبلی او جابه‌جا می‌شود.</span>
+                </span>
             </form>
             <?php else: ?>
-            <span style="background:#27ae60; color:#fff; padding:6px 8px; font-size:13px; border-radius:6px;">
-                ✅ معقول‌ترین <strong><?= (int)$i['idea_rationality'] ?></strong>
+            <span class="idea-action-tooltip">
+                <span style="background:#27ae60; color:#fff; padding:6px 8px; border-radius:6px;">
+                    ✅ معقول‌ترین <strong><?= (int)$i['idea_rationality'] ?></strong>
+                </span>
+                <span class="idea-action-tooltip-text" role="tooltip">این ایده در زمان بسته‌شدن موضوع، معقول‌ترین ایده بر اساس امتیاز ثبت‌شده بوده است.</span>
             </span>
             <?php endif; ?>
         </div>
@@ -682,10 +696,11 @@ document.addEventListener("DOMContentLoaded", function() {
     });
 
     // ===== جای‌گذاری توضیحات دکمه‌ها خارج از محدوده برش کادرها =====
-    document.querySelectorAll('.action-tooltip').forEach(function(wrapper) {
+    document.querySelectorAll('.action-tooltip, .idea-action-tooltip').forEach(function(wrapper) {
         const tip = wrapper.querySelector('.action-tooltip-text');
-        const button = wrapper.querySelector('button');
+        const button = wrapper.querySelector('button, a, > span');
         if (!tip || !button) return;
+        if (wrapper.classList.contains('idea-action-tooltip') && window.innerWidth <= 720) return;
 
         function placeTip() {
             tip.style.display = 'block';
