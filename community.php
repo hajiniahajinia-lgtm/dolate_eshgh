@@ -477,6 +477,8 @@ document.addEventListener('DOMContentLoaded', function () {
   <section id="community-hierarchy" style="margin:14px 0;padding:12px;background:rgba(255,255,255,.82);border:1px solid #d9dfe8;border-radius:9px;text-align:right;">
     <h3 style="margin:0 0 7px;">🌐 جایگاه این جامعه</h3>
     <?php if (!$hierarchy_ready): ?>
+      <p style="font-size:13px;line-height:1.9;margin:6px 0;">برای نمایش درخت جایگاه، ابتدا باید ستون جایگاه جوامع در پایگاه داده فعال باشد.</p>
+    <?php else: ?>
       <p style="font-size:13px;line-height:1.9;margin:6px 0;">
         <?php if ($community_parent): ?>
           این جامعه زیرمجموعهٔ <strong><?= htmlspecialchars($community_parent['name'], ENT_QUOTES, 'UTF-8') ?></strong> است.
@@ -485,7 +487,7 @@ document.addEventListener('DOMContentLoaded', function () {
         <?php endif; ?>
       </p>
       <p style="font-size:13px;line-height:1.9;margin:8px 0;color:#596579;">
-        ساختار درختی این جامعه در ادامه نمایش داده شده است. برای رأی‌دادن یا تغییر رأی، به بخش «رأی‌گیری دربارهٔ جایگاه جوامع» در صفحهٔ پروفایل بروید.
+        درخت جایگاه در همین کادر نمایش داده می‌شود. برای ثبت یا تغییر رأی، به بخش «رأی‌گیری دربارهٔ جایگاه جوامع» در صفحهٔ پروفایل بروید.
       </p>
       <?php if (!empty($ancestor_chain)): ?>
         <div style="margin-top:10px;padding:10px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;line-height:1.9;">
@@ -499,12 +501,11 @@ document.addEventListener('DOMContentLoaded', function () {
               <?php endif; ?>
             </div>
           <?php endforeach; ?>
-
           <?php
           $render_hierarchy_children = function($parent_id, $depth = 1) use (&$render_hierarchy_children, &$hierarchy_children, $community) {
               $nodes = $hierarchy_children[(int)$parent_id] ?? [];
               if (!$nodes) return;
-              echo '<div style="margin-right:'.(int)$depth*18 .'px;border-right:2px solid #dbe4ef;padding-right:9px;">';
+              echo '<div style="margin-right:'.((int)$depth * 18).'px;border-right:2px solid #dbe4ef;padding-right:9px;">';
               foreach ($nodes as $node) {
                   $is_current = (int)$node['id'] === (int)$community['id'];
                   echo '<div style="margin-top:5px;padding:6px 9px;background:'.($is_current ? '#eaf2ff' : '#fff').';border:1px solid '.($is_current ? '#b8d1f5' : '#e2e8f0').';border-radius:5px;line-height:1.8;">';
