@@ -531,9 +531,11 @@ $losers_count  = (int)$arch_stats['losers'];
 <script>
 document.addEventListener("DOMContentLoaded", function() {
     // ثبت اولویت و فوریت بدون بارگذاری مجدد صفحه
-    document.querySelectorAll('form[action="toggle_priority.php"], form[action="update_urgency.php"], form[action="update_idea.php"]').forEach(function(form) {
-        form.addEventListener("submit", async function(event) {
-            event.preventDefault();
+    // استفاده از رویداددهی واگذار‌شده تا فرم‌های ایده‌ای که بعداً به‌روزرسانی می‌شوند نیز بدون رفرش کار کنند.
+    document.addEventListener("submit", async function(event) {
+        const form = event.target;
+        if (!(form instanceof HTMLFormElement) || !form.matches('form[action="toggle_priority.php"], form[action="update_urgency.php"], form[action="update_idea.php"]')) return;
+        event.preventDefault();
             const submitButton = form.querySelector('button[type="submit"]') || form.querySelector('button');
             if (form.dataset.sending === "1") return;
             form.dataset.sending = "1";
@@ -609,7 +611,6 @@ document.addEventListener("DOMContentLoaded", function() {
                 form.dataset.sending = "0";
                 if (submitButton) submitButton.disabled = false;
             }
-        });
     });
 
     // ===== جای‌گذاری توضیحات دکمه‌ها خارج از محدوده برش کادرها =====
