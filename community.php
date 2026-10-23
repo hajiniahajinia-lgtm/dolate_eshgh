@@ -145,9 +145,12 @@ textarea{resize:vertical;}
 
 @media (min-width:721px){
     /* هم‌اندازه‌کردن دکمه فوریت با دکمه اولویت فقط در صفحه‌نمایش کامپیوتر */
-    .topic-actions .urgency-btn{
-        padding:8px;
-        font-size:13.333px;
+    .topic-actions form[action="toggle_priority.php"] button,
+    .topic-actions form[action="update_urgency.php"] .urgency-btn{
+        padding:8px !important;
+        font-size:13.333px !important;
+        line-height:normal !important;
+        min-height:0 !important;
     }
 
     /* چیدمان منظم اطلاعات موضوع فقط در صفحه‌نمایش کامپیوتر */
