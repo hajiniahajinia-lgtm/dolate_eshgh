@@ -1163,7 +1163,7 @@ document.addEventListener("DOMContentLoaded", function() {
             tooltip.style.top = (rect.bottom + window.scrollY + 6) + 'px';
             tooltip.style.left = (rect.left + window.scrollX) + 'px';
 
-            fetch('get_user_info.php?user_id=' + encodeURIComponent(userId))
+            fetch('get_user_info.php?user_id=' + encodeURIComponent(userId) + '&community_id=' + encodeURIComponent(<?= (int)$community_id ?>))
                 .then(res => res.json())
                 .then(data => {
                     if (data.error) {
@@ -1181,6 +1181,8 @@ document.addEventListener("DOMContentLoaded", function() {
       <li>صداقت: ${data.avg_honesty ?? '-'}</li>
       <li>مهارت اجرایی: ${data.avg_executive ?? '-'}</li>
     </ul>
+    <p><strong>رتبه محبوبیت در این جامعه:</strong> ${data.community_rank == null ? 'هنوز امتیاز کافی برای رتبه‌بندی ثبت نشده' : 'رتبه ' + data.community_rank + ' از ' + data.community_member_count + ' عضو'}</p>
+    <p><strong>تعداد اعضای جامعه:</strong> ${data.community_member_count ?? 0}</p>
 `;
                     }
                 }).catch(() => {
