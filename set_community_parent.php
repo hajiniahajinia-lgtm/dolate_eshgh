@@ -18,7 +18,9 @@ $parent_community_id = isset($_POST['parent_community_id']) ? (int)$_POST['paren
 $csrf_token = (string)($_POST['csrf_token'] ?? '');
 
 function return_to_community(int $community_id, string $status): void {
-    if ($community_id > 0) {
+    if (($_POST['return_to'] ?? '') === 'profile') {
+        header("Location: profile.php?hierarchy_status=" . rawurlencode($status) . "#community-parent-voting");
+    } elseif ($community_id > 0) {
         header("Location: community.php?id=" . $community_id . "&hierarchy_status=" . rawurlencode($status) . "#community-hierarchy");
     } else {
         header("Location: profile.php?hierarchy_status=" . rawurlencode($status) . "#community-parent-voting");
