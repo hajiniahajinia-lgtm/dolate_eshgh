@@ -361,7 +361,7 @@ document.addEventListener('DOMContentLoaded', function () {
       }
   }
   ?>
-  <p style="margin:10px 0 14px;line-height:1.9;"><strong>معقول‌ترین وظایف و رویکردهای جامعه:</strong>
+  <p style="margin:10px 0 14px;line-height:1.9;"><strong>وظایف و رویکردهای جامعه:</strong>
     <?php if (!empty($duty_proposals)): ?>
       <?= nl2br(htmlspecialchars($duty_proposals[0]['content'])) ?>
       <span style="display:inline-block;color:#946200;font-size:12px;">(<?= (int)$duty_proposals[0]['vote_count'] ?> رأی معقولیت)</span>
