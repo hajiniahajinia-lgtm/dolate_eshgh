@@ -144,6 +144,12 @@ textarea{resize:vertical;}
 .card{background:#f7f8fa;border:1px solid #ccc;text-align:center;padding:14px;border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,0.04);}
 
 @media (min-width:721px){
+    /* هم‌اندازه‌کردن دکمه فوریت با دکمه اولویت فقط در صفحه‌نمایش کامپیوتر */
+    .topic-actions .urgency-btn{
+        padding:8px;
+        font-size:13.333px;
+    }
+
     /* چیدمان منظم اطلاعات موضوع فقط در صفحه‌نمایش کامپیوتر */
     .topic-header{
         display:grid;
