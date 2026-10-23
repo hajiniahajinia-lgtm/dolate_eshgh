@@ -310,6 +310,12 @@ function toggleIdea(id){
             </div>
             <?php endif; ?>
 
+            <?php if(($row['election']['final_candidate_user_id'] ?? null) && !empty($row['election']['final_candidate_name'])): ?>
+            <div class="selected-executor" style="margin-top:8px;padding:9px 12px;border:1px solid #9bcda5;border-radius:8px;background:#e9f8ec;color:#175b2b">
+              <strong>🏆 مجری منتخب این ایده: <?= htmlspecialchars($row['election']['final_candidate_name'],ENT_QUOTES,'UTF-8') ?></strong>
+            </div>
+            <?php endif; ?>
+
             <?php if($candidate_tables_ready && !empty($row['idea']['idea_id'])): ?>
             <details class="execution-details">
               <summary>🙋 داوطلبان اجرای طرح برنده (<?= count($row['execution_candidates']) ?>)</summary>
