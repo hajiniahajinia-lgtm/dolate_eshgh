@@ -35,7 +35,7 @@ if (!$is_member) {
 }
 
 if ($action === 'submit') {
-    $proposal_type = (string)($_POST['proposal_type'] ?? '');
+    $proposal_type = (string)($_POST['proposal_type'] ?? 'duty');
     $content = trim((string)($_POST['content'] ?? ''));
 
     if (!in_array($proposal_type, ['duty', 'approach'], true)) {
