@@ -147,10 +147,22 @@ textarea{resize:vertical;}
     /* هم‌اندازه‌کردن دکمه فوریت با دکمه اولویت فقط در صفحه‌نمایش کامپیوتر */
     .topic-actions form[action="toggle_priority.php"] button,
     .topic-actions form[action="update_urgency.php"] .urgency-btn{
-        padding:8px !important;
-        font-size:13.333px !important;
-        line-height:normal !important;
-        min-height:0 !important;
+        box-sizing:border-box !important;
+        display:inline-flex !important;
+        align-items:center !important;
+        justify-content:center !important;
+        width:92px !important;
+        min-width:92px !important;
+        max-width:92px !important;
+        height:36px !important;
+        min-height:36px !important;
+        max-height:36px !important;
+        padding:0 6px !important;
+        margin-top:0 !important;
+        font-family:Tahoma, Arial, sans-serif !important;
+        font-size:13px !important;
+        line-height:1 !important;
+        white-space:nowrap !important;
     }
 
     /* چیدمان منظم اطلاعات موضوع فقط در صفحه‌نمایش کامپیوتر */
