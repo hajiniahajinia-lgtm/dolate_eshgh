@@ -610,8 +610,11 @@ document.addEventListener('DOMContentLoaded', function () {
       $mem_q = $conn->prepare("
           SELECT users.id, users.username, users.age, users.gender, users.education,
                  users.job, users.city, users.resume,
-                 COALESCE(AVG((us.lawfulness + us.ethics + us.honesty + us.executive_skill) / 4.0), 0) AS popularity_score,
-                 COUNT(us.scorer_user_id) AS popularity_votes
+                 AVG(NULLIF(us.lawfulness, 0)) AS avg_lawfulness,
+                 AVG(NULLIF(us.ethics, 0)) AS avg_ethics,
+                 AVG(NULLIF(us.honesty, 0)) AS avg_honesty,
+                 AVG(NULLIF(us.executive_skill, 0)) AS avg_executive,
+                 COUNT(CASE WHEN COALESCE(us.lawfulness, 0) > 0 OR COALESCE(us.ethics, 0) > 0 OR COALESCE(us.honesty, 0) > 0 OR COALESCE(us.executive_skill, 0) > 0 THEN us.scorer_user_id END) AS popularity_votes
           FROM community_members
           JOIN users ON users.id = community_members.user_id
           LEFT JOIN user_scores us
@@ -625,7 +628,7 @@ document.addEventListener('DOMContentLoaded', function () {
           WHERE community_members.community_id = ?
           GROUP BY users.id, users.username, users.age, users.gender, users.education,
                    users.job, users.city, users.resume
-          ORDER BY popularity_score DESC, popularity_votes DESC, users.username ASC
+          ORDER BY popularity_votes DESC, users.username ASC
       ");
       $mem_q->bind_param("i", $community['id']);
       $mem_q->execute();
@@ -634,8 +637,29 @@ document.addEventListener('DOMContentLoaded', function () {
           // رتبهٔ این فهرست با رتبهٔ کادر اطلاعات یکسان است؛ اعضای بدون امتیاز رتبه نمی‌گیرند.
           $members_for_ranking = [];
           while ($member_row = $mem_res->fetch_assoc()) {
+              $criterion_scores = [
+                  $member_row['avg_lawfulness'],
+                  $member_row['avg_ethics'],
+                  $member_row['avg_honesty'],
+                  $member_row['avg_executive']
+              ];
+              $valid_scores = array_filter($criterion_scores, function($value) { return $value !== null; });
+              $member_row['popularity_score'] = count($valid_scores) > 0
+                  ? array_sum($valid_scores) / count($valid_scores)
+                  : 0;
               $members_for_ranking[] = $member_row;
           }
+
+          usort($members_for_ranking, function($a, $b) {
+              $aVotes = (int)$a['popularity_votes'];
+              $bVotes = (int)$b['popularity_votes'];
+              if (($aVotes > 0) !== ($bVotes > 0)) return $aVotes > 0 ? -1 : 1;
+              if ($aVotes > 0 && (float)$a['popularity_score'] !== (float)$b['popularity_score']) {
+                  return (float)$b['popularity_score'] <=> (float)$a['popularity_score'];
+              }
+              if ($aVotes !== $bVotes) return $bVotes <=> $aVotes;
+              return strcmp((string)$a['username'], (string)$b['username']);
+          });
 
           foreach ($members_for_ranking as $m) {
               $score_value = (float)$m['popularity_score'];
