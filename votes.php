@@ -70,6 +70,9 @@ if($_SERVER['REQUEST_METHOD'] === 'POST'){
         $valid=$conn->prepare("SELECT t.id FROM topics t JOIN topic_voting_meta m ON m.topic_id=t.id JOIN topic_final_votes tfv ON tfv.topic_id=t.id AND tfv.idea_id=? WHERE t.id=? AND t.community_id=? AND t.closed=1 AND m.finalized=0 LIMIT 1");
         $valid->bind_param("iii",$idea_id,$topic_id,$community_id); $valid->execute(); $valid_topic=$valid->get_result()->fetch_assoc(); $valid->close();
         if(!$valid_topic){echo json_encode(['success'=>false,'message'=>'این موضوع یا ایده برای داوطلبی معتبر نیست.']);exit;}
+        $member_check=$conn->prepare("SELECT 1 FROM community_members WHERE community_id=? AND user_id=? LIMIT 1");
+        $member_check->bind_param("ii",$community_id,$user_id);$member_check->execute();$is_member=(bool)$member_check->get_result()->fetch_assoc();$member_check->close();
+        if(!$is_member){echo json_encode(['success'=>false,'message'=>'فقط اعضای جامعه می‌توانند داوطلب اجرای طرح شوند.']);exit;}
         $check=$conn->prepare("SELECT id FROM topic_execution_candidates WHERE topic_id=? AND idea_id=? AND user_id=? LIMIT 1");
         $check->bind_param("iii",$topic_id,$idea_id,$user_id);$check->execute();$existing=$check->get_result()->fetch_assoc();$check->close();
         if($existing){
