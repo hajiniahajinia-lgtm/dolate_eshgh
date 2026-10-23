@@ -437,37 +437,36 @@ document.addEventListener('DOMContentLoaded', function () {
   }
   $community_parent = null;
   $community_children = [];
-  $other_communities = [];
+  $hierarchy_by_id = [];
+  $hierarchy_children = [];
+  $ancestor_chain = [];
   if ($hierarchy_ready) {
-      $parent_query = $conn->prepare("
-          SELECT c.id, c.name
-          FROM communities c
-          WHERE c.id = (SELECT parent_community_id FROM communities WHERE id = ?)
-          LIMIT 1
-      ");
-      if ($parent_query) {
-          $parent_query->bind_param("i", $community['id']);
-          $parent_query->execute();
-          $community_parent = $parent_query->get_result()->fetch_assoc();
-          $parent_query->close();
+      $all_communities_result = $conn->query("SELECT id, name, parent_community_id FROM communities ORDER BY name ASC");
+      if ($all_communities_result) {
+          while ($row = $all_communities_result->fetch_assoc()) {
+              $row['id'] = (int)$row['id'];
+              $row['parent_community_id'] = $row['parent_community_id'] === null ? 0 : (int)$row['parent_community_id'];
+              $hierarchy_by_id[$row['id']] = $row;
+              $hierarchy_children[$row['parent_community_id']][] = $row;
+          }
+          $all_communities_result->close();
       }
 
-      $children_query = $conn->prepare("SELECT id, name FROM communities WHERE parent_community_id = ? ORDER BY name ASC");
-      if ($children_query) {
-          $children_query->bind_param("i", $community['id']);
-          $children_query->execute();
-          $children_result = $children_query->get_result();
-          while ($child_row = $children_result->fetch_assoc()) $community_children[] = $child_row;
-          $children_query->close();
+      $parent_id = $hierarchy_by_id[(int)$community['id']]['parent_community_id'] ?? 0;
+      if ($parent_id > 0 && isset($hierarchy_by_id[$parent_id])) {
+          $community_parent = $hierarchy_by_id[$parent_id];
       }
 
-      $other_query = $conn->prepare("SELECT id, name FROM communities WHERE id <> ? ORDER BY name ASC");
-      if ($other_query) {
-          $other_query->bind_param("i", $community['id']);
-          $other_query->execute();
-          $other_result = $other_query->get_result();
-          while ($other_row = $other_result->fetch_assoc()) $other_communities[] = $other_row;
-          $other_query->close();
+      $child_rows = $hierarchy_children[(int)$community['id']] ?? [];
+      foreach ($child_rows as $child_row) $community_children[] = $child_row;
+
+      // مسیر والدها را تا ریشه پیدا می‌کنیم؛ از چرخه‌های احتمالی نیز محافظت می‌کنیم.
+      $cursor = (int)$community['id'];
+      $seen_ancestors = [];
+      while ($cursor > 0 && isset($hierarchy_by_id[$cursor]) && !isset($seen_ancestors[$cursor])) {
+          $seen_ancestors[$cursor] = true;
+          array_unshift($ancestor_chain, $hierarchy_by_id[$cursor]);
+          $cursor = (int)$hierarchy_by_id[$cursor]['parent_community_id'];
       }
   }
   if (empty($_SESSION['community_hierarchy_csrf'])) {
@@ -478,8 +477,6 @@ document.addEventListener('DOMContentLoaded', function () {
   <section id="community-hierarchy" style="margin:14px 0;padding:12px;background:rgba(255,255,255,.82);border:1px solid #d9dfe8;border-radius:9px;text-align:right;">
     <h3 style="margin:0 0 7px;">🌐 جایگاه این جامعه</h3>
     <?php if (!$hierarchy_ready): ?>
-      <p style="font-size:13px;line-height:1.9;margin:6px 0;">برای فعال‌شدن این امکان، فایل <strong>community_hierarchy.sql</strong> را یک‌بار روی پایگاه دادهٔ هاست اجرا کنید. این تغییر فقط یک ستون و یک نمایه اضافه می‌کند و داده‌های موجود را حذف نمی‌کند.</p>
-    <?php else: ?>
       <p style="font-size:13px;line-height:1.9;margin:6px 0;">
         <?php if ($community_parent): ?>
           این جامعه زیرمجموعهٔ <strong><?= htmlspecialchars($community_parent['name'], ENT_QUOTES, 'UTF-8') ?></strong> است.
@@ -488,17 +485,44 @@ document.addEventListener('DOMContentLoaded', function () {
         <?php endif; ?>
       </p>
       <p style="font-size:13px;line-height:1.9;margin:8px 0;color:#596579;">
-        برای مشارکت در تعیین جایگاه این جامعه، به صفحهٔ پروفایل بروید و از بخش «رأی‌گیری دربارهٔ جایگاه جوامع» رأی خود را ثبت یا تغییر دهید. جایگاه نهایی بر اساس نتیجهٔ رأی‌گیری تعیین می‌شود.
+        ساختار درختی این جامعه در ادامه نمایش داده شده است. برای رأی‌دادن یا تغییر رأی، به بخش «رأی‌گیری دربارهٔ جایگاه جوامع» در صفحهٔ پروفایل بروید.
       </p>
-      <?php if (!empty($community_children)): ?>
-        <div style="margin-top:10px;font-size:13px;line-height:1.9;">
-          <strong>جوامع زیرمجموعهٔ این جامعه:</strong>
-          <ul style="margin:5px 0;padding-right:22px;">
-            <?php foreach ($community_children as $child): ?>
-              <li><a href="community.php?id=<?= (int)$child['id'] ?>"><?= htmlspecialchars($child['name'], ENT_QUOTES, 'UTF-8') ?></a></li>
-            <?php endforeach; ?>
-          </ul>
+      <?php if (!empty($ancestor_chain)): ?>
+        <div style="margin-top:10px;padding:10px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;line-height:1.9;">
+          <strong style="display:block;margin-bottom:6px;">🌳 درخت جایگاه جامعه</strong>
+          <?php foreach ($ancestor_chain as $depth => $tree_node): ?>
+            <div style="margin-right:<?= (int)$depth * 18 ?>px;padding:6px 9px;margin-top:4px;border-right:3px solid <?= (int)$tree_node['id'] === (int)$community['id'] ? '#2065d1' : '#cbd5e1' ?>;background:<?= (int)$tree_node['id'] === (int)$community['id'] ? '#eaf2ff' : '#fff' ?>;border-radius:5px;">
+              <?php if ((int)$tree_node['id'] === (int)$community['id']): ?>
+                <strong>📍 <?= htmlspecialchars($tree_node['name'], ENT_QUOTES, 'UTF-8') ?> <span style="font-size:11px;color:#2065d1;">(جامعهٔ جاری)</span></strong>
+              <?php else: ?>
+                <a href="community.php?id=<?= (int)$tree_node['id'] ?>" style="font-weight:normal;">🌐 <?= htmlspecialchars($tree_node['name'], ENT_QUOTES, 'UTF-8') ?></a>
+              <?php endif; ?>
+            </div>
+          <?php endforeach; ?>
+
+          <?php
+          $render_hierarchy_children = function($parent_id, $depth = 1) use (&$render_hierarchy_children, &$hierarchy_children, $community) {
+              $nodes = $hierarchy_children[(int)$parent_id] ?? [];
+              if (!$nodes) return;
+              echo '<div style="margin-right:'.(int)$depth*18 .'px;border-right:2px solid #dbe4ef;padding-right:9px;">';
+              foreach ($nodes as $node) {
+                  $is_current = (int)$node['id'] === (int)$community['id'];
+                  echo '<div style="margin-top:5px;padding:6px 9px;background:'.($is_current ? '#eaf2ff' : '#fff').';border:1px solid '.($is_current ? '#b8d1f5' : '#e2e8f0').';border-radius:5px;line-height:1.8;">';
+                  if ($is_current) {
+                      echo '<strong>📍 '.htmlspecialchars($node['name'], ENT_QUOTES, 'UTF-8').' <span style="font-size:11px;color:#2065d1;">(جامعهٔ جاری)</span></strong>';
+                  } else {
+                      echo '<a href="community.php?id='.(int)$node['id'].'" style="font-weight:normal;">'.htmlspecialchars($node['name'], ENT_QUOTES, 'UTF-8').'</a>';
+                  }
+                  echo '</div>';
+                  $render_hierarchy_children((int)$node['id'], $depth + 1);
+              }
+              echo '</div>';
+          };
+          ?>
+          <?php $render_hierarchy_children((int)$community['id'], 1); ?>
         </div>
+      <?php else: ?>
+        <p style="font-size:13px;color:#667085;">درخت جایگاه جامعه فعلاً در دسترس نیست.</p>
       <?php endif; ?>
     <?php endif; ?>
   </section>
