@@ -438,7 +438,7 @@ $new_comms=$sq->get_result();
 $sq->close();
 while($nc=$new_comms->fetch_assoc()):
 ?>
-<option value="<?= (int)$nc['id'] ?>"><?= !empty($nc['parent_community_id']) ? '　↳ ' . htmlspecialchars($nc['name']) . ' — زیرمجموعهٔ ' . htmlspecialchars($nc['parent_name']) : htmlspecialchars($nc['name']) . ' — جامعهٔ مستقل' ?></option>
+<option value="<?= (int)$nc['id'] ?>" style="color:<?= !empty($nc['parent_community_id']) ? '#1769c2' : '#d97706' ?>;">□ <?= !empty($nc['parent_community_id']) ? htmlspecialchars($nc['name']) . ' — زیرمجموعهٔ ' . htmlspecialchars($nc['parent_name']) : htmlspecialchars($nc['name']) . ' — جامعهٔ مستقل' ?></option>
 <?php endwhile; ?>
 </select>
 <button type="submit">عضویت</button>
