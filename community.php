@@ -583,12 +583,35 @@ document.addEventListener('DOMContentLoaded', function () {
     <button class="members-button">👥 مشاهده اعضا</button>
     <div class="members-list">
       <?php
-      $mem_q = $conn->prepare("SELECT users.username, users.age, users.gender, users.education, users.job, users.city, users.resume FROM community_members JOIN users ON users.id = community_members.user_id WHERE community_members.community_id = ?");
+      // محبوبیت از میانگین چهار معیار موجود در user_scores محاسبه می‌شود؛
+      // فقط امتیازدهندگان عضو همین جامعه در رتبه‌بندی لحاظ می‌شوند.
+      $mem_q = $conn->prepare("
+          SELECT users.id, users.username, users.age, users.gender, users.education,
+                 users.job, users.city, users.resume,
+                 COALESCE(AVG((us.lawfulness + us.ethics + us.honesty + us.executive_skill) / 4.0), 0) AS popularity_score,
+                 COUNT(us.scorer_user_id) AS popularity_votes
+          FROM community_members
+          JOIN users ON users.id = community_members.user_id
+          LEFT JOIN user_scores us
+            ON us.target_user_id = users.id
+           AND us.scorer_user_id <> users.id
+           AND us.scorer_user_id IN (
+               SELECT cm2.user_id
+               FROM community_members cm2
+               WHERE cm2.community_id = community_members.community_id
+           )
+          WHERE community_members.community_id = ?
+          GROUP BY users.id, users.username, users.age, users.gender, users.education,
+                   users.job, users.city, users.resume
+          ORDER BY popularity_score DESC, popularity_votes DESC, users.username ASC
+      ");
       $mem_q->bind_param("i", $community['id']);
       $mem_q->execute();
       $mem_res = $mem_q->get_result();
       if ($mem_res->num_rows > 0) {
+          $member_rank = 0;
           while ($m = $mem_res->fetch_assoc()) {
+              $member_rank++;
               $profile_fields = [
                   'سن' => $m['age'] ?? '',
                   'جنسیت' => $m['gender'] ?? '',
@@ -597,9 +620,18 @@ document.addEventListener('DOMContentLoaded', function () {
                   'شهر' => $m['city'] ?? '',
                   'معرفی' => $m['resume'] ?? ''
               ];
+              $score_value = (float)$m['popularity_score'];
+              $score_label = number_format($score_value, 2, '.', '');
               echo "<div class='member-entry'>";
-              echo "<span class='member-name' tabindex='0'>".htmlspecialchars($m['username'], ENT_QUOTES, 'UTF-8')."</span>";
+              echo "<span class='member-name' tabindex='0'>".($member_rank === 1 && (int)$m['popularity_votes'] > 0 ? "🥇 " : "").htmlspecialchars($m['username'], ENT_QUOTES, 'UTF-8')."</span>";
               echo "<div class='member-profile'>";
+              echo "<div><strong>رتبه محبوبیت در این جامعه:</strong> ".(int)$member_rank."</div>";
+              if ((int)$m['popularity_votes'] > 0) {
+                  echo "<div><strong>میانگین محبوبیت:</strong> ".htmlspecialchars($score_label, ENT_QUOTES, 'UTF-8')." از ۵</div>";
+                  echo "<div><strong>تعداد ارزیابی‌ها:</strong> ".(int)$m['popularity_votes']."</div>";
+              } else {
+                  echo "<div style='color:#667085'>هنوز از سوی اعضای این جامعه ارزیابی نشده است.</div>";
+              }
               foreach ($profile_fields as $label => $value) {
                   $value = trim((string)$value);
                   if ($value !== '') {
@@ -608,6 +640,10 @@ document.addEventListener('DOMContentLoaded', function () {
               }
               if (count(array_filter($profile_fields, function($value) { return trim((string)$value) !== ''; })) === 0) {
                   echo "<span style='color:#777'>اطلاعات پروفایل ثبت نشده است.</span>";
+              }
+              if ($is_community_member && (int)$m['id'] !== $user_id) {
+                  $score_url = "give_score.php?user_id=".(int)$m['id']."&redirect=".urlencode("community.php?id=".(int)$community['id']);
+                  echo "<div style='margin-top:7px'><a href='".htmlspecialchars($score_url, ENT_QUOTES, 'UTF-8')."' style='display:inline-block;background:#ff9800;color:#fff;padding:5px 8px;border-radius:5px;font-size:12px;'>⭐ ثبت / تغییر امتیاز محبوبیت</a></div>";
               }
               echo "</div></div>";
           }
