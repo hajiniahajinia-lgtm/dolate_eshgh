@@ -119,7 +119,7 @@ textarea{resize:vertical;}
 .action-tooltip-text{display:none;position:fixed;top:0;left:0;width:270px;max-width:calc(100vw - 24px);box-sizing:border-box;padding:9px 11px;background:#fff;color:#263238;border:1px solid #b8c7d8;border-radius:8px;box-shadow:0 4px 14px rgba(0,0,0,.16);font-size:12px;line-height:1.9;font-weight:normal;text-align:right;white-space:normal;z-index:99999;}
 .action-tooltip:hover .action-tooltip-text,.action-tooltip:focus-within .action-tooltip-text{display:block;}
 /* توضیح‌های دکمه‌های ایده؛ جای‌گذاری ثابت برای جلوگیری از بریده‌شدن زیر حاشیه‌ها */
-.idea-action-tooltip{position:relative;display:inline-flex;align-items:center;width:160px;max-width:160px;}
+.idea-action-tooltip{position:relative;display:inline-flex;align-items:center;}
 .idea-action-tooltip-text{display:none;position:fixed;top:0;left:0;width:280px;max-width:calc(100vw - 24px);box-sizing:border-box;padding:10px 12px;background:#fff;color:#263238;border:1px solid #b8c7d8;border-radius:8px;box-shadow:0 5px 18px rgba(0,0,0,.2);font-size:12px;line-height:1.9;font-weight:normal;text-align:right;white-space:normal;overflow-wrap:anywhere;z-index:99999;pointer-events:none;}
 @media (max-width:720px){.idea-action-tooltip-text{display:none !important;}}
 .urgency-input{width:60px;text-align:center;padding:6px;font-size:13px;}
@@ -148,6 +148,7 @@ textarea{resize:vertical;}
 .card{background:#f7f8fa;border:1px solid #ccc;text-align:center;padding:14px;border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,0.04);}
 
 @media (min-width:721px){
+    .idea-action-tooltip{width:160px;max-width:160px;}
     /* هم‌اندازه‌کردن دکمه فوریت با دکمه اولویت فقط در صفحه‌نمایش کامپیوتر */
     .topic-actions form[action="toggle_priority.php"] button,
     .topic-actions form[action="update_urgency.php"] .urgency-btn{
