@@ -22,6 +22,51 @@ $ust->execute();
 $user = $ust->get_result()->fetch_assoc();
 $ust->close();
 
+// تبدیل تاریخ میلادی به شمسی، بدون نیاز به افزونهٔ اضافی PHP
+function community_gregorian_to_jalali($gy, $gm, $gd) {
+    $g_days_in_month = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    $jy = 0;
+    if ($gy > 1600) {
+        $jy = 979;
+        $gy -= 1600;
+    } else {
+        $jy = 0;
+        $gy -= 621;
+    }
+    $gy2 = ($gm > 2) ? ($gy + 1) : $gy;
+    $days = (365 * $gy)
+        + (int)(($gy2 + 3) / 4)
+        - (int)(($gy2 + 99) / 100)
+        + (int)(($gy2 + 399) / 400)
+        - 80 + $gd;
+    for ($i = 0; $i < $gm - 1; $i++) {
+        $days += $g_days_in_month[$i];
+    }
+    if ($gm > 2 && (($gy2 % 4 === 0 && $gy2 % 100 !== 0) || $gy2 % 400 === 0)) {
+        $days++;
+    }
+    $jy += 33 * (int)($days / 12053);
+    $days %= 12053;
+    $jy += 4 * (int)($days / 1461);
+    $days %= 1461;
+    if ($days > 365) {
+        $jy += (int)(($days - 1) / 365);
+        $days = ($days - 1) % 365;
+    }
+    if ($days < 186) {
+        $jm = 1 + (int)($days / 31);
+        $jd = 1 + ($days % 31);
+    } else {
+        $days -= 186;
+        $jm = 7 + (int)($days / 30);
+        $jd = 1 + ($days % 30);
+    }
+    return [$jy, $jm, $jd];
+}
+function community_persian_digits($value) {
+    return strtr((string)$value, ['0'=>'۰','1'=>'۱','2'=>'۲','3'=>'۳','4'=>'۴','5'=>'۵','6'=>'۶','7'=>'۷','8'=>'۸','9'=>'۹']);
+}
+
 // جامعه جاری
 $community_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 $community = null;
@@ -322,6 +367,11 @@ document.addEventListener('DOMContentLoaded', function () {
 <?php if ($community): ?>
 <div class="box community-header">
   <h2><?=htmlspecialchars($community['name'])?></h2>
+
+  <?php if (!empty($community['created_at']) && ($community_created_timestamp = strtotime($community['created_at'])) !== false): ?>
+    <?php $community_jalali = community_gregorian_to_jalali((int)date('Y', $community_created_timestamp), (int)date('n', $community_created_timestamp), (int)date('j', $community_created_timestamp)); ?>
+    <p style="margin: -4px 0 12px; color: #4b5563; font-size: 13px;">📅 تاریخ ایجاد جامعه: <strong><?= community_persian_digits(sprintf('%04d/%02d/%02d', $community_jalali[0], $community_jalali[1], $community_jalali[2])) ?></strong></p>
+  <?php endif; ?>
 
   <?php
   // قابلیت وظایف و رویکردهای پیشنهادی فقط در صورت نصب جدول‌های افزوده‌شده فعال می‌شود.
