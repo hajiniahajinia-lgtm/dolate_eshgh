@@ -189,6 +189,29 @@ textarea{resize:vertical;}
         text-align:center !important;
     }
 
+    /* هم‌اندازه‌کردن دکمه‌های محبوبیت کاربر و معقول‌ترین ایده فقط در کامپیوتر */
+    .idea-actions a[href^="give_score.php"],
+    .idea-actions form[action="update_idea.php"] button,
+    .idea-actions > span{
+        box-sizing:border-box !important;
+        display:inline-flex !important;
+        align-items:center !important;
+        justify-content:center !important;
+        width:160px !important;
+        min-width:160px !important;
+        max-width:160px !important;
+        height:36px !important;
+        min-height:36px !important;
+        max-height:36px !important;
+        padding:0 6px !important;
+        margin:0 !important;
+        font-family:Tahoma, Arial, sans-serif !important;
+        font-size:13px !important;
+        line-height:1 !important;
+        white-space:nowrap !important;
+        text-align:center !important;
+    }
+
     /* چیدمان منظم اطلاعات موضوع فقط در صفحه‌نمایش کامپیوتر */
     .topic-header{
         display:grid;
