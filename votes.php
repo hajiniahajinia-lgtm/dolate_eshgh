@@ -382,6 +382,63 @@ $arch_q = $conn->prepare("
 ");
 $arch_q->bind_param("i",$community_id); $arch_q->execute(); $arch_res=$arch_q->get_result();
 $arch_count = $arch_res->num_rows;
+
+// محاسبهٔ رتبهٔ محبوبیت هر عضو در همین جامعه، برای نمایش کنار نام ایده‌دهنده.
+$community_ranks = [];
+$community_member_total = 0;
+$rank_stmt = $conn->prepare("
+    SELECT cm.user_id,
+           AVG(NULLIF(us.lawfulness, 0)) AS avg_lawfulness,
+           AVG(NULLIF(us.ethics, 0)) AS avg_ethics,
+           AVG(NULLIF(us.honesty, 0)) AS avg_honesty,
+           AVG(NULLIF(us.executive_skill, 0)) AS avg_executive,
+           COUNT(CASE WHEN COALESCE(us.lawfulness, 0) > 0 OR COALESCE(us.ethics, 0) > 0 OR COALESCE(us.honesty, 0) > 0 OR COALESCE(us.executive_skill, 0) > 0 THEN us.scorer_user_id END) AS score_count
+    FROM community_members cm
+    LEFT JOIN user_scores us
+      ON us.target_user_id = cm.user_id
+     AND us.scorer_user_id <> cm.user_id
+     AND us.scorer_user_id IN (SELECT user_id FROM community_members WHERE community_id = ?)
+    WHERE cm.community_id = ?
+    GROUP BY cm.user_id
+");
+if ($rank_stmt) {
+    $rank_stmt->bind_param("ii", $community_id, $community_id);
+    $rank_stmt->execute();
+    $rank_result = $rank_stmt->get_result();
+    $rank_scores = [];
+    while ($rank_row = $rank_result->fetch_assoc()) {
+        $community_member_total++;
+        $rank_row['user_id'] = (int)$rank_row['user_id'];
+        $rank_row['score_count'] = (int)$rank_row['score_count'];
+        $rank_row['composite_score'] = null;
+        if ($rank_row['score_count'] > 0) {
+            $criteria = [
+                $rank_row['avg_lawfulness'],
+                $rank_row['avg_ethics'],
+                $rank_row['avg_honesty'],
+                $rank_row['avg_executive']
+            ];
+            $criteria = array_filter($criteria, function($value) { return $value !== null; });
+            if (count($criteria) > 0) {
+                $rank_row['composite_score'] = array_sum($criteria) / count($criteria);
+            }
+        }
+        $rank_scores[] = $rank_row;
+    }
+    $rank_stmt->close();
+
+    foreach ($rank_scores as $rank_row) {
+        if ($rank_row['composite_score'] === null) continue;
+        $rank = 1;
+        foreach ($rank_scores as $other_row) {
+            if ($other_row['composite_score'] !== null
+                && $other_row['composite_score'] > $rank_row['composite_score']) {
+                $rank++;
+            }
+        }
+        $community_ranks[$rank_row['user_id']] = $rank;
+    }
+}
 ?>
 
 <!DOCTYPE html>
@@ -727,6 +784,7 @@ body{
             $icontent = $idea['content'];
             $iauthor = $idea['username'] ?? 'ناشناس';
             $author_id = (int)($idea['author_id'] ?? 0);
+            $author_community_rank = $author_id > 0 ? ($community_ranks[$author_id] ?? null) : null;
             $author_age = trim((string)($idea['age'] ?? ''));
             $author_gender = trim((string)($idea['gender'] ?? ''));
             $author_job = trim((string)($idea['job'] ?? ''));
@@ -809,6 +867,7 @@ body{
         <span class="idea-author-tooltip" role="tooltip">
           <strong>اطلاعات ایده‌دهنده</strong><br>
           نام کاربری: <?= htmlspecialchars($iauthor, ENT_QUOTES, 'UTF-8') ?><br>
+          رتبه در این جامعه: <?= $author_community_rank === null ? 'هنوز رتبه‌ای ندارد' : ($author_community_rank . ' از ' . $community_member_total . ' عضو') ?><br>
           <?php if ($author_age !== ''): ?>سن: <?= htmlspecialchars($author_age, ENT_QUOTES, 'UTF-8') ?><br><?php endif; ?>
           <?php if ($author_gender !== ''): ?>جنسیت: <?= htmlspecialchars($author_gender, ENT_QUOTES, 'UTF-8') ?><br><?php endif; ?>
           <?php if ($author_job !== ''): ?>شغل: <?= htmlspecialchars($author_job, ENT_QUOTES, 'UTF-8') ?><br><?php endif; ?>
