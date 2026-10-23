@@ -426,6 +426,99 @@ document.addEventListener('DOMContentLoaded', function () {
     <?php endif; ?>
     </div>
   </details>
+
+  <?php
+  // ساختار سلسله‌مراتبی جوامع؛ ستون والد با فایل SQL جداگانه و به‌صورت کنترل‌شده افزوده می‌شود.
+  $hierarchy_ready = false;
+  $hierarchy_column_check = $conn->query("SHOW COLUMNS FROM communities LIKE 'parent_community_id'");
+  if ($hierarchy_column_check) {
+      $hierarchy_ready = ($hierarchy_column_check->num_rows > 0);
+      $hierarchy_column_check->close();
+  }
+  $community_parent = null;
+  $community_children = [];
+  $other_communities = [];
+  if ($hierarchy_ready) {
+      $parent_query = $conn->prepare("
+          SELECT c.id, c.name
+          FROM communities c
+          WHERE c.id = (SELECT parent_community_id FROM communities WHERE id = ?)
+          LIMIT 1
+      ");
+      if ($parent_query) {
+          $parent_query->bind_param("i", $community['id']);
+          $parent_query->execute();
+          $community_parent = $parent_query->get_result()->fetch_assoc();
+          $parent_query->close();
+      }
+
+      $children_query = $conn->prepare("SELECT id, name FROM communities WHERE parent_community_id = ? ORDER BY name ASC");
+      if ($children_query) {
+          $children_query->bind_param("i", $community['id']);
+          $children_query->execute();
+          $children_result = $children_query->get_result();
+          while ($child_row = $children_result->fetch_assoc()) $community_children[] = $child_row;
+          $children_query->close();
+      }
+
+      $other_query = $conn->prepare("SELECT id, name FROM communities WHERE id <> ? ORDER BY name ASC");
+      if ($other_query) {
+          $other_query->bind_param("i", $community['id']);
+          $other_query->execute();
+          $other_result = $other_query->get_result();
+          while ($other_row = $other_result->fetch_assoc()) $other_communities[] = $other_row;
+          $other_query->close();
+      }
+  }
+  if (empty($_SESSION['community_hierarchy_csrf'])) {
+      $_SESSION['community_hierarchy_csrf'] = bin2hex(random_bytes(32));
+  }
+  $hierarchy_status = $_GET['hierarchy_status'] ?? '';
+  ?>
+  <section id="community-hierarchy" style="margin:14px 0;padding:12px;background:rgba(255,255,255,.82);border:1px solid #d9dfe8;border-radius:9px;text-align:right;">
+    <h3 style="margin:0 0 7px;">🌐 جایگاه این جامعه</h3>
+    <?php if (!$hierarchy_ready): ?>
+      <p style="font-size:13px;line-height:1.9;margin:6px 0;">برای فعال‌شدن این امکان، فایل <strong>community_hierarchy.sql</strong> را یک‌بار روی پایگاه دادهٔ هاست اجرا کنید. این تغییر فقط یک ستون و یک نمایه اضافه می‌کند و داده‌های موجود را حذف نمی‌کند.</p>
+    <?php else: ?>
+      <p style="font-size:13px;line-height:1.9;margin:6px 0;">
+        <?php if ($community_parent): ?>
+          این جامعه زیرمجموعهٔ <strong><?= htmlspecialchars($community_parent['name'], ENT_QUOTES, 'UTF-8') ?></strong> است.
+        <?php else: ?>
+          این جامعه در حال حاضر <strong>مستقل</strong> است.
+        <?php endif; ?>
+      </p>
+      <?php if ($hierarchy_status === 'saved'): ?>
+        <p style="color:#18794e;font-size:13px;margin:6px 0;">جایگاه جامعه با موفقیت ذخیره شد.</p>
+      <?php elseif ($hierarchy_status === 'cycle' || $hierarchy_status === 'invalid'): ?>
+        <p style="color:#b42318;font-size:13px;margin:6px 0;">این ارتباط قابل ثبت نیست؛ جامعه را نمی‌توان زیرمجموعهٔ خودش یا یکی از زیرمجموعه‌هایش قرار داد.</p>
+      <?php elseif ($hierarchy_status === 'csrf'): ?>
+        <p style="color:#b42318;font-size:13px;margin:6px 0;">فرم منقضی شده است؛ صفحه را تازه‌سازی و دوباره تلاش کنید.</p>
+      <?php endif; ?>
+      <form method="post" action="set_community_parent.php" style="margin-top:10px;">
+        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['community_hierarchy_csrf'], ENT_QUOTES, 'UTF-8') ?>">
+        <input type="hidden" name="community_id" value="<?= (int)$community['id'] ?>">
+        <label for="parent-community-select" style="display:block;font-size:13px;">تعیین جایگاه (هر کاربر واردشده می‌تواند آن را تغییر دهد)</label>
+        <select id="parent-community-select" name="parent_community_id" style="margin-top:6px;">
+          <option value="0" <?= !$community_parent ? 'selected' : '' ?>>جامعهٔ مستقل؛ بدون جامعهٔ بالادست</option>
+          <?php foreach ($other_communities as $other_community): ?>
+            <option value="<?= (int)$other_community['id'] ?>" <?= $community_parent && (int)$community_parent['id'] === (int)$other_community['id'] ? 'selected' : '' ?>>زیرمجموعهٔ <?= htmlspecialchars($other_community['name'], ENT_QUOTES, 'UTF-8') ?></option>
+          <?php endforeach; ?>
+        </select>
+        <button type="submit" style="margin-top:8px;">ذخیرهٔ جایگاه جامعه</button>
+      </form>
+      <?php if (!empty($community_children)): ?>
+        <div style="margin-top:10px;font-size:13px;line-height:1.9;">
+          <strong>جوامع زیرمجموعهٔ این جامعه:</strong>
+          <ul style="margin:5px 0;padding-right:22px;">
+            <?php foreach ($community_children as $child): ?>
+              <li><a href="community.php?id=<?= (int)$child['id'] ?>"><?= htmlspecialchars($child['name'], ENT_QUOTES, 'UTF-8') ?></a></li>
+            <?php endforeach; ?>
+          </ul>
+        </div>
+      <?php endif; ?>
+    <?php endif; ?>
+  </section>
+
   <p><strong>تعداد اعضا:</strong> <?= (int)$community['members_count'] ?></p>
   <div class="members-dropdown">
     <button class="members-button">👥 مشاهده اعضا</button>
