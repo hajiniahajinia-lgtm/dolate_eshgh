@@ -10,6 +10,22 @@ $user_id = (int)$_SESSION['user_id'];
 
 $community_id = isset($_GET['community_id']) ? (int)$_GET['community_id'] : 0;
 if ($community_id <= 0) die("Community not specified.");
+$candidate_tables_ready=false;
+$tables_check=$conn->query("SELECT COUNT(*) AS n FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN ('topic_execution_candidates','topic_execution_candidate_votes')");
+if($tables_check){$candidate_tables_ready=((int)$tables_check->fetch_assoc()['n']===2);$tables_check->close();}
+$election_message='';
+if(isset($_GET['candidate_vote_status'])){if($_GET['candidate_vote_status']==='saved')$election_message='رأی شما برای انتخاب مجری ثبت شد.';elseif($_GET['candidate_vote_status']==='changed')$election_message='رأی شما به نامزد جدید منتقل شد.';elseif($_GET['candidate_vote_status']==='invalid')$election_message='این رأی معتبر نیست؛ فقط اعضای جامعه می‌توانند برای نامزدهای طرح برنده رأی بدهند.';elseif($_GET['candidate_vote_status']==='missing_schema')$election_message='برای فعال‌شدن انتخابات مجری، فایل migration نامزدی را در پایگاه داده اجرا کنید.';}
+if($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['vote_for_candidate'])){
+ if(!$candidate_tables_ready){header('Location: archived_topics.php?community_id='.$community_id.'&candidate_vote_status=missing_schema');exit;}
+ $topic_id=(int)($_POST['topic_id']??0);$idea_id=(int)($_POST['idea_id']??0);$candidate_uid=(int)($_POST['candidate_user_id']??0);
+ $ms=$conn->prepare("SELECT 1 FROM community_members WHERE community_id=? AND user_id=? LIMIT 1");$ms->bind_param("ii",$community_id,$user_id);$ms->execute();$is_member=(bool)$ms->get_result()->fetch_assoc();$ms->close();
+ $ws=$conn->prepare("SELECT 1 FROM topics t JOIN topic_voting_meta m ON m.topic_id=t.id JOIN topic_winners w ON w.topic_id=t.id AND w.idea_id=? WHERE t.id=? AND t.community_id=? AND m.finalized=1 LIMIT 1");$ws->bind_param("iii",$idea_id,$topic_id,$community_id);$ws->execute();$is_winner=(bool)$ws->get_result()->fetch_assoc();$ws->close();
+ $cs=$conn->prepare("SELECT 1 FROM topic_execution_candidates WHERE topic_id=? AND idea_id=? AND user_id=? LIMIT 1");$cs->bind_param("iii",$topic_id,$idea_id,$candidate_uid);$cs->execute();$is_candidate=(bool)$cs->get_result()->fetch_assoc();$cs->close();
+ if(!$is_member||!$is_winner||!$is_candidate||$candidate_uid===$user_id){header('Location: archived_topics.php?community_id='.$community_id.'&candidate_vote_status=invalid');exit;}
+ $ps=$conn->prepare("SELECT candidate_user_id FROM topic_execution_candidate_votes WHERE topic_id=? AND idea_id=? AND voter_user_id=? LIMIT 1");$ps->bind_param("iii",$topic_id,$idea_id,$user_id);$ps->execute();$prior=$ps->get_result()->fetch_assoc();$ps->close();
+ $sv=$conn->prepare("INSERT INTO topic_execution_candidate_votes (topic_id,idea_id,candidate_user_id,voter_user_id) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE candidate_user_id=VALUES(candidate_user_id),created_at=CURRENT_TIMESTAMP");$sv->bind_param("iiii",$topic_id,$idea_id,$candidate_uid,$user_id);$sv->execute();$sv->close();
+ header('Location: archived_topics.php?community_id='.$community_id.'&candidate_vote_status='.($prior?'changed':'saved'));exit;
+}
 
 // =====================
 // توابع کمکی
@@ -140,6 +156,17 @@ while($row=$result->fetch_assoc()){
     }
 
     $status = ($votes['pct_yes']>=50) ? 'winner' : 'loser';
+    $execution_candidates=[];
+    if($status==='winner' && $candidate_tables_ready && !empty($winner_idea['idea_id'])){
+      $winner_idea_id=(int)$winner_idea['idea_id'];
+      $cl=$conn->prepare("SELECT c.user_id,u.username FROM topic_execution_candidates c JOIN users u ON u.id=c.user_id JOIN community_members cm ON cm.user_id=c.user_id AND cm.community_id=? WHERE c.topic_id=? AND c.idea_id=? ORDER BY u.username ASC");
+      $cl->bind_param("iii",$community_id,$topic_id,$winner_idea_id);$cl->execute();$clr=$cl->get_result();
+      while($cr=$clr->fetch_assoc()){$uid=(int)$cr['user_id'];
+        $ps=$conn->prepare("SELECT COALESCE(AVG((lawfulness+ethics+honesty+executive_skill)/4.0),0) AS score,COUNT(scorer_user_id) AS score_votes FROM user_scores WHERE target_user_id=? AND scorer_user_id<>? AND scorer_user_id IN (SELECT user_id FROM community_members WHERE community_id=?)");$ps->bind_param("iii",$uid,$uid,$community_id);$ps->execute();$pr=$ps->get_result()->fetch_assoc();$ps->close();
+        $vs=$conn->prepare("SELECT COUNT(*) AS total,COALESCE(MAX(voter_user_id=?),0) AS mine FROM topic_execution_candidate_votes WHERE topic_id=? AND idea_id=? AND candidate_user_id=?");$vs->bind_param("iiii",$user_id,$topic_id,$winner_idea_id,$uid);$vs->execute();$vr=$vs->get_result()->fetch_assoc();$vs->close();
+        $execution_candidates[]=['user_id'=>$uid,'username'=>$cr['username'],'popularity'=>(float)($pr['score']??0),'popularity_votes'=>(int)($pr['score_votes']??0),'election_votes'=>(int)($vr['total']??0),'my_vote'=>(int)($vr['mine']??0)===1];
+      }$cl->close();
+    }
 
     $data=[
         'id'=>$topic_id,
@@ -151,6 +178,7 @@ while($row=$result->fetch_assoc()){
         'participation'=>$participation,
         'enforce'=>$enforce,
         'idea'=>$winner_idea,
+        'execution_candidates'=>$execution_candidates,
         'status'=>$status
     ];
 
@@ -203,6 +231,8 @@ function toggleIdea(id){
 <body>
 <div class="container">
   <h1>📦 آرشیو موضوعات (نهایی‌شده)</h1>
+  <?php if($election_message!==''): ?><div style="margin:0 0 14px;padding:10px;border-radius:8px;background:#fff3cd;color:#664d03;text-align:center"><?= htmlspecialchars($election_message,ENT_QUOTES,'UTF-8') ?></div><?php endif; ?>
+  <?php if(!$candidate_tables_ready): ?><div style="margin:0 0 14px;padding:10px;border-radius:8px;background:#fff3cd;color:#664d03;text-align:center">برای فعال‌شدن داوطلبی و انتخاب مجری، فایل <strong>migration_execution_candidates.sql</strong> را یک‌بار در پایگاه داده همین سایت اجرا کنید.</div><?php endif; ?>
   <div class="columns">
     <div class="column winners">
         <h2>🏆 برنده‌ها</h2>
@@ -222,6 +252,19 @@ function toggleIdea(id){
                 <div class="meta">ایده‌دهنده: <?= htmlspecialchars($row['idea']['idea_author'] ?? 'ناشناس') ?></div>
             </div>
             <?php endif; ?>
+
+            <?php if(!empty($row['execution_candidates'])): ?>
+            <div style="width:100%;margin-top:8px;padding:12px;border:1px solid #a9d4b0;background:#f2fff4;border-radius:10px;box-sizing:border-box">
+              <strong>🙋 داوطلبان اجرای طرح برنده</strong><div class="meta" style="margin:5px 0 10px">محبوبیت و رأی انتخاب مجری جداگانه نمایش داده می‌شوند. هر عضو می‌تواند برای این طرح یک نامزد انتخاب کند و رأی خود را تغییر دهد.</div>
+              <?php foreach($row['execution_candidates'] as $candidate): ?>
+                <div style="padding:9px;margin-top:7px;border:1px solid #d9e7dc;border-radius:8px;background:#fff"><div><strong><?= htmlspecialchars($candidate['username'],ENT_QUOTES,'UTF-8') ?></strong></div>
+                  <div class="meta">محبوبیت: <strong><?= number_format($candidate['popularity'],2) ?></strong> از <?= (int)$candidate['popularity_votes'] ?> امتیازدهی</div>
+                  <div class="meta">رأی مستقل برای انتخاب مجری: <strong><?= (int)$candidate['election_votes'] ?></strong></div>
+                  <?php if((int)$candidate['user_id']!==$user_id): ?><form method="post" style="margin-top:7px"><input type="hidden" name="vote_for_candidate" value="1"><input type="hidden" name="topic_id" value="<?= (int)$row['id'] ?>"><input type="hidden" name="idea_id" value="<?= (int)$row['idea']['idea_id'] ?>"><input type="hidden" name="candidate_user_id" value="<?= (int)$candidate['user_id'] ?>"><button type="submit" style="width:100%;padding:8px;border:0;border-radius:6px;background:<?= $candidate['my_vote']?'#218838':'#dceeff' ?>;color:<?= $candidate['my_vote']?'#fff':'#173b63' ?>;font-weight:bold;cursor:pointer"><?= $candidate['my_vote']?'✓ رأی شما برای این نامزد ثبت شده':'انتخاب این نامزد به‌عنوان مجری' ?></button></form><?php else: ?><div class="meta" style="margin-top:6px">برای جلوگیری از رأی به خود، نمی‌توانید به نام خودتان رأی بدهید.</div><?php endif; ?>
+                </div>
+              <?php endforeach; ?>
+            </div>
+            <?php elseif($status==='winner' && $candidate_tables_ready && !empty($row['idea']['idea_id'])): ?><div style="width:100%;margin-top:8px;padding:10px;background:#f7fbff;border:1px solid #c8d9f0;border-radius:8px;box-sizing:border-box">برای ایدهٔ برنده هنوز داوطلبی ثبت نشده است.</div><?php endif; ?>
 
             <div class="votebox">
                 <div>کل آرا: <strong><?= (int)$row['votes']['total'] ?></strong></div>
