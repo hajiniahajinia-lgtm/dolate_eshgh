@@ -416,12 +416,19 @@ document.addEventListener('DOMContentLoaded', function () {
       }
   }
   ?>
-  <p style="margin:10px 0 14px;line-height:1.9;"><strong>وظایف و رویکردهای جامعه:</strong>
-    <?php if (!empty($duty_proposals)): ?>
-      <?= nl2br(htmlspecialchars($duty_proposals[0]['content'])) ?>
-      <span style="display:inline-block;color:#946200;font-size:12px;">(<?= (int)$duty_proposals[0]['vote_count'] ?> رأی معقولیت)</span>
+  <?php
+  // متن اولیه تا زمانی که دست‌کم یک پیشنهاد رأی معقولیت نگیرد، متن جاری جامعه باقی می‌ماند.
+  $current_duty = null;
+  if (!empty($duty_proposals) && (int)$duty_proposals[0]['vote_count'] > 0) {
+      $current_duty = $duty_proposals[0];
+  }
+  ?>
+  <p style="margin:10px 0 14px;line-height:1.9;"><strong>وظایف و رویکردهای جامعه:</strong><br>
+    <?php if ($current_duty): ?>
+      <?= nl2br(htmlspecialchars($current_duty['content'], ENT_QUOTES, 'UTF-8')) ?>
+      <span style="display:inline-block;color:#946200;font-size:12px;">(<?= (int)$current_duty['vote_count'] ?> رأی معقولیت)</span>
     <?php else: ?>
-      هنوز پیشنهادی ثبت نشده است.
+      <?= nl2br(htmlspecialchars((string)($community['approach'] ?? ''), ENT_QUOTES, 'UTF-8')) ?>
     <?php endif; ?>
   </p>
   <details class="community-duties-toggle">
@@ -437,7 +444,7 @@ document.addEventListener('DOMContentLoaded', function () {
           <?php foreach ($duty_proposals as $idx => $proposal): ?>
             <div class="community-duty-item">
               <div class="community-duty-content">
-                <?php if ($idx === 0): ?><strong class="community-duty-top">★ معقول‌ترین پیشنهاد فعلی</strong><?php endif; ?>
+                <?php if ($idx === 0 && (int)$proposal['vote_count'] > 0): ?><strong class="community-duty-top">★ معقول‌ترین پیشنهاد فعلی</strong><?php endif; ?>
                 <span class="community-duty-type">پیشنهاد رویکرد و وظایف</span>
                 <div><?= nl2br(htmlspecialchars($proposal['content'], ENT_QUOTES, 'UTF-8')) ?></div>
                 <small>پیشنهاددهنده: <?= htmlspecialchars($proposal['username'], ENT_QUOTES, 'UTF-8') ?> · رأی معقولیت: <?= (int)$proposal['vote_count'] ?></small>
