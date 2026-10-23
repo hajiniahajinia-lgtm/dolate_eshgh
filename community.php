@@ -364,6 +364,9 @@ document.addEventListener('DOMContentLoaded', function () {
 <?php if ($community): ?>
 <div class="box community-header">
   <h2><?=htmlspecialchars($community['name'])?></h2>
+  <div style="margin:0 0 12px;text-align:right;">
+    <a href="profile.php" style="display:inline-block;background:#2065d1;color:#fff;text-decoration:none;padding:9px 14px;border-radius:8px;font-weight:bold;font-size:14px;">↩ بازگشت به پروفایل</a>
+  </div>
 
   <?php if (!empty($community['created_at']) && ($community_created_timestamp = strtotime($community['created_at'])) !== false): ?>
     <?php $community_jalali = community_gregorian_to_jalali((int)date('Y', $community_created_timestamp), (int)date('n', $community_created_timestamp), (int)date('j', $community_created_timestamp)); ?>
