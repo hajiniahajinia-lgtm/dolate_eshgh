@@ -61,6 +61,16 @@ button.leave {background:#e63946;}
 .community-management > summary::-webkit-details-marker {display:none;}
 .community-management[open] > summary {margin-bottom:12px;}
 .community-management .box {margin-bottom:10px;}
+.community-select-native {position:absolute !important;width:1px !important;height:1px !important;opacity:0 !important;pointer-events:none !important;}
+.community-picker {position:relative;width:100%;margin-top:8px;}
+.community-picker-toggle {display:flex;justify-content:space-between;align-items:center;width:100%;padding:12px;background:#fff;color:#333;border:1px solid #bbb;border-radius:6px;text-align:right;}
+.community-picker-list {position:absolute;z-index:20;top:100%;right:0;left:0;max-height:280px;overflow-y:auto;background:#fff;border:1px solid #bbb;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.12);}
+.community-picker-option {display:flex;align-items:baseline;gap:10px;width:100%;padding:10px;text-align:right;background:#fff;color:#333;border-bottom:1px solid #eee;border-radius:0;margin:0;}
+.community-picker-option:hover {background:#f4f7fb;}
+.community-picker-option .community-name {font-size:17px;font-weight:bold;}
+.community-picker-option .community-kind {font-size:12px;font-weight:normal;white-space:nowrap;}
+.community-picker-option.independent-community .community-name,.community-picker-option.independent-community .community-kind {color:#d97706;}
+.community-picker-option.child-community .community-name,.community-picker-option.child-community .community-kind {color:#1769c2;}
 .leave-community-form {display:block !important;width:100%;margin:0 !important;padding:0;}
 .leave-community-form button.leave {display:flex;width:100%;height:44px;min-height:44px;padding:0 10px;margin-top:10px;align-items:center;justify-content:center;box-sizing:border-box;line-height:1;}
 button.edit {background:#2a9d8f;margin-bottom:10px;}
@@ -107,6 +117,24 @@ function toggleCommunityTree() {
     button.textContent = isOpen ? '🌳 نمایش درخت جوامع' : '🌳 بستن درخت جوامع';
 }
 document.addEventListener("DOMContentLoaded", function() {
+    const communitySelect = document.getElementById("joinCommunitySelect");
+    const pickerToggle = document.getElementById("communityPickerToggle");
+    const pickerList = document.getElementById("communityPickerList");
+    if (communitySelect && pickerToggle && pickerList) {
+        pickerToggle.addEventListener("click", function() {
+            pickerList.hidden = !pickerList.hidden;
+        });
+        pickerList.querySelectorAll(".community-picker-option").forEach(function(option) {
+            option.addEventListener("click", function() {
+                communitySelect.value = this.dataset.value;
+                pickerToggle.textContent = this.querySelector(".community-name").textContent.replace(/^□\\s*/, "");
+                pickerList.hidden = true;
+            });
+        });
+        document.addEventListener("click", function(event) {
+            if (!event.target.closest("#communityPicker")) pickerList.hidden = true;
+        });
+    }
     const acc = document.getElementsByClassName("accordion");
     for (let i=0;i<acc.length;i++){
         acc[i].addEventListener("click",function(){
@@ -422,8 +450,6 @@ if($user_comms->num_rows>0):
 <div class="box">
 <h3>عضویت در جامعه‌های موجود</h3>
 <form action="join_community.php" method="post">
-<select name="community_id" required>
-<option value="">— انتخاب جامعه —</option>
 <?php
 $sq=$conn->prepare("
 SELECT c.id, c.name, c.parent_community_id, p.name AS parent_name
@@ -436,11 +462,28 @@ $sq->bind_param("i",$user_id);
 $sq->execute();
 $new_comms=$sq->get_result();
 $sq->close();
-while($nc=$new_comms->fetch_assoc()):
 ?>
-<option value="<?= (int)$nc['id'] ?>" style="color:<?= !empty($nc['parent_community_id']) ? '#1769c2' : '#d97706' ?>;">□ <?= !empty($nc['parent_community_id']) ? htmlspecialchars($nc['name']) . ' — زیرمجموعهٔ ' . htmlspecialchars($nc['parent_name']) : htmlspecialchars($nc['name']) . ' — جامعهٔ مستقل' ?></option>
+<select name="community_id" id="joinCommunitySelect" required class="community-select-native">
+<option value="">— انتخاب جامعه —</option>
+<?php while($nc=$new_comms->fetch_assoc()): ?>
+<option value="<?= (int)$nc['id'] ?>"><?= htmlspecialchars($nc['name']) ?></option>
 <?php endwhile; ?>
 </select>
+<div class="community-picker" id="communityPicker">
+<button type="button" class="community-picker-toggle" id="communityPickerToggle">— انتخاب جامعه — <span>▾</span></button>
+<div class="community-picker-list" id="communityPickerList" hidden>
+<?php
+$new_comms->data_seek(0);
+while($nc=$new_comms->fetch_assoc()):
+$is_child = !empty($nc['parent_community_id']);
+?>
+<button type="button" class="community-picker-option <?= $is_child ? 'child-community' : 'independent-community' ?>" data-value="<?= (int)$nc['id'] ?>">
+<span class="community-name">□ <?= htmlspecialchars($nc['name']) ?></span>
+<span class="community-kind"><?= $is_child ? 'زیرمجموعهٔ ' . htmlspecialchars($nc['parent_name']) : 'جامعهٔ مستقل' ?></span>
+</button>
+<?php endwhile; ?>
+</div>
+</div>
 <button type="submit">عضویت</button>
 </form>
 </div>
