@@ -80,7 +80,9 @@ if($_SERVER['REQUEST_METHOD'] === 'POST'){
             $delvotes=$conn->prepare("DELETE FROM topic_execution_candidate_votes WHERE topic_id=? AND idea_id=? AND candidate_user_id=?");$delvotes->bind_param("iii",$topic_id,$idea_id,$user_id);$delvotes->execute();$delvotes->close();$is_candidate=false;
         }else{$ins=$conn->prepare("INSERT INTO topic_execution_candidates (topic_id,idea_id,user_id) VALUES (?,?,?)");$ins->bind_param("iii",$topic_id,$idea_id,$user_id);$ins->execute();$ins->close();$is_candidate=true;}
         $cs=$conn->prepare("SELECT COUNT(*) AS n FROM topic_execution_candidates WHERE topic_id=? AND idea_id=?");$cs->bind_param("ii",$topic_id,$idea_id);$cs->execute();$cc=(int)$cs->get_result()->fetch_assoc()['n'];$cs->close();
-        echo json_encode(['success'=>true,'is_candidate'=>$is_candidate,'candidate_count'=>$cc]);exit;
+        $names_stmt=$conn->prepare("SELECT COALESCE(u.username, CONCAT('عضو ', c.user_id)) AS username FROM topic_execution_candidates c LEFT JOIN users u ON u.id=c.user_id WHERE c.topic_id=? AND c.idea_id=? ORDER BY c.id ASC");
+        $names_stmt->bind_param("ii",$topic_id,$idea_id);$names_stmt->execute();$names_res=$names_stmt->get_result();$candidate_names=[];while($name_row=$names_res->fetch_assoc()){$candidate_names[]=$name_row['username'];}$names_stmt->close();
+        echo json_encode(['success'=>true,'is_candidate'=>$is_candidate,'candidate_count'=>$cc,'candidate_names'=>$candidate_names]);exit;
     }
 
     // ---------- رأی آری/نه ----------
@@ -857,8 +859,16 @@ body{
             $enf_no  = (int)$conn->query("SELECT COUNT(*) AS c FROM topic_enforce_votes WHERE topic_id=$tid AND idea_id=$iid AND enforceable=0")->fetch_assoc()['c'];
 
             $pct = ($yes_count + $no_count) > 0 ? round(($yes_count / ($yes_count + $no_count)) * 100, 2) : 0;
-            $candidate_count=0; $my_is_candidate=false;
-            if($candidate_tables_ready){$cs=$conn->prepare("SELECT COUNT(*) AS total, COALESCE(MAX(user_id=?),0) AS mine FROM topic_execution_candidates WHERE topic_id=? AND idea_id=?");$cs->bind_param("iii",$user_id,$tid,$iid);$cs->execute();$cr=$cs->get_result()->fetch_assoc();$cs->close();$candidate_count=(int)($cr['total']??0);$my_is_candidate=(int)($cr['mine']??0)===1;}
+            $candidate_count=0; $my_is_candidate=false; $candidate_names=[];
+            if($candidate_tables_ready){
+                $cs=$conn->prepare("SELECT COUNT(*) AS total, COALESCE(MAX(user_id=?),0) AS mine FROM topic_execution_candidates WHERE topic_id=? AND idea_id=?");
+                $cs->bind_param("iii",$user_id,$tid,$iid);$cs->execute();$cr=$cs->get_result()->fetch_assoc();$cs->close();
+                $candidate_count=(int)($cr['total']??0);$my_is_candidate=(int)($cr['mine']??0)===1;
+                $names_stmt=$conn->prepare("SELECT COALESCE(u.username, CONCAT('عضو ', c.user_id)) AS username FROM topic_execution_candidates c LEFT JOIN users u ON u.id=c.user_id WHERE c.topic_id=? AND c.idea_id=? ORDER BY c.id ASC");
+                $names_stmt->bind_param("ii",$tid,$iid);$names_stmt->execute();$names_res=$names_stmt->get_result();
+                while($name_row=$names_res->fetch_assoc()){$candidate_names[]=$name_row['username'];}
+                $names_stmt->close();
+            }
     ?>
      <div class="idea" data-idea="<?= $iid ?>">
   <button class="show-hide-btn" onclick="toggleIdea(<?= $iid ?>)">💡 نمایش/مخفی کردن ایده</button>
@@ -898,6 +908,7 @@ body{
       <div class="candidate-signup" style="margin-top:8px;padding:9px;border:1px solid #c8d9f0;border-radius:8px;background:#f7fbff">
         <button type="button" class="candidate-btn" data-topic="<?= $tid ?>" data-idea="<?= $iid ?>" style="width:100%;padding:9px;border:0;border-radius:6px;background:<?= $my_is_candidate?'#e7a93b':'#dceeff' ?>;color:#173b63;font-weight:bold;cursor:pointer"><?= $my_is_candidate?'✓ داوطلب اجرای این طرح هستید — لغو داوطلبی':'🙋 اعلام آمادگی برای اجرای این طرح' ?></button>
         <div class="small candidate-count" style="margin-top:5px">تعداد داوطلبان این ایده: <strong><?= $candidate_count ?></strong></div>
+        <div class="small candidate-names" style="margin-top:5px;line-height:1.8"><?= $candidate_count > 0 ? 'داوطلبان: ' . htmlspecialchars(implode('، ', $candidate_names), ENT_QUOTES, 'UTF-8') : 'هنوز کسی برای اجرای این طرح داوطلب نشده است.' ?></div>
       </div>
     <?php else: ?><div class="small" style="margin-top:8px;color:#875b13">برای فعال‌شدن داوطلبی، ابتدا فایل migration نامزدی مجری را در پایگاه داده اجرا کنید.</div><?php endif; ?>
   <?php endif; ?>
@@ -1016,6 +1027,7 @@ document.addEventListener('DOMContentLoaded', function(){
             if(!resp||!resp.success){alert((resp&&resp.message)||'ثبت داوطلبی انجام نشد.');return;}
             button.textContent=resp.is_candidate?'✓ داوطلب اجرای این طرح هستید — لغو داوطلبی':'🙋 اعلام آمادگی برای اجرای این طرح';button.style.background=resp.is_candidate?'#e7a93b':'#dceeff';
             const box=button.closest('.candidate-signup'),count=box?box.querySelector('.candidate-count strong'):null;if(count)count.textContent=resp.candidate_count;
+            const namesLabel=box?box.querySelector('.candidate-names'):null;if(namesLabel){namesLabel.textContent=resp.candidate_names&&resp.candidate_names.length?'داوطلبان: '+resp.candidate_names.join('، '):'هنوز کسی برای اجرای این طرح داوطلب نشده است.';}
         }).catch(()=>alert('ارتباط با سرور برقرار نشد.')).finally(()=>{button.disabled=false;});
     });});
 
