@@ -268,6 +268,10 @@ h1{margin:0 0 18px;font-size:22px;text-align:center}
 .non-enforce-box{background:#FF9800;color:#fff;border-radius:4px;padding:3px 8px;margin-top:2px;display:inline-block;font-weight:600;}
 .meta{font-size:13px;color:#555}
 .show-hide-btn{margin-top:6px;background:#1976D2;color:#fff;border:none;padding:4px 8px;border-radius:6px;cursor:pointer;font-size:12px;}
+.execution-details{width:100%;margin-top:8px;border:1px solid #a9d4b0;background:#f2fff4;border-radius:10px;box-sizing:border-box;overflow:hidden;}
+.execution-details>summary{padding:10px 12px;cursor:pointer;font-weight:bold;color:#20572a;list-style-position:inside;}
+.execution-details>summary:hover{background:#e5f8e8;}
+.execution-details-body{padding:0 12px 12px;}
 /* واکنشگرایی */
 @media(max-width:900px){
     .columns {flex-direction: column;}
@@ -307,8 +311,9 @@ function toggleIdea(id){
             <?php endif; ?>
 
             <?php if($candidate_tables_ready && !empty($row['idea']['idea_id'])): ?>
-            <div style="width:100%;margin-top:8px;padding:12px;border:1px solid #a9d4b0;background:#f2fff4;border-radius:10px;box-sizing:border-box">
-              <strong>🙋 داوطلبان اجرای طرح برنده</strong>
+            <details class="execution-details">
+              <summary>🙋 داوطلبان اجرای طرح برنده (<?= count($row['execution_candidates']) ?>)</summary>
+              <div class="execution-details-body">
               <form method="post" style="margin-top:8px"><input type="hidden" name="toggle_execution_candidate" value="1"><input type="hidden" name="topic_id" value="<?= (int)$row['id'] ?>"><input type="hidden" name="idea_id" value="<?= (int)$row['idea']['idea_id'] ?>"><button type="submit" style="width:100%;padding:9px;border:0;border-radius:6px;background:<?= $my_is_candidate?'#e7a93b':'#dceeff' ?>;color:#173b63;font-weight:bold;cursor:pointer"><?= $my_is_candidate?'✓ داوطلب اجرای این طرح هستید — لغو داوطلبی':'🙋 اعلام آمادگی برای اجرای این طرح' ?></button></form>
               <div class="meta" style="margin:5px 0 10px"><?= count($row['execution_candidates']) ?> داوطلب. نام داوطلبان زیر نمایش داده می‌شود. محبوبیت و رأی انتخاب مجری جداگانه نمایش داده می‌شوند.</div>
               <?php if(!empty($row['execution_candidates'])): foreach($row['execution_candidates'] as $candidate): ?>
@@ -333,7 +338,8 @@ function toggleIdea(id){
                   <?php endif; ?>
                 </div>
               <?php endif; ?>
-            </div>
+              </div>
+            </details>
             <?php endif; ?>
 
             <div class="votebox">
