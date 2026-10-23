@@ -802,23 +802,7 @@ document.addEventListener("DOMContentLoaded", function() {
                 const currentCountdown = currentTopic.querySelector('.countdown');
                 if (freshCountdown && currentCountdown) {
                     currentCountdown.dataset.remaining = freshCountdown.dataset.remaining;
-                    let diff = parseInt(freshCountdown.dataset.remaining, 10) || 0;
-                    const endTime = Date.now() + diff * 1000;
-                    function updateCountdown() {
-                        const remaining = Math.max(0, Math.ceil((endTime - Date.now()) / 1000));
-                        if (remaining <= 0) {
-                            currentCountdown.textContent = "⏰ زمان به پایان رسید";
-                            currentCountdown.style.color = "#c0392b";
-                            return;
-                        }
-                        const days = Math.floor(remaining / 86400);
-                        const hours = Math.floor((remaining % 86400) / 3600);
-                        const minutes = Math.floor((remaining % 3600) / 60);
-                        const seconds = remaining % 60;
-                        currentCountdown.textContent = (days > 0 ? days + " روز " : "") + hours + " ساعت " + minutes + " دقیقه " + seconds + " ثانیه";
-                        setTimeout(updateCountdown, 1000);
-                    }
-                    updateCountdown();
+                    startTopicCountdown(currentCountdown, parseInt(freshCountdown.dataset.remaining, 10) || 0);
                 }
             } catch (error) {
                 // در صورت خطای ارتباط، روش معمول فرم را حفظ کن.
@@ -928,33 +912,31 @@ document.addEventListener("DOMContentLoaded", function() {
     }
 
 
-    // ===== شمارش معکوس =====
-    document.querySelectorAll(".countdown").forEach(function(el) {
-        let initial = parseInt(el.dataset.remaining, 10) || 0;
-        const endTs = Date.now() + initial * 1000;
+    // ===== شمارش معکوس: برای هر موضوع فقط یک تایمر فعال باشد =====
+    function startTopicCountdown(el, initialSeconds) {
+        if (el._countdownTimer) clearTimeout(el._countdownTimer);
+        const endTs = Date.now() + Math.max(0, initialSeconds) * 1000;
 
         function updateOnce() {
-            let diff = Math.max(0, Math.ceil((endTs - Date.now()) / 1000));
+            const diff = Math.max(0, Math.ceil((endTs - Date.now()) / 1000));
             if (diff <= 0) {
                 el.textContent = "⏰ زمان به پایان رسید";
                 el.style.color = "#c0392b";
+                el._countdownTimer = null;
                 return;
             }
-            const days = Math.floor(diff / (24*60*60));
-            const hours = Math.floor((diff % (24*60*60)) / 3600);
+            const days = Math.floor(diff / 86400);
+            const hours = Math.floor((diff % 86400) / 3600);
             const minutes = Math.floor((diff % 3600) / 60);
             const seconds = diff % 60;
-
-            let text = "";
-            if (days > 0) text += days + " روز ";
-            text += hours + " ساعت ";
-            text += minutes + " دقیقه ";
-            text += seconds + " ثانیه";
-            el.textContent = text;
-
-            setTimeout(updateOnce, 1000);
+            el.textContent = (days > 0 ? days + " روز " : "") + hours + " ساعت " + minutes + " دقیقه " + seconds + " ثانیه";
+            el._countdownTimer = setTimeout(updateOnce, 1000);
         }
         updateOnce();
+    }
+
+    document.querySelectorAll(".countdown").forEach(function(el) {
+        startTopicCountdown(el, parseInt(el.dataset.remaining, 10) || 0);
     });
 
     // ===== تولتیپ کاربران =====
