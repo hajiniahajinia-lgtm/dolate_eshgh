@@ -59,6 +59,17 @@ a {text-decoration:none;color:#2065d1;font-weight:bold;}
 .panel form {display:inline-block;margin-right:8px;}
 .edit-form {display:none;margin-top:10px;}
 .communities-box {max-height:400px;overflow-y:auto;border:1px solid #ccc;border-radius:10px;padding:8px;background:#fdfdfd;}
+
+/* --- درخت جوامع --- */
+.community-tree{list-style:none;margin:0;padding:0;}
+.community-tree ul{list-style:none;margin:7px 0 7px 0;padding-right:22px;border-right:2px solid #d8e2ef;}
+.community-tree-item{margin:7px 0;}
+.community-tree-link{display:flex;align-items:center;gap:8px;padding:9px 11px;border:1px solid #dce5ef;border-radius:7px;background:#fbfdff;color:#263b53;font-weight:normal;}
+.community-tree-link:hover{background:#edf5ff;}
+.community-tree-root>.community-tree-link{background:#f0f6ff;font-weight:bold;border-color:#b9d1ee;}
+.community-tree-icon{flex:0 0 auto;color:#b88719;}
+.community-tree-empty{color:#667085;font-size:14px;}
+
 /* --- واکنشگرایی --- */
 @media (max-width:600px){
     .container{padding:8px;}
@@ -137,6 +148,60 @@ document.addEventListener("DOMContentLoaded", function() {
 <?php if($user['age']): ?><p><strong>سن:</strong> <?= (int)$user['age'] ?></p><?php endif; ?>
 <?php if($user['city']): ?><p><strong>شهر:</strong> <?= htmlspecialchars($user['city']) ?></p><?php endif; ?>
 <?php if($user['resume']): ?><p><strong>رزومه:</strong> <?= nl2br(htmlspecialchars($user['resume'])) ?></p><?php endif; ?>
+</div>
+
+<!-- درخت ساختار همه جوامع -->
+<div class="box">
+<h3>🌳 درخت جوامع</h3>
+<p style="font-size:13px;color:#667085;line-height:1.9">جوامع مستقل در سطح اصلی و جوامع زیرمجموعه در زیر جامعهٔ مادر نمایش داده می‌شوند. برای ورود به هر جامعه، روی نام آن بزنید.</p>
+<div class="communities-box">
+<?php
+$tree_result = $conn->query("SELECT id, name, parent_community_id FROM communities ORDER BY name");
+$tree_rows = [];
+$tree_children = [];
+if ($tree_result) {
+    while ($tr = $tree_result->fetch_assoc()) {
+        $tr['id'] = (int)$tr['id'];
+        $tr['parent_community_id'] = ($tr['parent_community_id'] === null) ? null : (int)$tr['parent_community_id'];
+        $tree_rows[$tr['id']] = $tr;
+    }
+    $tree_result->free();
+}
+foreach ($tree_rows as $tr) {
+    $parent_id = $tr['parent_community_id'];
+    if ($parent_id !== null && isset($tree_rows[$parent_id]) && $parent_id !== $tr['id']) {
+        $tree_children[$parent_id][] = $tr;
+    } else {
+        $tree_children[0][] = $tr;
+    }
+}
+$render_community_tree = function($parent_id, $depth = 0, $ancestors = []) use (&$render_community_tree, &$tree_children, &$tree_rows) {
+    $items = $tree_children[$parent_id] ?? [];
+    if (!$items) return;
+    echo '<ul class="community-tree' . ($depth === 0 ? ' community-tree-roots' : '') . '">';
+    foreach ($items as $item) {
+        $id = (int)$item['id'];
+        if (isset($ancestors[$id])) continue;
+        $next_ancestors = $ancestors;
+        $next_ancestors[$id] = true;
+        $has_children = !empty($tree_children[$id]);
+        echo '<li class="community-tree-item' . ($depth === 0 ? ' community-tree-root' : '') . '">';
+        echo '<a class="community-tree-link" href="community.php?id=' . $id . '">';
+        echo '<span class="community-tree-icon" aria-hidden="true">' . ($has_children ? '▣' : '▪') . '</span>';
+        echo '<span>' . htmlspecialchars($item['name'], ENT_QUOTES, 'UTF-8') . '</span>';
+        echo '</a>';
+        if ($has_children) $render_community_tree($id, $depth + 1, $next_ancestors);
+        echo '</li>';
+    }
+    echo '</ul>';
+};
+if (empty($tree_rows)) {
+    echo '<p class="community-tree-empty">هنوز جامعه‌ای ایجاد نشده است.</p>';
+} else {
+    $render_community_tree(0);
+}
+?>
+</div>
 </div>
 
 <!-- جوامع من -->
