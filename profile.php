@@ -303,7 +303,7 @@ if ($is_descendant) continue;
 <option value="<?= $pid ?>" <?= $current_vote === $pid ? 'selected' : '' ?>>زیرمجموعهٔ <?= htmlspecialchars($candidate['name'], ENT_QUOTES, 'UTF-8') ?> (<?= (int)($counts_for_community[$pid] ?? 0) ?> رأی)</option>
 <?php endforeach; ?>
 </select>
-<button type="submit" style="margin-top:7px;">ثبت / تغییر رأی</button>
+<button type="submit" style="margin-top:7px;background:#facc15;color:#3b2f00;">ثبت / تغییر رأی</button>
 </form>
 </div>
 <?php endforeach; ?>
