@@ -81,12 +81,19 @@ if ($parent_community_id > 0) {
     }
 }
 
-$new_parent = $parent_community_id > 0 ? $parent_community_id : null;
-$update = $conn->prepare("UPDATE communities SET parent_community_id = ? WHERE id = ?");
-if (!$update) {
-    return_to_community($community_id, 'invalid');
+if ($parent_community_id > 0) {
+    $update = $conn->prepare("UPDATE communities SET parent_community_id = ? WHERE id = ?");
+    if (!$update) {
+        return_to_community($community_id, 'invalid');
+    }
+    $update->bind_param("ii", $parent_community_id, $community_id);
+} else {
+    $update = $conn->prepare("UPDATE communities SET parent_community_id = NULL WHERE id = ?");
+    if (!$update) {
+        return_to_community($community_id, 'invalid');
+    }
+    $update->bind_param("i", $community_id);
 }
-$update->bind_param("ii", $new_parent, $community_id);
 if (!$update->execute()) {
     $update->close();
     return_to_community($community_id, 'invalid');
