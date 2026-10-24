@@ -23,6 +23,44 @@ if ($name === '' || $approach === '') {
     die("نام جامعه و وظایف/رویکردها نمی‌تواند خالی باشد. <a href='profile.php'>بازگشت</a>");
 }
 
+// یکسان‌سازی چند شکل رایج نوشتاری نام برای جلوگیری از تکرارهایی مانند ي/ی و ك/ک
+function normalize_community_name($value) {
+    $value = str_replace(["ي", "ى", "ك", "\u{200C}", "\u{200D}"], ["ی", "ی", "ک", "", ""], (string)$value);
+    $value = preg_replace('/\\s+/u', ' ', trim($value));
+    if (function_exists('mb_strtolower')) {
+        $value = mb_strtolower($value, 'UTF-8');
+    } else {
+        $value = strtolower($value);
+    }
+    return $value;
+}
+
+// بررسی نام‌های موجود؛ این کار بدون تغییر ساختار پایگاه داده انجام می‌شود.
+$existing_names = $conn->query("SELECT name FROM communities");
+if (!$existing_names) {
+    die("بررسی نام جامعه انجام نشد. لطفاً دوباره تلاش کنید. <a href='profile.php'>بازگشت</a>");
+}
+
+$normalized_name = normalize_community_name($name);
+$name_exists = false;
+while ($existing = $existing_names->fetch_assoc()) {
+    if (normalize_community_name($existing['name']) === $normalized_name) {
+        $name_exists = true;
+        break;
+    }
+}
+$existing_names->free();
+
+if ($name_exists) {
+    http_response_code(409);
+    die("<!DOCTYPE html>
+<html lang='fa' dir='rtl'>
+<head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'>
+<title>نام جامعه تکراری است</title>
+<style>body{font-family:tahoma,Arial,sans-serif;background:#eef3f8;margin:0;padding:20px}.message{max-width:560px;margin:40px auto;background:#fff;border:1px solid #e5b8b8;border-radius:10px;padding:22px;text-align:center;line-height:2;color:#8a2525}a{display:inline-block;margin-top:12px;background:#2065d1;color:#fff;text-decoration:none;padding:8px 16px;border-radius:6px}</style></head>
+<body><div class='message'><strong>جامعه‌ای با این نام از قبل وجود دارد.</strong><br>لطفاً نام دیگری انتخاب کنید.<br><a href='profile.php'>بازگشت به پروفایل</a></div></body></html>");
+}
+
 // درج جامعه در جدول communities با creator_id
 $stmt = $conn->prepare("INSERT INTO communities (name, approach, members_count, creator_id) VALUES (?, ?, 0, ?)");
 if (!$stmt) die("خطا در آماده‌سازی کوئری: " . $conn->error);
