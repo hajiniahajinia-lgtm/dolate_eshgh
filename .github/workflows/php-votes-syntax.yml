@@ -1,0 +1,32 @@
+name: PHP syntax check for votes security branch
+
+on:
+  push:
+    branches:
+      - security/votes-csrf-validation
+    paths:
+      - 'votes.php'
+      - '.github/workflows/php-votes-syntax.yml'
+  pull_request:
+    paths:
+      - 'votes.php'
+      - '.github/workflows/php-votes-syntax.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  php-lint:
+    name: PHP syntax check (no deployment)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          tools: none
+          coverage: none
+      - name: Check votes.php syntax
+        run: php -l votes.php
