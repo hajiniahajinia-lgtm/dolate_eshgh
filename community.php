@@ -87,6 +87,13 @@ if ($community_id > 0) {
     $cstmt->close();
 }
 
+// نهایی‌کردن رأی‌گیری‌های اخراجی که مهلت آن‌ها گذشته است؛ فقط اگر جداول افزونه نصب شده باشند.
+require_once __DIR__ . "/community_member_removal_helpers.php";
+$community_removal_ready = community_removal_tables_ready($conn);
+if ($community_removal_ready && $community_id > 0 && $community) {
+    community_removal_finalize_expired($conn, $community_id);
+}
+
 // بررسی بسته شدن خودکار موضوعات و انتقال ایده برتر
 $topics_check = $conn->prepare("SELECT id, urgency, created_at FROM topics WHERE community_id=? AND closed=0");
 $topics_check->bind_param("i", $community_id);
@@ -736,6 +743,14 @@ document.addEventListener('DOMContentLoaded', function () {
                   $score_url = "give_score.php?user_id=".(int)$m['id']."&redirect=".urlencode("community.php?id=".(int)$community['id']);
                   echo "<div style='margin-top:7px'><a href='".htmlspecialchars($score_url, ENT_QUOTES, 'UTF-8')."' style='display:inline-block;background:#ff9800;color:#fff;padding:5px 8px;border-radius:5px;font-size:12px;'>⭐ ثبت / تغییر امتیاز محبوبیت</a></div>";
               }
+              if ($is_community_member && (int)$m['id'] !== $user_id && $community_removal_ready) {
+                  echo "<form method='post' action='request_member_removal.php' style='margin-top:7px' onsubmit=\"return confirm('آیا می‌خواهید درخواست رأی‌گیری برای اخراج این عضو ثبت شود؟ مهلت رأی‌گیری سه روز است.');\">";
+                  echo "<input type='hidden' name='community_id' value='".(int)$community['id']."'>";
+                  echo "<input type='hidden' name='target_user_id' value='".(int)$m['id']."'>";
+                  echo "<input type='hidden' name='csrf_token' value='".htmlspecialchars($community_duty_csrf, ENT_QUOTES, 'UTF-8')."'>";
+                  echo "<button type='submit' style='background:#b42318;color:#fff;padding:5px 8px;border-radius:5px;font-size:12px;margin:0'>⚖️ درخواست رأی‌گیری برای اخراج</button>";
+                  echo "</form>";
+              }
               echo "</div></div>";
           }
       } else {
@@ -746,6 +761,90 @@ document.addEventListener('DOMContentLoaded', function () {
     </div>
   </div>
 </div>
+
+<?php
+// درخواست‌ها و نتایج رأی‌گیری اخراج عضو
+$removal_requests = [];
+if ($community_removal_ready && $community_id > 0) {
+    $rq = $conn->prepare("SELECT r.*, target.username AS target_username, requester.username AS requester_username,
+        (SELECT COUNT(*) FROM community_member_removal_votes v WHERE v.request_id=r.id AND v.vote='yes') AS yes_count,
+        (SELECT COUNT(*) FROM community_member_removal_votes v WHERE v.request_id=r.id AND v.vote='no') AS no_count,
+        (SELECT v2.vote FROM community_member_removal_votes v2 WHERE v2.request_id=r.id AND v2.user_id=? LIMIT 1) AS my_vote
+        FROM community_member_removal_requests r
+        LEFT JOIN users target ON target.id=r.target_user_id
+        LEFT JOIN users requester ON requester.id=r.requester_user_id
+        WHERE r.community_id=?
+        ORDER BY CASE WHEN r.status='open' THEN 0 ELSE 1 END, r.created_at DESC
+        LIMIT 20");
+    if ($rq) {
+        $rq->bind_param("ii", $user_id, $community_id);
+        $rq->execute();
+        $rr = $rq->get_result();
+        while ($row = $rr->fetch_assoc()) $removal_requests[] = $row;
+        $rq->close();
+    }
+}
+$removal_messages = [
+    'created' => 'درخواست رأی‌گیری ثبت شد؛ اعضا سه روز فرصت رأی‌دادن دارند.',
+    'voted' => 'رأی شما ثبت شد؛ تا پایان مهلت می‌توانید آن را تغییر دهید.',
+    'exists' => 'برای این عضو یک رأی‌گیری باز وجود دارد.',
+    'closed' => 'مهلت این رأی‌گیری پایان یافته یا رأی‌گیری بسته شده است.',
+    'membership' => 'برای انجام این کار باید عضو فعلی جامعه باشید و فرد هدف نیز عضو جامعه باشد.',
+    'invalid' => 'اطلاعات درخواست معتبر نیست.',
+    'error' => 'ثبت درخواست انجام نشد؛ لطفاً دوباره تلاش کنید.',
+    'setup' => 'برای فعال‌شدن رأی‌گیری اخراج، ابتدا فایل SQL افزونه را در پایگاه داده اجرا کنید.'
+];
+$removal_msg_key = (string)($_GET['removal_msg'] ?? '');
+?>
+<section class="box" style="text-align:right;border-color:#e6b8b8">
+  <h3 style="margin-bottom:8px">⚖️ رأی‌گیری برای اخراج عضو</h3>
+  <?php if (isset($removal_messages[$removal_msg_key])): ?>
+    <p style="padding:8px;background:#fff8e1;border-radius:6px;color:#624b00"><?= htmlspecialchars($removal_messages[$removal_msg_key], ENT_QUOTES, 'UTF-8') ?></p>
+  <?php endif; ?>
+  <?php if (!$community_removal_ready): ?>
+    <p style="font-size:13px;color:#667085;line-height:1.9">این قابلیت هنوز فعال نشده است. برای فعال‌سازی، فایل <code>community_member_removal.sql</code> باید یک‌بار در پایگاه داده اجرا شود؛ این کار در حال حاضر خودکار انجام نمی‌شود.</p>
+  <?php elseif (empty($removal_requests)): ?>
+    <p style="font-size:13px;color:#667085">درخواست یا نتیجه‌ای برای نمایش وجود ندارد.</p>
+  <?php else: ?>
+    <?php foreach ($removal_requests as $removal): ?>
+      <?php
+        $yes_votes = (int)$removal['yes_count'];
+        $no_votes = (int)$removal['no_count'];
+        $total_votes = $yes_votes + $no_votes;
+        $required_votes = (int)ceil(((int)$removal['member_count_snapshot']) / 3);
+        $remaining_seconds = max(0, strtotime($removal['deadline_at']) - time());
+        $target_name = (string)($removal['target_username'] ?? ('عضو ' . (int)$removal['target_user_id']));
+      ?>
+      <div style="border:1px solid #e5e7eb;border-radius:8px;padding:10px;margin:10px 0;background:#fff">
+        <div><strong>عضو مورد درخواست:</strong> <?= htmlspecialchars($target_name, ENT_QUOTES, 'UTF-8') ?></div>
+        <div style="font-size:12px;color:#667085;margin-top:4px">درخواست‌دهنده: <?= htmlspecialchars((string)($removal['requester_username'] ?? 'عضو جامعه'), ENT_QUOTES, 'UTF-8') ?></div>
+        <div style="margin-top:7px;line-height:1.9">
+          موافق: <strong><?= $yes_votes ?></strong> — مخالف: <strong><?= $no_votes ?></strong><br>
+          مشارکت: <strong><?= $total_votes ?></strong> از حد نصاب <strong><?= $required_votes ?></strong> رأی<br>
+          <?php if ($removal['status'] === 'open'): ?>
+            <span style="color:#9a6700">وضعیت: در حال رأی‌گیری</span><br>
+            <span style="font-size:12px;color:#667085">زمان باقی‌مانده: <?= (int)floor($remaining_seconds / 86400) ?> روز و <?= (int)floor(($remaining_seconds % 86400) / 3600) ?> ساعت</span>
+          <?php elseif ($removal['status'] === 'approved'): ?>
+            <strong style="color:#16803c">نتیجه: اخراج با رأی اعضا تصویب شد.</strong>
+          <?php else: ?>
+            <strong style="color:#667085">نتیجه: درخواست تصویب نشد (حد نصاب یا اکثریت موافق حاصل نشد، یا عضو پیش‌تر خارج شده بود).</strong>
+          <?php endif; ?>
+        </div>
+        <?php if ($removal['status'] === 'open' && $is_community_member && $remaining_seconds > 0): ?>
+          <form method="post" action="vote_member_removal.php" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+            <input type="hidden" name="community_id" value="<?= (int)$community_id ?>">
+            <input type="hidden" name="request_id" value="<?= (int)$removal['id'] ?>">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($community_duty_csrf, ENT_QUOTES, 'UTF-8') ?>">
+            <button type="submit" name="vote" value="yes" style="margin:0;background:#16803c"><?= $removal['my_vote'] === 'yes' ? '✓ رأی موافق شما — تغییر به موافق' : 'موافق اخراج' ?></button>
+            <button type="submit" name="vote" value="no" style="margin:0;background:#b42318"><?= $removal['my_vote'] === 'no' ? '✓ رأی مخالف شما — تغییر به مخالف' : 'مخالف اخراج' ?></button>
+          </form>
+        <?php elseif ($removal['status'] === 'open' && !$is_community_member): ?>
+          <p style="font-size:12px;color:#667085">برای رأی‌دادن باید عضو این جامعه باشید.</p>
+        <?php endif; ?>
+      </div>
+    <?php endforeach; ?>
+  <?php endif; ?>
+</section>
 
 <div style="text-align:center; margin:15px 0;">
   <a href="community_stats.php?community_id=<?= $community['id'] ?>">
