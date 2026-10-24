@@ -43,7 +43,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 <style>
 body {
-    font-family: Tahoma, sans-serif;
+    font-family: "Vazirmatn", "IRANSans", "Segoe UI", Tahoma, sans-serif;
     background:#eef1f4;
     padding:20px;
     margin:0;
@@ -96,11 +96,15 @@ body {
 h2 {
     text-align:center;
     color:#1f5ad1;
-    font-size:24px;
-    margin-bottom:20px;
+    font-size:25px;
+    font-weight:700;
+    letter-spacing:-0.4px;
+    margin-bottom:24px;
 }
 
 label {
+    color:#344054;
+    font-weight:600;
     font-size:14px;
     margin-top:8px;
     display:block;
@@ -114,6 +118,7 @@ input[type="text"], input[type="password"] {
     border-radius:8px;
     border:1px solid #bbb;
     box-sizing:border-box;
+    font-family:inherit;
     font-size:15px;
 }
 
@@ -124,7 +129,9 @@ button {
     color:#fff;
     border:none;
     border-radius:8px;
+    font-family:inherit;
     font-size:16px;
+    font-weight:600;
     cursor:pointer;
     margin-top:10px;
 }
@@ -155,7 +162,6 @@ a:hover {
 
 
 <div class="container">
-    <p style="text-align:center;font-size:18px;color:#1f5ad1;margin:0 0 12px;">سلام بانو برای علی</p>
     <h2>ورود به سامانه</h2>
 
     <?php if($message): ?>
