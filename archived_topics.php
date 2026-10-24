@@ -465,7 +465,7 @@ document.addEventListener('DOMContentLoaded',function(){
                 <div>لازم‌الاجرا: <span class="enforce-box"><?= $row['enforce']['enforce'] ?> (<?= $row['enforce']['pct_enforce'] ?>%)</span></div>
                 <div>غیر لازم‌الاجرا: <span class="non-enforce-box"><?= $row['enforce']['non_enforce'] ?></span></div>
                 <div class="meta">ایجادکننده: <strong><?= htmlspecialchars($row['creator']) ?></strong></div>
-                <div class="meta">نهایی‌شده در: <strong><?= htmlspecialchars($row['finalized_at']) ?></strong></div>
+                <div class="meta">نهایی‌شده در: <strong><?= htmlspecialchars(archived_jalali_datetime($row['finalized_at']), ENT_QUOTES, 'UTF-8') ?></strong></div>
             </div>
         </div>
         <?php endforeach; else: ?>
@@ -501,7 +501,7 @@ document.addEventListener('DOMContentLoaded',function(){
                 <div>لازم‌الاجرا: <span class="enforce-box"><?= $row['enforce']['enforce'] ?> (<?= $row['enforce']['pct_enforce'] ?>%)</span></div>
                 <div>غیر لازم‌الاجرا: <span class="non-enforce-box"><?= $row['enforce']['non_enforce'] ?></span></div>
                 <div class="meta">ایجادکننده: <strong><?= htmlspecialchars($row['creator']) ?></strong></div>
-                <div class="meta">نهایی‌شده در: <strong><?= htmlspecialchars($row['finalized_at']) ?></strong></div>
+                <div class="meta">نهایی‌شده در: <strong><?= htmlspecialchars(archived_jalali_datetime($row['finalized_at']), ENT_QUOTES, 'UTF-8') ?></strong></div>
             </div>
         </div>
         <?php endforeach; else: ?>
