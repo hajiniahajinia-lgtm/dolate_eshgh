@@ -64,6 +64,18 @@ function community_persian_digits($value) {
     return strtr((string)$value, ['0'=>'۰','1'=>'۱','2'=>'۲','3'=>'۳','4'=>'۴','5'=>'۵','6'=>'۶','7'=>'۷','8'=>'۸','9'=>'۹']);
 }
 
+// نمایش تاریخ و ساعت به تقویم شمسی برای موضوعات و ایده‌ها
+function community_format_jalali_datetime($value) {
+    $timestamp = strtotime((string)$value);
+    if ($timestamp === false) return '';
+    [$jy, $jm, $jd] = community_gregorian_to_jalali(
+        (int)date('Y', $timestamp),
+        (int)date('n', $timestamp),
+        (int)date('j', $timestamp)
+    );
+    return community_persian_digits(sprintf('%04d/%02d/%02d %s', $jy, $jm, $jd, date('H:i', $timestamp)));
+}
+
 // جامعه جاری
 $community_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 $community = null;
@@ -833,7 +845,7 @@ if ($remaining_seconds < 0) $remaining_seconds = 0;
       <?php endif; ?>
     </div>
     <div class="topic-meta" style="font-size:13px;color:#333;margin-top:4px;">
-        ⏱ ثبت شده در: <?= date("Y-m-d H:i", strtotime($t2['created_at'])) ?>
+        ⏱ ثبت شده در: <?= htmlspecialchars(community_format_jalali_datetime($t2['created_at']), ENT_QUOTES, 'UTF-8') ?>
     </div>
     <div class="countdown" data-remaining="<?= $remaining_seconds ?>" style="font-size:13px;color:#555;margin-top:6px;">در حال محاسبه...</div>
     <div class="topic-summary" style="text-align:left;font-size:13px;">
@@ -877,7 +889,7 @@ if ($remaining_seconds < 0) $remaining_seconds = 0;
         <div class="text">
             <strong class="user-tooltip" data-user-id="<?= (int)$i['uid'] ?>">👤 <?= htmlspecialchars($i['username']) ?></strong>
             <div class="idea-meta" style="font-size:12px;color:#555;margin-bottom:4px;">
-                ⏱ ثبت شده در: <?= date("Y-m-d H:i", strtotime($i['created_at'])) ?>
+                ⏱ ثبت شده در: <?= htmlspecialchars(community_format_jalali_datetime($i['created_at']), ENT_QUOTES, 'UTF-8') ?>
             </div>
             <?= nl2br(htmlspecialchars($i['content'])) ?>
             <div class="tooltip-box" id="tooltip-<?= (int)$i['uid'] ?>"><p>در حال بارگذاری...</p></div>
