@@ -348,6 +348,45 @@ function updateElectionCountdowns(){
     });
 }
 document.addEventListener('DOMContentLoaded',function(){
+    // بعد از ثبت فرم‌های داوطلبی، رأی یا فوریت، موقعیت صفحه و ستون‌ها حفظ شود.
+    const scrollKey='archivedTopicsScroll:'+window.location.pathname+window.location.search;
+    try{
+        const saved=JSON.parse(sessionStorage.getItem(scrollKey)||'null');
+        if(saved){
+            sessionStorage.removeItem(scrollKey);
+            if(Array.isArray(saved.columns)){
+                document.querySelectorAll('.column').forEach(function(col,index){
+                    if(saved.columns[index]!==undefined) col.scrollTop=saved.columns[index];
+                });
+            }
+            if(Array.isArray(saved.details)){
+                document.querySelectorAll('.execution-details').forEach(function(details,index){
+                    if(saved.details[index]) details.open=true;
+                });
+            }
+            window.requestAnimationFrame(function(){
+                window.scrollTo(0,Number(saved.windowY)||0);
+                window.requestAnimationFrame(function(){
+                    if(Array.isArray(saved.columns)){
+                        document.querySelectorAll('.column').forEach(function(col,index){
+                            if(saved.columns[index]!==undefined) col.scrollTop=saved.columns[index];
+                        });
+                    }
+                });
+            });
+        }
+    }catch(e){}
+    document.querySelectorAll('.execution-details form[method="post"]').forEach(function(form){
+        form.addEventListener('submit',function(){
+            try{
+                sessionStorage.setItem(scrollKey,JSON.stringify({
+                    windowY:window.scrollY,
+                    columns:Array.from(document.querySelectorAll('.column')).map(function(col){return col.scrollTop;}),
+                    details:Array.from(document.querySelectorAll('.execution-details')).map(function(details){return details.open;})
+                }));
+            }catch(e){}
+        });
+    });
     updateElectionCountdowns();
     window.setInterval(updateElectionCountdowns,1000);
 });
