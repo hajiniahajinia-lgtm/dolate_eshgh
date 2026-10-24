@@ -323,6 +323,33 @@ function toggleIdea(id){
     if(box.style.display==='none'){ box.style.display='block'; }
     else{ box.style.display='none'; }
 }
+
+function updateElectionCountdowns(){
+    const now=Math.floor(Date.now()/1000);
+    document.querySelectorAll('.election-countdown').forEach(function(el){
+        const deadline=parseInt(el.dataset.deadline,10);
+        let remaining=deadline-now;
+        if(!Number.isFinite(deadline)||remaining<=0){
+            el.textContent='⏳ مهلت به پایان رسیده؛ برای نهایی‌شدن نتیجه صفحه را تازه‌سازی کنید.';
+            el.style.background='#ffe5e5';
+            el.style.borderColor='#e6aaaa';
+            el.style.color='#8b1e1e';
+            return;
+        }
+        const days=Math.floor(remaining/86400); remaining%=86400;
+        const hours=Math.floor(remaining/3600); remaining%=3600;
+        const minutes=Math.floor(remaining/60); const seconds=remaining%60;
+        const fa=function(n){return String(n).replace(/[0-9]/g,function(d){return '۰۱۲۳۴۵۶۷۸۹'[Number(d)];});};
+        const parts=[];
+        if(days>0) parts.push(fa(days)+' روز');
+        parts.push(fa(hours)+' ساعت',fa(minutes)+' دقیقه',fa(seconds)+' ثانیه');
+        el.textContent='⏳ زمان باقی‌مانده تا پایان انتخابات: '+parts.join(' و ');
+    });
+}
+document.addEventListener('DOMContentLoaded',function(){
+    updateElectionCountdowns();
+    window.setInterval(updateElectionCountdowns,1000);
+});
 </script>
 </head>
 <body>
@@ -379,6 +406,7 @@ function toggleIdea(id){
                   <?php else: ?>
                     <div class="meta" style="margin-top:5px">پایان مهلت: <?= htmlspecialchars(archived_jalali_datetime((int)$row['election']['deadline']),ENT_QUOTES,'UTF-8') ?></div>
                     <?php if(time() < (int)$row['election']['deadline']): ?>
+                      <div class="election-countdown" data-deadline="<?= (int)$row['election']['deadline'] ?>" style="margin-top:8px;padding:9px 11px;border-radius:8px;background:#fff3cd;border:1px solid #f0d98a;color:#654d00;font-weight:bold;text-align:center">⏳ زمان باقی‌مانده تا پایان انتخابات: در حال محاسبه…</div>
                       <form method="post" style="margin-top:8px;display:flex;gap:6px;align-items:center;flex-wrap:wrap"><input type="hidden" name="set_execution_election_urgency" value="1"><input type="hidden" name="topic_id" value="<?= (int)$row['id'] ?>"><input type="hidden" name="idea_id" value="<?= (int)$row['idea']['idea_id'] ?>"><label for="urgency-<?= (int)$row['id'] ?>">فوریت پیشنهادی (روز، ۱ تا ۳۰۰):</label><input id="urgency-<?= (int)$row['id'] ?>" type="number" name="urgency_days" min="1" max="300" required value="<?= $row['election']['my_urgency_days']!==null?(int)$row['election']['my_urgency_days']:5 ?>" style="width:85px;padding:7px;border:1px solid #b7c7d9;border-radius:6px"><button type="submit" style="padding:8px 12px;border:0;border-radius:6px;background:#e7b943;color:#4b3500;font-weight:bold;cursor:pointer">ثبت فوریت</button></form>
                     <?php else: ?><div class="meta" style="margin-top:8px;color:#a33">مهلت به پایان رسیده؛ با بارگذاری صفحه انتخابات نهایی می‌شود.</div><?php endif; ?>
                   <?php endif; ?>
