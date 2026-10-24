@@ -64,6 +64,46 @@ if($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['vote_for_candidate'])){
 // =====================
 // توابع کمکی
 // =====================
+// تبدیل تاریخ میلادی به شمسی؛ مستقل از افزونه‌های اضافی PHP
+function archived_gregorian_to_jalali($gy, $gm, $gd) {
+    $gdm = [0,31,59,90,120,151,181,212,243,273,304,334];
+    $gy2 = ($gm > 2) ? ($gy + 1) : $gy;
+    $days = 355666 + (365 * $gy)
+        + (int)(($gy2 + 3) / 4)
+        - (int)(($gy2 + 99) / 100)
+        + (int)(($gy2 + 399) / 400)
+        + $gd + $gdm[$gm - 1];
+    $jy = -1595 + 33 * (int)($days / 12053);
+    $days %= 12053;
+    $jy += 4 * (int)($days / 1461);
+    $days %= 1461;
+    if ($days > 365) {
+        $jy += (int)(($days - 1) / 365);
+        $days = ($days - 1) % 365;
+    }
+    if ($days < 186) {
+        $jm = 1 + (int)($days / 31);
+        $jd = 1 + ($days % 31);
+    } else {
+        $jm = 7 + (int)(($days - 186) / 30);
+        $jd = 1 + (($days - 186) % 30);
+    }
+    return [$jy, $jm, $jd];
+}
+
+function archived_persian_digits($value) {
+    return strtr((string)$value, ['0'=>'۰','1'=>'۱','2'=>'۲','3'=>'۳','4'=>'۴','5'=>'۵','6'=>'۶','7'=>'۷','8'=>'۸','9'=>'۹']);
+}
+
+function archived_jalali_datetime($value) {
+    if (empty($value)) return '—';
+    $timestamp = is_numeric($value) ? (int)$value : strtotime($value);
+    if (!$timestamp) return '—';
+    $parts = archived_gregorian_to_jalali((int)date('Y', $timestamp), (int)date('n', $timestamp), (int)date('j', $timestamp));
+    $formatted = sprintf('%04d/%02d/%02d %s', $parts[0], $parts[1], $parts[2], date('H:i:s', $timestamp));
+    return archived_persian_digits($formatted);
+}
+
 function get_vote_stats($conn, $topic_id) {
     $stmt = $conn->prepare("
         SELECT 
@@ -332,12 +372,12 @@ function toggleIdea(id){
               <?php if($row['election']['ready']): ?>
                 <div style="margin-top:12px;padding:10px;border:1px solid #c7d7ed;border-radius:8px;background:#f8fbff">
                   <strong>⏳ فوریت و انتخابات نهایی مجری</strong>
-                  <div class="meta" style="margin-top:5px">شروع مهلت از ورود ایده به آرشیو: <?= htmlspecialchars($row['election']['started_at'],ENT_QUOTES,'UTF-8') ?></div>
+                  <div class="meta" style="margin-top:5px">شروع مهلت از ورود ایده به آرشیو: <?= htmlspecialchars(archived_jalali_datetime($row['election']['started_at']),ENT_QUOTES,'UTF-8') ?></div>
                   <div class="meta">مدت فعلی: <strong><?= (int)$row['election']['duration_days'] ?> روز</strong> (<?= (int)$row['election']['urgency_vote_count'] ?> پیشنهاد فوریت<?= $row['election']['urgency_average']!==null?'؛ میانگین '.number_format($row['election']['urgency_average'],2).' روز':'' ?>)</div>
                   <?php if($row['election']['final_candidate_user_id']): ?>
-                    <div style="margin-top:8px;padding:9px;border-radius:7px;background:#dff4e3;color:#175b2b"><strong>🏆 مجری نهایی: <?= htmlspecialchars($row['election']['final_candidate_name']??'نامشخص',ENT_QUOTES,'UTF-8') ?></strong><div class="meta">انتخابات در <?= htmlspecialchars($row['election']['finalized_at']??'',ENT_QUOTES,'UTF-8') ?> نهایی شده است.</div></div>
+                    <div style="margin-top:8px;padding:9px;border-radius:7px;background:#dff4e3;color:#175b2b"><strong>🏆 مجری نهایی: <?= htmlspecialchars($row['election']['final_candidate_name']??'نامشخص',ENT_QUOTES,'UTF-8') ?></strong><div class="meta">انتخابات در <?= htmlspecialchars(archived_jalali_datetime($row['election']['finalized_at']??''),ENT_QUOTES,'UTF-8') ?> نهایی شده است.</div></div>
                   <?php else: ?>
-                    <div class="meta" style="margin-top:5px">پایان مهلت: <?= date('Y-m-d H:i:s',(int)$row['election']['deadline']) ?></div>
+                    <div class="meta" style="margin-top:5px">پایان مهلت: <?= htmlspecialchars(archived_jalali_datetime((int)$row['election']['deadline']),ENT_QUOTES,'UTF-8') ?></div>
                     <?php if(time() < (int)$row['election']['deadline']): ?>
                       <form method="post" style="margin-top:8px;display:flex;gap:6px;align-items:center;flex-wrap:wrap"><input type="hidden" name="set_execution_election_urgency" value="1"><input type="hidden" name="topic_id" value="<?= (int)$row['id'] ?>"><input type="hidden" name="idea_id" value="<?= (int)$row['idea']['idea_id'] ?>"><label for="urgency-<?= (int)$row['id'] ?>">فوریت پیشنهادی (روز، ۱ تا ۳۰۰):</label><input id="urgency-<?= (int)$row['id'] ?>" type="number" name="urgency_days" min="1" max="300" required value="<?= $row['election']['my_urgency_days']!==null?(int)$row['election']['my_urgency_days']:5 ?>" style="width:85px;padding:7px;border:1px solid #b7c7d9;border-radius:6px"><button type="submit" style="padding:8px 12px;border:0;border-radius:6px;background:#e7b943;color:#4b3500;font-weight:bold;cursor:pointer">ثبت فوریت</button></form>
                     <?php else: ?><div class="meta" style="margin-top:8px;color:#a33">مهلت به پایان رسیده؛ با بارگذاری صفحه انتخابات نهایی می‌شود.</div><?php endif; ?>
