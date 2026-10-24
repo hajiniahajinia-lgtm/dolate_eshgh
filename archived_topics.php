@@ -230,8 +230,21 @@ while($row=$result->fetch_assoc()){
     }
 
     $status = ($votes['pct_yes']>=50) ? 'winner' : 'loser';
+    // انتقال نامزدهای مجری به آرشیو فقط وقتی ایدهٔ برنده اکثریت رأی «لازم‌الاجرا» داشته باشد.
+    $winner_idea_is_enforceable=false;
+    if(!empty($winner_idea['idea_id'])){
+      $winner_idea_id_for_enforce=(int)$winner_idea['idea_id'];
+      $enf_stmt=$conn->prepare("SELECT SUM(enforceable=1) AS yes_count, SUM(enforceable=0) AS no_count FROM topic_enforce_votes WHERE topic_id=? AND idea_id=?");
+      if($enf_stmt){
+        $enf_stmt->bind_param("ii",$topic_id,$winner_idea_id_for_enforce);
+        $enf_stmt->execute();
+        $enf_row=$enf_stmt->get_result()->fetch_assoc();
+        $enf_stmt->close();
+        $winner_idea_is_enforceable=(int)($enf_row['yes_count']??0)>(int)($enf_row['no_count']??0);
+      }
+    }
     $execution_candidates=[];$my_is_candidate=false;
-    if($status==='winner' && $candidate_tables_ready && !empty($winner_idea['idea_id'])){
+    if($status==='winner' && $winner_idea_is_enforceable && $candidate_tables_ready && !empty($winner_idea['idea_id'])){
       $winner_idea_id=(int)$winner_idea['idea_id'];
       $mine=$conn->prepare("SELECT 1 FROM topic_execution_candidates WHERE topic_id=? AND idea_id=? AND user_id=? LIMIT 1");$mine->bind_param("iii",$topic_id,$winner_idea_id,$user_id);$mine->execute();$my_is_candidate=(bool)$mine->get_result()->fetch_assoc();$mine->close();
       $cl=$conn->prepare("SELECT c.user_id,u.username FROM topic_execution_candidates c JOIN users u ON u.id=c.user_id JOIN community_members cm ON cm.user_id=c.user_id AND cm.community_id=? WHERE c.topic_id=? AND c.idea_id=? ORDER BY u.username ASC");
