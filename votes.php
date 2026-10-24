@@ -1,7 +1,7 @@
 <?php
 // votes.php - یک فایل کامل: PHP + HTML + JS
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
+ini_set('display_errors', '0');
+ini_set('display_startup_errors', '0');
 error_reporting(E_ALL);
 
 session_start();
@@ -16,6 +16,10 @@ if (!isset($_SESSION['user_id'])) {
 $user_id = (int)$_SESSION['user_id'];
 $community_id = isset($_GET['community_id']) ? (int)$_GET['community_id'] : 0;
 if($community_id <= 0) die("Community not specified.");
+
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
 
 // ----- create helper table for enforce votes (one row per user/idea) -----
 $conn->query("
@@ -54,6 +58,54 @@ $community = $cstmt->get_result()->fetch_assoc();
 $cstmt->close();
 if(!$community) die("Community not found.");
 
+function is_community_member($conn, $community_id, $user_id) {
+    $stmt = $conn->prepare(
+        "SELECT 1 FROM community_members
+         WHERE community_id = ? AND user_id = ? LIMIT 1"
+    );
+    $stmt->bind_param("ii", $community_id, $user_id);
+    $stmt->execute();
+    $member = (bool)$stmt->get_result()->fetch_assoc();
+    $stmt->close();
+    return $member;
+}
+
+function is_active_voting_topic($conn, $community_id, $topic_id) {
+    $stmt = $conn->prepare(
+        "SELECT t.id
+         FROM topics t
+         JOIN topic_final_votes tfv ON tfv.topic_id = t.id
+         LEFT JOIN topic_voting_meta m ON m.topic_id = t.id
+         WHERE t.id = ? AND t.community_id = ? AND t.closed = 1
+           AND (m.finalized IS NULL OR m.finalized = 0)
+         LIMIT 1"
+    );
+    $stmt->bind_param("ii", $topic_id, $community_id);
+    $stmt->execute();
+    $valid = (bool)$stmt->get_result()->fetch_assoc();
+    $stmt->close();
+    return $valid;
+}
+
+function is_active_voting_idea($conn, $community_id, $topic_id, $idea_id) {
+    $stmt = $conn->prepare(
+        "SELECT i.id
+         FROM topics t
+         JOIN ideas i ON i.topic_id = t.id
+         JOIN topic_final_votes tfv ON tfv.topic_id = t.id AND tfv.idea_id = i.id
+         LEFT JOIN topic_voting_meta m ON m.topic_id = t.id
+         WHERE t.id = ? AND i.id = ? AND t.community_id = ?
+           AND t.closed = 1
+           AND (m.finalized IS NULL OR m.finalized = 0)
+         LIMIT 1"
+    );
+    $stmt->bind_param("iii", $topic_id, $idea_id, $community_id);
+    $stmt->execute();
+    $valid = (bool)$stmt->get_result()->fetch_assoc();
+    $stmt->close();
+    return $valid;
+}
+
 // جداول نامزدی با migration مستقل ساخته می‌شوند؛ در این فایل schema خودکار تغییر نمی‌کند.
 $candidate_tables_ready = false;
 $tables_check = $conn->query("SELECT COUNT(*) AS n FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN ('topic_execution_candidates','topic_execution_candidate_votes')");
@@ -62,6 +114,27 @@ if ($tables_check) { $candidate_tables_ready = ((int)$tables_check->fetch_assoc(
 // --- پاسخ AJAX برای رأی‌ها ---
 if($_SERVER['REQUEST_METHOD'] === 'POST'){
     header('Content-Type: application/json; charset=utf-8');
+
+    $session_token = (string)($_SESSION['csrf_token'] ?? '');
+    $posted_token = (string)($_POST['csrf_token'] ?? '');
+    if ($session_token === '' || $posted_token === '' ||
+        !hash_equals($session_token, $posted_token)) {
+        http_response_code(403);
+        echo json_encode([
+            'success' => false,
+            'message' => 'درخواست معتبر نیست؛ صفحه را تازه‌سازی کنید.'
+        ]);
+        exit;
+    }
+
+    if (!is_community_member($conn, $community_id, $user_id)) {
+        http_response_code(403);
+        echo json_encode([
+            'success' => false,
+            'message' => 'فقط اعضای جامعه می‌توانند این عملیات را انجام دهند.'
+        ]);
+        exit;
+    }
 
     // ---------- ثبت/لغو داوطلبی اجرای یک ایده ----------
     if(isset($_POST['toggle_execution_candidate'])){
@@ -91,6 +164,13 @@ if($_SERVER['REQUEST_METHOD'] === 'POST'){
         $idea_id  = (int)$_POST['idea_id'];
         $vote_type = (isset($_POST['vote_type']) && $_POST['vote_type'] === 'no') ? 'no' : 'yes';
 
+        if ($topic_id <= 0 || $idea_id <= 0 ||
+            !is_active_voting_idea($conn, $community_id, $topic_id, $idea_id)) {
+            http_response_code(400);
+            echo json_encode(['success'=>false,'message'=>'موضوع یا ایده برای رأی‌گیری معتبر نیست.']);
+            exit;
+        }
+
         $stmt = $conn->prepare("
             INSERT INTO topic_voting_ballots (topic_id, idea_id, user_id, vote_type)
             VALUES (?,?,?,?)
@@ -112,6 +192,13 @@ if($_SERVER['REQUEST_METHOD'] === 'POST'){
         $topic_id = (int)$_POST['topic_id'];
         $idea_id  = (int)$_POST['idea_id'];
         $enforceable = (isset($_POST['vote_enforceable']) && intval($_POST['vote_enforceable']) === 1) ? 1 : 0;
+
+        if ($topic_id <= 0 || $idea_id <= 0 ||
+            !is_active_voting_idea($conn, $community_id, $topic_id, $idea_id)) {
+            http_response_code(400);
+            echo json_encode(['success'=>false,'message'=>'موضوع یا ایده برای رأی‌گیری معتبر نیست.']);
+            exit;
+        }
 
         // insert/update در جدول topic_enforce_votes (هر کاربر فقط یک رکورد دارد)
         $stmt = $conn->prepare("
@@ -136,8 +223,10 @@ if($_SERVER['REQUEST_METHOD'] === 'POST'){
         $topic_id = (int)($_POST['topic_id'] ?? 0);
         $urg = max(1, min(365, (int)($_POST['urgency_days'] ?? 5)));
 
-        if($topic_id <= 0){
-            echo json_encode(['success'=>false,'message'=>'موضوع نامعتبر است']);
+        if ($topic_id <= 0 ||
+            !is_active_voting_topic($conn, $community_id, $topic_id)) {
+            http_response_code(400);
+            echo json_encode(['success'=>false,'message'=>'موضوع برای ثبت فوریت معتبر نیست.']);
             exit;
         }
 
@@ -762,6 +851,7 @@ body{
 </div>
         <form class="form-inline" method="post" data-topic="<?= $tid ?>">
           <input type="hidden" name="topic_id" value="<?= $tid ?>">
+          <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
           <label for="urgency-days-<?= $tid ?>">فوریت انتخابی شما (روز):</label>
           <input id="urgency-days-<?= $tid ?>" type="number" name="urgency_days" min="1" max="365" value="<?= $my_urgency_days ?>" title="فوریت انتخابی شما بر حسب روز">
           <span class="urgency-help-wrap">
@@ -987,6 +1077,7 @@ document.addEventListener('DOMContentLoaded', function(){
             const data = new URLSearchParams();
             data.append('topic_id', topic);
             data.append('idea_id', idea);
+            data.append('csrf_token', <?= json_encode($_SESSION['csrf_token']) ?>);
 
             if(type === 'yes' || type === 'no'){
                 data.append('vote_yesno', 1);
@@ -1022,7 +1113,7 @@ document.addEventListener('DOMContentLoaded', function(){
 
     // ---------- ثبت/لغو داوطلبی اجرای ایده ----------
     document.querySelectorAll('.candidate-btn').forEach(function(btn){btn.addEventListener('click',function(){
-        const button=this,data=new URLSearchParams();data.append('toggle_execution_candidate','1');data.append('topic_id',button.dataset.topic);data.append('idea_id',button.dataset.idea);button.disabled=true;
+        const button=this,data=new URLSearchParams();data.append('toggle_execution_candidate','1');data.append('topic_id',button.dataset.topic);data.append('idea_id',button.dataset.idea);data.append('csrf_token', <?= json_encode($_SESSION['csrf_token']) ?>);button.disabled=true;
         fetch('votes.php?community_id=<?= $community_id ?>',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:data.toString()}).then(r=>r.json()).then(resp=>{
             if(!resp||!resp.success){alert((resp&&resp.message)||'ثبت داوطلبی انجام نشد.');return;}
             button.textContent=resp.is_candidate?'✓ داوطلب اجرای این طرح هستید — لغو داوطلبی':'🙋 اعلام آمادگی برای اجرای این طرح';button.style.background=resp.is_candidate?'#e7a93b':'#dceeff';
