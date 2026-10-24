@@ -258,6 +258,7 @@ while($row=$result->fetch_assoc()){
       $final_name=null;if($final_uid){$fn=$conn->prepare("SELECT username FROM users WHERE id=? LIMIT 1");$fn->bind_param("i",$final_uid);$fn->execute();$final_name=$fn->get_result()->fetch_assoc()['username']??('عضو '.$final_uid);$fn->close();}
       $election=['ready'=>true,'started_at'=>$state_row['started_at'],'deadline'=>$deadline,'duration_days'=>$duration,'urgency_average'=>(int)$ur['total']>0?(float)$ur['avg_days']:null,'urgency_vote_count'=>(int)$ur['total'],'my_urgency_days'=>$ur['mine']!==null?(int)$ur['mine']:null,'final_candidate_user_id'=>$final_uid?:null,'finalized_at'=>$state_row['finalized_at']??null,'final_candidate_name'=>$final_name];
       foreach($execution_candidates as &$ec){$ec['election_votes']=0;$ec['my_vote']=false;$ecq=$conn->prepare("SELECT COUNT(*) AS total,COALESCE(MAX(voter_user_id=?),0) AS mine FROM topic_execution_candidate_votes WHERE topic_id=? AND idea_id=? AND candidate_user_id=?");$ecq->bind_param("iiii",$user_id,$topic_id,$winner_idea_id,$ec['user_id']);$ecq->execute();$ecr=$ecq->get_result()->fetch_assoc();$ecq->close();$ec['election_votes']=(int)$ecr['total'];$ec['my_vote']=(int)$ecr['mine']===1;}unset($ec);
+       usort($execution_candidates,static function($a,$b){$byVotes=(int)$b['election_votes']<=>(int)$a['election_votes'];if($byVotes!==0)return $byVotes;$byPopularity=(float)$b['popularity']<=>(float)$a['popularity'];if($byPopularity!==0)return $byPopularity;return strcasecmp((string)$a['username'],(string)$b['username']);});
     }
 
     $data=[
@@ -383,7 +384,7 @@ document.addEventListener('DOMContentLoaded',function(){
             </div>
             <?php endif; ?>
 
-            <?php if($candidate_tables_ready && !empty($row['idea']['idea_id'])): ?>
+            <?php if($candidate_tables_ready && !empty($row['idea']['idea_id']) && empty($row['election']['final_candidate_user_id'])): ?>
             <details class="execution-details">
               <summary>🙋 داوطلبان اجرای طرح برنده (<?= count($row['execution_candidates']) ?>)</summary>
               <div class="execution-details-body">
