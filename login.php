@@ -155,6 +155,7 @@ a:hover {
 
 
 <div class="container">
+    <p style="text-align:center;font-size:18px;color:#1f5ad1;margin:0 0 12px;">سلام بانو برای علی</p>
     <h2>ورود به سامانه</h2>
 
     <?php if($message): ?>
