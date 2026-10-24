@@ -404,7 +404,20 @@ document.addEventListener('DOMContentLoaded', function () {
       $is_community_member = (bool)$member_check->get_result()->fetch_row();
       $member_check->close();
   }
+  ?>
 
+  <?php if ($is_community_member): ?>
+    <form method="post" action="leave_community.php"
+          onsubmit="return confirm('آیا مطمئن هستید که می‌خواهید از عضویت این جامعه خارج شوید؟');"
+          style="margin:0 0 12px;text-align:right;">
+      <input type="hidden" name="community_id" value="<?= (int)$community['id'] ?>">
+      <button type="submit" style="display:inline-block;width:auto;background:#c62828;color:#fff;padding:9px 14px;border-radius:8px;font-weight:bold;font-size:14px;">
+        🚪 خروج از عضویت جامعه
+      </button>
+    </form>
+  <?php endif; ?>
+
+  <?php
   $duty_proposals = [];
   if ($community_duties_ready) {
       $duty_query = $conn->prepare("
