@@ -7,6 +7,11 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
+if ($_SERVER['REQUEST_METHOD'] !== 'POST' || empty($_SESSION['community_duty_csrf']) || !isset($_POST['csrf_token']) || !is_string($_POST['csrf_token']) || !hash_equals($_SESSION['community_duty_csrf'], $_POST['csrf_token'])) {
+    http_response_code(403);
+    exit('درخواست معتبر نیست. لطفاً صفحه را تازه‌سازی کنید و دوباره تلاش کنید.');
+}
+
 $user_id = (int)$_SESSION['user_id'];
 
 if (!isset($_POST['topic_id']) || !isset($_POST['community_id']) || !isset($_POST['idea_text'])) {
