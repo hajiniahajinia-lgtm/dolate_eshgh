@@ -1173,6 +1173,29 @@ document.addEventListener("DOMContentLoaded", function() {
                     return;
                 }
 
+                // فوریت نیز پاسخ کوتاه JSON می‌گیرد و بدون پردازش کل صفحه به‌روز می‌شود.
+                if (form.action.includes("update_urgency.php")) {
+                    const result = await response.json();
+                    if (!result.success) throw new Error("ثبت فوریت انجام نشد");
+
+                    const urgency = Math.max(1, Math.min(360, Number(result.urgency_units) || 1));
+                    const urgencyInput = currentTopic.querySelector(".urgency-input");
+                    if (urgencyInput) urgencyInput.value = urgency;
+
+                    const currentSummary = currentTopic.querySelector(".topic-summary");
+                    const summaryLines = currentSummary ? currentSummary.querySelectorAll("div") : [];
+                    if (summaryLines.length > 1) {
+                        summaryLines[1].textContent = "⏱ فوریت: " + urgency + "روز";
+                    }
+
+                    const currentCountdown = currentTopic.querySelector(".countdown");
+                    if (currentCountdown) {
+                        currentCountdown.dataset.remaining = String(Math.max(0, Number(result.remaining_seconds) || 0));
+                        startTopicCountdown(currentCountdown, Math.max(0, Number(result.remaining_seconds) || 0));
+                    }
+                    return;
+                }
+
                 const html = await response.text();
                 const parsed = new DOMParser().parseFromString(html, "text/html");
                 const freshTopic = parsed.getElementById("topic-" + topicId);
