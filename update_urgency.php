@@ -70,6 +70,32 @@ $update_topic->execute();
 $updated = $update_topic->affected_rows;
 $update_topic->close();
 
-// بازگشت به جامعه انتخاب‌شده
+// محاسبه زمان باقی‌مانده برای به‌روزرسانی فوری شمارشگر در صفحه
+$created_sql = $conn->prepare("
+    SELECT UNIX_TIMESTAMP(created_at) AS created_ts
+    FROM topics
+    WHERE id = ? AND community_id = ?
+    LIMIT 1
+");
+$created_sql->bind_param("ii", $topic_id, $community_id);
+$created_sql->execute();
+$created_row = $created_sql->get_result()->fetch_assoc();
+$created_sql->close();
+
+$created_ts = (int)($created_row['created_ts'] ?? time());
+$remaining_seconds = max(0, $created_ts + ($avg_urgency_units * 86400) - time());
+
+// درخواست AJAX پاسخ کوتاه می‌گیرد تا نیازی به دریافت کل صفحه نباشد.
+if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode([
+        'success' => true,
+        'urgency_units' => $avg_urgency_units,
+        'remaining_seconds' => $remaining_seconds
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+// بازگشت به جامعه انتخاب‌شده برای فرم معمولی
 header("Location: community.php?id=" . $community_id);
 exit;
