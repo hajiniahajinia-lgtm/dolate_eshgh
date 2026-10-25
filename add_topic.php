@@ -9,6 +9,18 @@ if (!isset($_SESSION['user_id'])) {
 
 $user_id = (int)$_SESSION['user_id'];
 
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    http_response_code(405);
+    exit("درخواست نامعتبر است.");
+}
+
+$csrf_token = (string)($_POST['csrf_token'] ?? '');
+if (empty($_SESSION['community_duty_csrf']) || $csrf_token === '' ||
+    !hash_equals($_SESSION['community_duty_csrf'], $csrf_token)) {
+    http_response_code(403);
+    exit("درخواست معتبر نیست یا نشست شما منقضی شده است. لطفاً صفحه را تازه‌سازی و دوباره تلاش کنید.");
+}
+
 if (!isset($_POST['topic_title']) || !isset($_POST['community_id'])) {
     die("⚠️ لطفاً عنوان موضوع و جامعه را انتخاب کنید");
 }
