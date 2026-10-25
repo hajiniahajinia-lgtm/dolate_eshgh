@@ -968,6 +968,7 @@ if ($remaining_seconds < 0) $remaining_seconds = 0;
     </div>
     <div class="topic-actions">
       <form action="toggle_priority.php" method="POST" style="display:inline;">
+          <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($community_duty_csrf, ENT_QUOTES, 'UTF-8') ?>">
           <input type="hidden" name="topic_id" value="<?= $tid ?>">
           <input type="hidden" name="community_id" value="<?= $community['id'] ?>">
           <span class="action-tooltip">
