@@ -107,6 +107,17 @@ $upd->bind_param("ii", $total_votes, $topic_id);
 $upd->execute();
 $upd->close();
 
-// Redirect بازگشت به صفحه جامعه (استفاده از community_id ارسال شده)
+// پاسخ کوتاه برای درخواست AJAX؛ فرم معمولی همچنان به صفحه جامعه برمی‌گردد.
+if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode([
+        'success' => true,
+        'total_votes' => $total_votes,
+        'has_priority' => !$has
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+// Redirect بازگشت به صفحه جامعه برای ارسال معمولی فرم
 header("Location: community.php?id=" . $community_id);
 exit;
