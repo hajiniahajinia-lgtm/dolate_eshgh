@@ -1,7 +1,8 @@
 <?php
 // votes.php - یک فایل کامل: PHP + HTML + JS
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
+// در محیط هاست خطاها به کاربر نمایش داده نشوند؛ جزئیات در لاگ سرور ثبت می‌شوند.
+ini_set('display_errors', 0);
+ini_set('display_startup_errors', 0);
 error_reporting(E_ALL);
 
 session_start();
