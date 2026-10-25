@@ -873,6 +873,7 @@ $removal_msg_key = (string)($_GET['removal_msg'] ?? '');
 <div class="card-form idea-form">
   <h3>ثبت ایده</h3>
   <form action="add_idea.php" method="post">
+    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($community_duty_csrf, ENT_QUOTES, 'UTF-8') ?>">
     <input type="hidden" name="community_id" value="<?= (int)$community['id'] ?>">
     <label for="topic-picker-button">انتخاب موضوع*</label>
     <div class="topic-picker" id="topic-picker">
@@ -1040,6 +1041,7 @@ if ($remaining_seconds < 0) $remaining_seconds = 0;
     <?php if(!$is_closed): ?>
     <div class="add-idea" style="margin-top:8px">
   <form action="add_idea.php" method="post">
+    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($community_duty_csrf, ENT_QUOTES, 'UTF-8') ?>">
     <input type="hidden" name="community_id" value="<?= $community['id'] ?>">
     <input type="hidden" name="topic_id" value="<?= $tid ?>">
     <textarea name="idea_text" placeholder="✍️ ثبت ایده جدید..." required></textarea>
