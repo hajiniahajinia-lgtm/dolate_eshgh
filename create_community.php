@@ -14,6 +14,13 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
+$csrf_token = (string)($_POST['csrf_token'] ?? '');
+if (empty($_SESSION['community_hierarchy_csrf']) || $csrf_token === '' ||
+    !hash_equals($_SESSION['community_hierarchy_csrf'], $csrf_token)) {
+    http_response_code(403);
+    exit("درخواست معتبر نیست یا نشست شما منقضی شده است. لطفاً به پروفایل بازگردید و دوباره تلاش کنید.");
+}
+
 // دریافت امن مقادیر
 $name = trim($_POST['community_name'] ?? '');
 $approach = trim($_POST['community_approach'] ?? '');
