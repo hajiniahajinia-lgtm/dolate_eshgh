@@ -27,6 +27,16 @@ $ust->close();
 
 // بروزرسانی پروفایل
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
+    if (
+        empty($_SESSION['community_duty_csrf']) ||
+        !isset($_POST['csrf_token']) ||
+        !is_string($_POST['csrf_token']) ||
+        !hash_equals($_SESSION['community_duty_csrf'], $_POST['csrf_token'])
+    ) {
+        http_response_code(403);
+        exit('درخواست معتبر نیست. صفحه را تازه‌سازی کنید و دوباره تلاش کنید.');
+    }
+
     $gender = trim($_POST['gender'] ?? '');
     $education = trim($_POST['education'] ?? '');
     $job = trim($_POST['job'] ?? '');
@@ -160,6 +170,7 @@ document.addEventListener("DOMContentLoaded", function() {
 <button type="button" class="edit" onclick="toggleEditForm()">تکمیل/ویرایش پروفایل</button>
 <div id="editForm" class="edit-form">
 <form method="post" action="">
+<input type="hidden" name="csrf_token" value="<?= htmlspecialchars($community_duty_csrf, ENT_QUOTES, 'UTF-8') ?>">
 <input type="hidden" name="update_profile" value="1">
 
 <label>جنسیت</label>
