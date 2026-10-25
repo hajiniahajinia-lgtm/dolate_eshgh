@@ -17,7 +17,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // بررسی تکراری بودن شماره یا ملی
     $check_stmt = $conn->prepare("SELECT id, phone, national_id FROM users WHERE phone = ? OR national_id = ? LIMIT 1");
     if (!$check_stmt) {
-        die("خطا در آماده‌سازی کوئری: " . $conn->error);
+        error_log("register.php: failed to prepare duplicate-user query: " . $conn->error);
+        http_response_code(500);
+        die("در حال حاضر امکان ثبت‌نام وجود ندارد. لطفاً بعداً دوباره تلاش کنید.");
     }
     $check_stmt->bind_param("ss", $phone, $national_id);
     $check_stmt->execute();
@@ -39,7 +41,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // درج کاربر جدید
     $insert_stmt = $conn->prepare("INSERT INTO users (username, phone, national_id, password) VALUES (?, ?, ?, ?)");
     if (!$insert_stmt) {
-        die("خطا در آماده‌سازی کوئری درج: " . $conn->error);
+        error_log("register.php: failed to prepare user insert: " . $conn->error);
+        http_response_code(500);
+        die("در حال حاضر امکان ثبت‌نام وجود ندارد. لطفاً بعداً دوباره تلاش کنید.");
     }
     $insert_stmt->bind_param("ssss", $username, $phone, $national_id, $hashed_password);
 
@@ -48,7 +52,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header("Location: login.php");
         exit;
     } else {
-        die("خطا در ثبت کاربر: " . $conn->error);
+        error_log("register.php: failed to insert user: " . $insert_stmt->error);
+        http_response_code(500);
+        die("ثبت‌نام انجام نشد. لطفاً بعداً دوباره تلاش کنید.");
     }
 
 } else {
