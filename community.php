@@ -1152,12 +1152,31 @@ document.addEventListener("DOMContentLoaded", function() {
                     headers: { "X-Requested-With": "XMLHttpRequest" }
                 });
                 if (!response.ok) throw new Error("ثبت انجام نشد");
+                const topicId = form.querySelector('input[name="topic_id"]')?.value || (form.closest('.topic')?.id || '').replace(/^topic-/, '');
+                const currentTopic = topicId ? document.getElementById("topic-" + topicId) : null;
+                if (!currentTopic) throw new Error("موضوع در صفحه پیدا نشد");
+
+                // اولویت فقط پاسخ کوتاه JSON می‌گیرد؛ نیازی به دریافت و پردازش کل صفحه نیست.
+                if (form.action.includes("toggle_priority.php")) {
+                    const result = await response.json();
+                    if (!result.success) throw new Error("ثبت اولویت انجام نشد");
+
+                    const currentSummary = currentTopic.querySelector(".topic-summary");
+                    const priorityLine = currentSummary ? currentSummary.querySelector("div") : null;
+                    if (priorityLine) {
+                        priorityLine.textContent = "✅ مجموع اولویت: " + (Number(result.total_votes) || 0);
+                    }
+
+                    if (submitButton) {
+                        submitButton.style.backgroundColor = result.has_priority ? "#f1c40f" : "#ccc";
+                    }
+                    return;
+                }
+
                 const html = await response.text();
                 const parsed = new DOMParser().parseFromString(html, "text/html");
-                const topicId = form.querySelector('input[name="topic_id"]')?.value || (form.closest('.topic')?.id || '').replace(/^topic-/, '');
-                const freshTopic = topicId ? parsed.getElementById("topic-" + topicId) : null;
-                const currentTopic = topicId ? document.getElementById("topic-" + topicId) : null;
-                if (!freshTopic || !currentTopic) throw new Error("پاسخ صفحه قابل شناسایی نیست");
+                const freshTopic = parsed.getElementById("topic-" + topicId);
+                if (!freshTopic) throw new Error("پاسخ صفحه قابل شناسایی نیست");
 
                 // برای رأی معقولیت، فقط بخش ایده‌های همان موضوع را به‌روز کن تا صفحه بالا نپرد.
                 if (form.action.includes("update_idea.php")) {
