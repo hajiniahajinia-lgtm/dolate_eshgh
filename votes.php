@@ -6,6 +6,13 @@ ini_set('display_startup_errors', 0);
 error_reporting(E_ALL);
 
 session_start();
+
+// توکن CSRF مخصوص عملیات AJAX صفحهٔ رأی‌گیری
+if (empty($_SESSION['votes_csrf_token'])) {
+    $_SESSION['votes_csrf_token'] = bin2hex(random_bytes(32));
+}
+$votes_csrf_token = $_SESSION['votes_csrf_token'];
+
 include "db.php"; // اتصال شما به دیتابیسzzz
 
 if(!defined('X')) define('X', 5); // پیش‌فرض روز
@@ -63,6 +70,18 @@ if ($tables_check) { $candidate_tables_ready = ((int)$tables_check->fetch_assoc(
 // --- پاسخ AJAX برای رأی‌ها ---
 if($_SERVER['REQUEST_METHOD'] === 'POST'){
     header('Content-Type: application/json; charset=utf-8');
+
+    // رد درخواست‌های فاقد توکن معتبر پیش از هر تغییر در رأی‌ها یا نامزدی
+    if (
+        empty($_SESSION['votes_csrf_token']) ||
+        !isset($_POST['csrf_token']) ||
+        !is_string($_POST['csrf_token']) ||
+        !hash_equals($_SESSION['votes_csrf_token'], $_POST['csrf_token'])
+    ) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'message' => 'درخواست معتبر نیست. صفحه را تازه‌سازی کنید و دوباره تلاش کنید.']);
+        exit;
+    }
 
     // ---------- ثبت/لغو داوطلبی اجرای یک ایده ----------
     if(isset($_POST['toggle_execution_candidate'])){
@@ -986,6 +1005,7 @@ document.addEventListener('DOMContentLoaded', function(){
             const value = this.dataset.value;
 
             const data = new URLSearchParams();
+            data.append('csrf_token', <?= json_encode($votes_csrf_token) ?>);
             data.append('topic_id', topic);
             data.append('idea_id', idea);
 
@@ -1023,7 +1043,7 @@ document.addEventListener('DOMContentLoaded', function(){
 
     // ---------- ثبت/لغو داوطلبی اجرای ایده ----------
     document.querySelectorAll('.candidate-btn').forEach(function(btn){btn.addEventListener('click',function(){
-        const button=this,data=new URLSearchParams();data.append('toggle_execution_candidate','1');data.append('topic_id',button.dataset.topic);data.append('idea_id',button.dataset.idea);button.disabled=true;
+        const button=this,data=new URLSearchParams();data.append('csrf_token', <?= json_encode($votes_csrf_token) ?>);data.append('toggle_execution_candidate','1');data.append('topic_id',button.dataset.topic);data.append('idea_id',button.dataset.idea);button.disabled=true;
         fetch('votes.php?community_id=<?= $community_id ?>',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:data.toString()}).then(r=>r.json()).then(resp=>{
             if(!resp||!resp.success){alert((resp&&resp.message)||'ثبت داوطلبی انجام نشد.');return;}
             button.textContent=resp.is_candidate?'✓ داوطلب اجرای این طرح هستید — لغو داوطلبی':'🙋 اعلام آمادگی برای اجرای این طرح';button.style.background=resp.is_candidate?'#e7a93b':'#dceeff';
@@ -1037,6 +1057,7 @@ document.addEventListener('DOMContentLoaded', function(){
         form.addEventListener('submit', function(e){
             e.preventDefault();
             const data = new URLSearchParams(new FormData(this));
+            data.append('csrf_token', <?= json_encode($votes_csrf_token) ?>);
             data.append('set_urgency', 1);
 
             fetch('votes.php?community_id=<?= $community_id ?>', {
