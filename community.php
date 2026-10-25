@@ -979,6 +979,7 @@ if ($remaining_seconds < 0) $remaining_seconds = 0;
           </span>
       </form>
       <form action="update_urgency.php" method="post">
+        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($community_duty_csrf, ENT_QUOTES, 'UTF-8') ?>">
         <input type="hidden" name="topic_id" value="<?= $tid ?>">
         <input type="hidden" name="community_id" value="<?= $community['id'] ?>">
         <input class="urgency-input" type="number" name="urgency_days" min="1" max="360" value="<?= $urgency ?>" required>
