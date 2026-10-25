@@ -493,6 +493,7 @@ $is_child = !empty($nc['parent_community_id']);
 <div class="box">
 <h3>ایجاد جامعه جدید</h3>
 <form action="create_community.php" method="post">
+<input type="hidden" name="csrf_token" value="<?= htmlspecialchars($community_hierarchy_csrf, ENT_QUOTES, 'UTF-8') ?>">
 <label>نام جامعه*</label>
 <input type="text" name="community_name" required>
 
