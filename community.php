@@ -418,6 +418,7 @@ document.addEventListener('DOMContentLoaded', function () {
           onsubmit="return confirm('آیا مطمئن هستید که می‌خواهید از عضویت این جامعه خارج شوید؟');"
           style="margin:0 0 12px;text-align:right;">
       <input type="hidden" name="community_id" value="<?= (int)$community['id'] ?>">
+      <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($community_duty_csrf, ENT_QUOTES, 'UTF-8') ?>">
       <button type="submit" style="display:inline-block;width:auto;background:#c62828;color:#fff;padding:9px 14px;border-radius:8px;font-weight:bold;font-size:14px;">
         🚪 خروج از عضویت جامعه
       </button>
