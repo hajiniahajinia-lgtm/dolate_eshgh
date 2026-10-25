@@ -349,6 +349,49 @@ textarea{resize:vertical;}
     .idea .text{max-width:100%;}
 }
 
+
+/* ===== پیش‌نمایش چیدمان موبایلی جامعه؛ فقط CSS و قابل بازگشت ===== */
+@media (max-width: 720px) {
+  body { padding: 8px; background: #f3f7fb; }
+  .container { width: 100%; max-width: 100%; padding: 0 2px; box-sizing: border-box; }
+  .box, .card-form, .card { padding: 12px; margin-bottom: 12px; border-radius: 14px; border-color: #e0e8f1; box-shadow: 0 3px 12px rgba(24, 55, 90, .06); }
+  h2 { font-size: 19px; line-height: 1.7; }
+  h3 { font-size: 16px; line-height: 1.8; }
+  input[type=text], input[type=number], textarea, select { min-height: 44px; padding: 10px 11px; border-radius: 9px; font-size: 15px; }
+  textarea { min-height: 88px; }
+  button { min-height: 42px; padding: 10px 13px; border-radius: 9px; font-size: 14px; line-height: 1.7; }
+  a { overflow-wrap: anywhere; }
+  .community-header { border-radius: 16px; border: 1px solid #dce8f0; box-shadow: 0 4px 14px rgba(30, 70, 100, .08); }
+  .community-duties { padding: 10px; border-radius: 12px; }
+  .community-duties-toggle > summary { padding: 12px; border-radius: 10px; line-height: 1.8; }
+  .community-duty-item { gap: 9px; padding: 11px; border-radius: 10px; }
+  .community-duty-content { font-size: 14px; line-height: 2; }
+  .community-duty-vote-form { width: 100%; }
+  .community-duty-vote-form button, .community-duty-form button { min-height: 40px; white-space: normal; }
+  .topic { padding: 12px; margin-bottom: 12px; border-radius: 13px; background: #fff; border-color: #dbe8f5; box-shadow: 0 2px 9px rgba(24, 55, 90, .04); }
+  .topic-header { gap: 10px; }
+  .topic-header h2 { font-size: 16px; line-height: 1.9; }
+  .topic-title-wrap { width: 100%; }
+  .topic-description { position: static; width: auto; max-width: 100%; margin-top: 8px; box-shadow: none; }
+  .topic-actions { gap: 8px; align-items: stretch; }
+  .topic-actions form { width: 100%; display: flex; flex-wrap: wrap; align-items: center; }
+  .topic-actions form button, .topic-actions form input, .topic-actions form select { max-width: 100%; }
+  .urgency-input { min-height: 42px; width: 84px; }
+  .ideas-box { max-height: none; padding: 9px; border-radius: 10px; }
+  .idea { padding: 11px; border-radius: 10px; }
+  .idea .text { width: 100%; line-height: 1.9; }
+  .idea-rationality button { min-height: 40px; white-space: normal; }
+  .members-dropdown { display: block; width: 100%; }
+  .members-button { min-height: 42px; }
+  .members-list { min-width: 0; width: 100%; box-sizing: border-box; }
+  .member-profile { max-width: calc(100vw - 24px); }
+  .topic-picker-button { min-height: 46px; border-radius: 9px; }
+  .topic-picker-list { max-height: 45vh; }
+  .topic-picker-option { padding: 10px; }
+  .action-tooltip-text, .idea-action-tooltip-text { max-width: calc(100vw - 24px); }
+}
+/* ===== پایان پیش‌نمایش چیدمان موبایلی جامعه ===== */
+
 </style>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
