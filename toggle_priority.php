@@ -1,7 +1,7 @@
 <?php
 // toggle_priority.php — نسخهٔ دیباگ شده و سالم
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
+ini_set('display_errors', 0);
+ini_set('display_startup_errors', 0);
 error_reporting(E_ALL);
 
 session_start();
@@ -41,22 +41,25 @@ $community_id = isset($_POST['community_id']) ? (int)$_POST['community_id'] : 0;
 if ($topic_id <= 0 || $community_id <= 0) {
     // برای دیباگ، خطای کامل را لاگ کن
     error_log("toggle_priority: پارامتر ناقص topic_id={$topic_id} community_id={$community_id}");
-    die("اطلاعات معتبر ارسال نشده (topic_id یا community_id ناقص).");
+    http_response_code(400);
+    exit("اطلاعات ارسالی معتبر نیست.");
 }
 
 // بررسی وجود موضوع و اینکه باز است
 $stmt = $conn->prepare("SELECT id, community_id, closed FROM topics WHERE id=? LIMIT 1");
-if (!$stmt) { die("خطای prepare: " . $conn->error); }
+if (!$stmt) { error_log("toggle_priority topic prepare error: " . $conn->error); http_response_code(500); exit("خطای پایگاه‌داده. لطفاً بعداً دوباره تلاش کنید."); }
 $stmt->bind_param("i", $topic_id);
 $stmt->execute();
 $topic = $stmt->get_result()->fetch_assoc();
 $stmt->close();
 
 if (!$topic) {
-    die("موضوع مورد نظر پیدا نشد.");
+    http_response_code(404);
+    exit("موضوع مورد نظر پیدا نشد.");
 }
 if ((int)$topic['closed'] === 1) {
-    die("این موضوع بسته شده و امکان اولویت‌دهی وجود ندارد.");
+    http_response_code(400);
+    exit("این موضوع بسته شده و امکان اولویت‌دهی وجود ندارد.");
 }
 
 // نام جدول رأی‌ها: از نام یکنواخت استفاده کن
@@ -65,7 +68,7 @@ if ((int)$topic['closed'] === 1) {
 
 // آیا کاربر قبلاً رأی داده؟
 $check = $conn->prepare("SELECT 1 FROM topic_priority_votes WHERE topic_id=? AND user_id=? LIMIT 1");
-if (!$check) { die("خطای prepare (check): " . $conn->error); }
+if (!$check) { error_log("toggle_priority check prepare error: " . $conn->error); http_response_code(500); exit("خطای پایگاه‌داده. لطفاً بعداً دوباره تلاش کنید."); }
 $check->bind_param("ii", $topic_id, $user_id);
 $check->execute();
 $has = $check->get_result()->fetch_row();
