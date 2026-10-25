@@ -1018,6 +1018,7 @@ if ($remaining_seconds < 0) $remaining_seconds = 0;
             </span>
             <?php if(!$is_closed): ?>
             <form action="update_idea.php" method="post">
+                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($community_duty_csrf, ENT_QUOTES, 'UTF-8') ?>">
                 <input type="hidden" name="idea_id" value="<?= (int)$i['id'] ?>">
                 <span class="idea-action-tooltip">
                     <button type="submit" style="background:#27ae60; color:#fff; padding:6px 8px; font-size:13px; border-radius:6px; border:none;">
