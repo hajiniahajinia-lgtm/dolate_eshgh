@@ -8,6 +8,11 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 $user_id = (int)$_SESSION['user_id'];
+if (empty($_SESSION['community_duty_csrf'])) {
+    $_SESSION['community_duty_csrf'] = bin2hex(random_bytes(32));
+}
+$community_duty_csrf = $_SESSION['community_duty_csrf'];
+
 if (empty($_SESSION['community_hierarchy_csrf'])) {
     $_SESSION['community_hierarchy_csrf'] = bin2hex(random_bytes(32));
 }
@@ -432,6 +437,7 @@ if($user_comms->num_rows>0):
 <a href="community.php?id=<?= (int)$uc['id'] ?>" class="community-action enter-community">🚪 ورود به جامعه</a>
 <form class="leave-community-form" action="leave_community.php" method="post" onsubmit="return confirm('آیا مطمئن هستید؟');">
 <input type="hidden" name="community_id" value="<?= (int)$uc['id'] ?>">
+<input type="hidden" name="csrf_token" value="<?= htmlspecialchars($community_duty_csrf, ENT_QUOTES, 'UTF-8') ?>">
 <button type="submit" class="community-action leave">🚫 ترک جامعه</button>
 </form>
 </div>
@@ -451,6 +457,7 @@ if($user_comms->num_rows>0):
 <div class="box">
 <h3>عضویت در جامعه‌های موجود</h3>
 <form action="join_community.php" method="post">
+<input type="hidden" name="csrf_token" value="<?= htmlspecialchars($community_duty_csrf, ENT_QUOTES, 'UTF-8') ?>">
 <?php
 $sq=$conn->prepare("
 SELECT c.id, c.name, c.parent_community_id, p.name AS parent_name
