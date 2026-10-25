@@ -858,6 +858,7 @@ $removal_msg_key = (string)($_GET['removal_msg'] ?? '');
 <div class="card-form topic-form">
   <h3>ثبت موضوع جدید</h3>
   <form action="add_topic.php" method="post">
+    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($community_duty_csrf, ENT_QUOTES, 'UTF-8') ?>">
     <input type="hidden" name="community_id" value="<?= (int)$community['id'] ?>">
     <label>عنوان موضوع*</label>
     <textarea name="topic_title" rows="2" maxlength="100" placeholder="حداکثر 100 کاراکتر..." required></textarea>
