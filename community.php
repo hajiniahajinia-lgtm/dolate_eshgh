@@ -145,6 +145,7 @@ body{font-family:tahoma, Arial, sans-serif;background:#eef3f8;margin:0;padding:1
 .container{max-width:960px;margin:0 auto;padding:0 6px;}
 .box, .card-form, .card{background:#fff;border:1px solid #ccc;border-radius:10px;padding:14px;margin-bottom:16px;box-shadow:0 2px 5px rgba(0,0,0,0.05);}
 /* پس‌زمینه رنگین‌کمانی ملایم برای سربرگ جامعه */
+.community-mobile-actions{display:none;}
 .community-header{
     background:linear-gradient(125deg,
         #ffe4eb 0%,
@@ -212,6 +213,11 @@ textarea{resize:vertical;}
 .idea-action-tooltip:hover .idea-action-tooltip-text,
 .idea-action-tooltip:focus-within .idea-action-tooltip-text{display:block;}
 @media (max-width:720px){
+    .community-mobile-actions{display:flex;align-items:stretch;gap:6px;width:100%;margin:8px 0 12px;}
+    .community-mobile-actions>*{flex:1 1 0;min-width:0;margin:0!important;text-align:center!important;}
+    .community-mobile-actions a,.community-mobile-actions form button,.community-mobile-actions .members-button{display:flex;align-items:center;justify-content:center;width:100%;height:100%;min-height:42px;box-sizing:border-box;padding:7px 5px!important;font-size:11px!important;line-height:1.6;white-space:normal;}
+    .community-mobile-actions form{display:flex;}
+    .community-mobile-actions .members-dropdown{display:flex;align-items:stretch;}
     .community-duty-item{align-items:flex-start;flex-direction:column;}
     .community-duty-vote-form{align-self:flex-start;}
 .idea-action-tooltip-text{display:none !important;}}
@@ -531,6 +537,7 @@ document.addEventListener('DOMContentLoaded', function () {
 <?php if ($community): ?>
 <div class="box community-header">
   <h2><?=htmlspecialchars($community['name'])?></h2>
+  <div class="community-mobile-actions" id="communityMobileActions" aria-label="دسترسی‌های جامعه"></div>
   <div style="margin:0 0 12px;text-align:right;">
     <a href="profile.php" style="display:inline-block;background:#2065d1;color:#fff;text-decoration:none;padding:9px 14px;border-radius:8px;font-weight:bold;font-size:14px;">↩ بازگشت به پروفایل</a>
   </div>
@@ -1574,6 +1581,36 @@ el.addEventListener('mouseleave', function(){
         });
     });
 });
+
+// در موبایل سه دسترسی اصلی زیر عنوان جامعه در یک ردیف قرار می‌گیرند؛
+ // در دسکتاپ جای اصلی عناصر حفظ می‌شود.
+(function(){
+  const actions = document.getElementById('communityMobileActions');
+  if (!actions) return;
+  const backLink = document.querySelector('.community-header a[href="profile.php"]');
+  const backWrap = backLink ? backLink.parentElement : null;
+  const leaveForm = document.querySelector('.community-header form[action="leave_community.php"]');
+  const members = document.querySelector('.community-header .members-dropdown');
+  const nodes = [backWrap, leaveForm, members].filter(Boolean);
+  const placeholders = new Map();
+  nodes.forEach(node => {
+    const placeholder = document.createComment('community-action-position');
+    node.parentNode.insertBefore(placeholder, node);
+    placeholders.set(node, placeholder);
+  });
+  function arrangeActions(){
+    if (window.matchMedia('(max-width: 720px)').matches) {
+      nodes.forEach(node => actions.appendChild(node));
+    } else {
+      nodes.forEach(node => {
+        const placeholder = placeholders.get(node);
+        if (placeholder && placeholder.parentNode) placeholder.parentNode.insertBefore(node, placeholder);
+      });
+    }
+  }
+  arrangeActions();
+  window.addEventListener('resize', arrangeActions);
+})();
 </script>
 </body>
 </html>
