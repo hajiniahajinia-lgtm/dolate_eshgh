@@ -1413,9 +1413,8 @@ document.addEventListener("DOMContentLoaded", function() {
                     if (!result.success) throw new Error("ثبت فوریت انجام نشد");
 
                     const urgency = Math.max(1, Math.min(360, Number(result.urgency_units) || 1));
-                    const urgencyInput = currentTopic.querySelector(".urgency-input");
-                    if (urgencyInput) urgencyInput.value = urgency;
-
+                    // مقدار داخل کادر، انتخاب شخصی همین عضو است؛ آن را با میانگین جامعه عوض نکن.
+                    // فقط مقدار فوریتِ جمعی و شمارش معکوس موضوع به‌روز می‌شود.
                     const currentSummary = currentTopic.querySelector(".topic-summary");
                     const summaryLines = currentSummary ? currentSummary.querySelectorAll("div") : [];
                     if (summaryLines.length > 1) {
