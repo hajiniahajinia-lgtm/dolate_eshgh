@@ -148,12 +148,12 @@ body{font-family:tahoma, Arial, sans-serif;background:#eef3f8;margin:0;padding:1
 .community-mobile-actions{display:none;}
 .community-header{
     background:linear-gradient(125deg,
-        #ffe4eb 0%,
-        #ffefd6 20%,
-        #e7f8d9 40%,
-        #dff4ff 60%,
-        #e9e0ff 80%,
-        #ffe2f3 100%);
+        #ff9fba 0%,
+        #ffc878 20%,
+        #b8e88a 40%,
+        #91d8ff 60%,
+        #b3a0ff 80%,
+        #ff9bd4 100%);
     border-color:#e2dff0;
 }
 
