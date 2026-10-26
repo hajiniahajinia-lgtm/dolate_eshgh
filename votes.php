@@ -1588,5 +1588,76 @@ function arrange(){if(window.matchMedia('(max-width: 720px)').matches){nodes.for
 arrange();window.addEventListener('resize',arrange);
 })();
 </script>
+
+<script>
+(function(){
+    // در موبایل، کادر اطلاعات عضو را موقتاً به body منتقل می‌کنیم
+    // تا موقعیت فهرست اعضا یا والدهای آن روی وسط‌چین شدن اثر نگذارد.
+    if (!window.matchMedia('(max-width: 720px)').matches) return;
+    let activeProfile = null;
+    let activeEntry = null;
+
+    function closeProfile(){
+        if(!activeProfile) return;
+        activeProfile.style.display = 'none';
+        activeProfile.style.position = '';
+        activeProfile.style.left = '';
+        activeProfile.style.right = '';
+        activeProfile.style.top = '';
+        activeProfile.style.transform = '';
+        activeProfile.style.width = '';
+        activeProfile.style.maxWidth = '';
+        activeProfile.style.maxHeight = '';
+        activeProfile.style.zIndex = '';
+        if(activeEntry && activeEntry.contains(activeProfile) === false){
+            const name = activeEntry.querySelector('.member-name');
+            if(name) name.insertAdjacentElement('afterend', activeProfile);
+        }
+        activeProfile = null;
+        activeEntry = null;
+    }
+
+    document.addEventListener('click', function(event){
+        const name = event.target.closest('.member-name');
+        if(name && window.matchMedia('(max-width: 720px)').matches){
+            const entry = name.closest('.member-entry');
+            const profile = entry ? entry.querySelector('.member-profile') : null;
+            if(!profile) return;
+
+            event.preventDefault();
+            event.stopPropagation();
+            if(activeProfile === profile){
+                closeProfile();
+                return;
+            }
+            closeProfile();
+            activeProfile = profile;
+            activeEntry = entry;
+            document.body.appendChild(profile);
+            Object.assign(profile.style, {
+                display: 'block',
+                position: 'fixed',
+                left: '50%',
+                right: 'auto',
+                top: '12px',
+                transform: 'translateX(-50%)',
+                width: '280px',
+                maxWidth: 'calc(100vw - 24px)',
+                maxHeight: '60vh',
+                zIndex: '2147483647'
+            });
+            return;
+        }
+        if(activeProfile && !event.target.closest('.member-profile')){
+            closeProfile();
+        }
+    }, true);
+
+    document.addEventListener('keydown', function(event){
+        if(event.key === 'Escape') closeProfile();
+    });
+})();
+</script>
+
 </body>
 </html>
