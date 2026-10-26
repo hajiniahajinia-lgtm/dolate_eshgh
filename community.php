@@ -142,6 +142,18 @@ $topics_check->close();
 <title>جامعه</title>
 <style>
 body{font-family:tahoma, Arial, sans-serif;background:#eef3f8;margin:0;padding:12px;}
+/* پس‌زمینهٔ تخت جمشید فقط برای جامعه‌ای با نام دقیق «کشور» */
+body.country-community-page{
+    background-color:#eef3f8;
+    background-image:linear-gradient(rgba(255,255,255,.62),rgba(255,255,255,.62)),url('https://commons.wikimedia.org/wiki/Special:FilePath/20101229_Top_panoramic_view_of_Persepolis_Iran.jpg?width=1800');
+    background-size:cover;
+    background-position:center center;
+    background-repeat:no-repeat;
+    background-attachment:fixed;
+}
+@media(max-width:720px){
+    body.country-community-page{background-attachment:scroll;background-position:center top;}
+}
 .container{max-width:960px;margin:0 auto;padding:0 6px;}
 .box, .card-form, .card{background:#fff;border:1px solid #ccc;border-radius:10px;padding:14px;margin-bottom:16px;box-shadow:0 2px 5px rgba(0,0,0,0.05);}
 /* پس‌زمینه رنگین‌کمانی ملایم برای سربرگ جامعه */
@@ -640,7 +652,7 @@ document.addEventListener('DOMContentLoaded', function () {
 </script>
 
 </head>
-<body>
+<body<?= (isset($community['name']) && trim($community['name']) === 'کشور') ? ' class="country-community-page"' : '' ?>>
 <div class="container">
 
 <?php if ($community): ?>
