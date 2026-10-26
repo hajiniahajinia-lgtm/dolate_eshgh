@@ -461,6 +461,47 @@ textarea{resize:vertical;}
     white-space: nowrap !important;
     font-size: 12px !important;
   }
+
+  /* در موبایل، با باز شدن فوریت، فرم زیر دکمه نمایش داده شود نه کنار آن */
+  .topic-actions > .community-urgency-controls[open] {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    min-width: 0 !important;
+  }
+  .topic-actions > .community-urgency-controls[open] > summary {
+    flex: 0 0 42px !important;
+    width: 100% !important;
+  }
+  .topic-actions > .community-urgency-controls > form {
+    box-sizing: border-box !important;
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    gap: 7px !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    padding: 10px !important;
+    margin: 0 !important;
+  }
+  .topic-actions > .community-urgency-controls > form .urgency-input {
+    flex: 0 1 90px !important;
+    width: 90px !important;
+    max-width: 100% !important;
+  }
+  .topic-actions > .community-urgency-controls > form .urgency-btn {
+    flex: 0 1 auto !important;
+    width: auto !important;
+    min-width: 95px !important;
+    max-width: 100% !important;
+  }
+  .community-urgency-status {
+    display: block !important;
+    width: 100% !important;
+    overflow-wrap: anywhere;
+    line-height: 1.8;
+  }
 }
 
 /* فقط موبایل: اولویت، کادر روزهای فوریت و دکمه فوریت در یک ردیف و هم‌اندازه */
