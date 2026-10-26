@@ -411,7 +411,7 @@ textarea{resize:vertical;}
   .community-duty-content { font-size: 14px; line-height: 2; }
   .community-duty-vote-form { width: 100%; }
   .community-duty-vote-form button, .community-duty-form button { min-height: 40px; white-space: normal; }
-  .topic { padding: 12px; margin-bottom: 12px; border-radius: 13px; background: #fff; border-color: #dbe8f5; box-shadow: 0 2px 9px rgba(24, 55, 90, .04); }
+  .topic { padding: 12px; margin-bottom: 12px; border-radius: 13px; background: #B7D9F5; border-color: #dbe8f5; box-shadow: 0 2px 9px rgba(24, 55, 90, .04); }
   .topic-header { gap: 10px; }
   .topic-header h2 { font-size: 16px; line-height: 1.9; }
   .topic-title-wrap { width: 100%; }
