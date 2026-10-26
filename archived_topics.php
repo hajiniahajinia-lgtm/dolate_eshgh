@@ -906,7 +906,7 @@ document.addEventListener('DOMContentLoaded',function(){
 
             <?php if($candidate_tables_ready && !empty($row['idea']['idea_id']) && empty($row['election']['final_candidate_user_id'])): ?>
             <details class="execution-details">
-              <summary>🙋 داوطلبان اجرای طرح برنده (<?= count($row['execution_candidates']) ?>)</summary>
+              <summary>🙋 داوطلبان طرح منتخب (<?= count($row['execution_candidates']) ?>)</summary>
               <div class="execution-details-body">
               <form method="post" style="margin-top:8px"><input type="hidden" name="toggle_execution_candidate" value="1"><input type="hidden" name="topic_id" value="<?= (int)$row['id'] ?>"><input type="hidden" name="idea_id" value="<?= (int)$row['idea']['idea_id'] ?>"><button type="submit" style="width:100%;padding:9px;border:0;border-radius:6px;background:<?= $my_is_candidate?'#e7a93b':'#dceeff' ?>;color:#173b63;font-weight:bold;cursor:pointer"><?= $my_is_candidate?'✓ داوطلب اجرای این طرح هستید — لغو داوطلبی':'🙋 اعلام آمادگی برای اجرای این طرح' ?></button></form>
               <div class="meta" style="margin:5px 0 10px"><?= count($row['execution_candidates']) ?> داوطلب. نام داوطلبان زیر نمایش داده می‌شود. محبوبیت و رأی انتخاب مجری جداگانه نمایش داده می‌شوند.</div>
