@@ -1021,10 +1021,8 @@ $removal_msg_key = (string)($_GET['removal_msg'] ?? '');
   <form action="add_topic.php" method="post">
     <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($community_duty_csrf, ENT_QUOTES, 'UTF-8') ?>">
     <input type="hidden" name="community_id" value="<?= (int)$community['id'] ?>">
-    <label>عنوان موضوع*</label>
-    <textarea name="topic_title" rows="2" maxlength="100" placeholder="حداکثر 100 کاراکتر..." required></textarea>
-    <label for="topic-description">شرح موضوع (اختیاری)</label>
-    <textarea id="topic-description" name="topic_description" rows="3" maxlength="500" placeholder="شرح کوتاهی از موضوع بنویسید؛ حداکثر 500 کاراکتر..."></textarea>
+    <textarea name="topic_title" rows="2" maxlength="100" placeholder="عنوان موضوع*" aria-label="عنوان موضوع" required></textarea>
+    <textarea id="topic-description" name="topic_description" rows="3" maxlength="500" placeholder="شرح موضوع (اختیاری)" aria-label="شرح موضوع (اختیاری)"></textarea>
     <small style="display:block;color:#666;margin-top:4px;">پر کردن این بخش اختیاری است.</small>
     <label for="topic-initial-idea">طرح ایده (اختیاری)</label>
     <textarea id="topic-initial-idea" name="topic_initial_idea" rows="4" maxlength="25000" placeholder="اگر ایده‌ای برای حل این موضوع دارید، اینجا بنویسید؛ اختیاری است."></textarea>
