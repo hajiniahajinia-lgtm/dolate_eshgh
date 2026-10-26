@@ -464,7 +464,7 @@ if($user_comms->num_rows>0):
 </details>
 </div>
 
-<details class="community-management">
+<details class="community-management" id="join-community" <?= isset($_GET['join_community']) ? 'open' : '' ?>>
 <summary>➕ عضویت در جامعه یا ایجاد جامعه جدید</summary>
 
 <!-- عضویت در جوامع موجود -->
@@ -488,7 +488,7 @@ $sq->close();
 <select name="community_id" id="joinCommunitySelect" required class="community-select-native">
 <option value="">— انتخاب جامعه —</option>
 <?php while($nc=$new_comms->fetch_assoc()): ?>
-<option value="<?= (int)$nc['id'] ?>"><?= htmlspecialchars($nc['name']) ?></option>
+<option value="<?= (int)$nc['id'] ?>" <?= isset($_GET['join_community']) && (int)$_GET['join_community'] === (int)$nc['id'] ? 'selected' : '' ?>><?= htmlspecialchars($nc['name']) ?></option>
 <?php endwhile; ?>
 </select>
 <div class="community-picker" id="communityPicker">
