@@ -670,6 +670,7 @@ document.addEventListener('DOMContentLoaded', function () {
       <?php endif; ?>
     </div>
     <a href="community_stats.php?community_id=<?= (int)$community['id'] ?>" style="display:inline-flex;align-items:center;justify-content:center;gap:6px;background:#0099cc;color:#fff;text-decoration:none;padding:9px 13px;border-radius:8px;font-size:13px;font-weight:bold;white-space:nowrap;box-sizing:border-box;">📊 گزارش آماری جامعه</a>
+    <a href="search.php" style="display:inline-flex;align-items:center;justify-content:center;gap:6px;background:#1769aa;color:#fff;text-decoration:none;padding:9px 13px;border-radius:8px;font-size:13px;font-weight:bold;white-space:nowrap;box-sizing:border-box;">🔎 سرچ</a>
   </div>
   <div class="community-mobile-actions" id="communityMobileActions" aria-label="دسترسی‌های جامعه"></div>
   <div style="margin:0 0 12px;text-align:right;">
