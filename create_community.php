@@ -24,10 +24,31 @@ if (empty($_SESSION['community_hierarchy_csrf']) || $csrf_token === '' ||
 // دریافت امن مقادیر
 $name = trim($_POST['community_name'] ?? '');
 $approach = trim($_POST['community_approach'] ?? '');
+$community_type = trim($_POST['community_type'] ?? '');
+$community_type_custom = trim($_POST['community_type_custom'] ?? '');
 $join_now = isset($_POST['join_now']) && $_POST['join_now']==1 ? true : false;
 
-if ($name === '' || $approach === '') {
-    die("نام جامعه و وظایف/رویکردها نمی‌تواند خالی باشد. <a href='profile.php'>بازگشت</a>");
+$allowed_community_types = [
+    'کشور',
+    'شهر',
+    'روستا یا منطقه',
+    'کارخانه یا محل کار',
+    'دانشگاه یا مرکز آموزشی',
+    'سازمان یا نهاد',
+    'گروه با هدف مشترک',
+    'سایر'
+];
+if (!in_array($community_type, $allowed_community_types, true)) {
+    die("نوع جامعه معتبر نیست. <a href='profile.php'>بازگشت</a>");
+}
+if ($community_type === 'سایر') {
+    $community_type = $community_type_custom;
+}
+if ($name === '' || $approach === '' || $community_type === '') {
+    die("نام، نوع جامعه و وظایف/رویکردها نمی‌تواند خالی باشد. <a href='profile.php'>بازگشت</a>");
+}
+if (function_exists('mb_strlen') ? mb_strlen($community_type, 'UTF-8') > 100 : strlen($community_type) > 300) {
+    die("نوع جامعه نباید بیش از ۱۰۰ نویسه باشد. <a href='profile.php'>بازگشت</a>");
 }
 
 // یکسان‌سازی چند شکل رایج نوشتاری نام برای جلوگیری از تکرارهایی مانند ي/ی و ك/ک
@@ -69,10 +90,10 @@ if ($name_exists) {
 }
 
 // درج جامعه در جدول communities با creator_id
-$stmt = $conn->prepare("INSERT INTO communities (name, approach, members_count, creator_id) VALUES (?, ?, 0, ?)");
+$stmt = $conn->prepare("INSERT INTO communities (name, approach, members_count, creator_id, community_type) VALUES (?, ?, 0, ?, ?)");
 if (!$stmt) die("خطا در آماده‌سازی کوئری: " . $conn->error);
 
-$stmt->bind_param("ssi", $name, $approach, $user_id);
+$stmt->bind_param("ssis", $name, $approach, $user_id, $community_type);
 
 if ($stmt->execute()) {
     $community_id = $stmt->insert_id;
