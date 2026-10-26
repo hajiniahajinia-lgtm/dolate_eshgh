@@ -1132,7 +1132,7 @@ body{
 </div>
 
   <div class="topic-navigation-buttons" style="display:flex;gap:10px;flex-wrap:wrap;margin:12px 0 16px;">
-    <a href="#active-topics" style="display:inline-flex;align-items:center;justify-content:center;flex:1 1 180px;min-height:42px;box-sizing:border-box;background:#4A82DA;color:#fff;text-decoration:none;padding:10px 14px;border-radius:9px;font-weight:bold;text-align:center;">موضوعات در حال بحث</a>
+    <a href="community.php?community_id=<?= (int)$community_id ?>" style="display:inline-flex;align-items:center;justify-content:center;flex:1 1 180px;min-height:42px;box-sizing:border-box;background:#4A82DA;color:#fff;text-decoration:none;padding:10px 14px;border-radius:9px;font-weight:bold;text-align:center;">موضوعات در حال بحث</a>
     <a href="archived_topics.php?community_id=<?= (int)$community_id ?>" style="display:inline-flex;align-items:center;justify-content:center;flex:1 1 180px;min-height:42px;box-sizing:border-box;background:#4A82DA;color:#fff;text-decoration:none;padding:10px 14px;border-radius:9px;font-weight:bold;text-align:center;">آرشیو موضوعات (<?= (int)$arch_count ?>)</a>
   </div>
 
