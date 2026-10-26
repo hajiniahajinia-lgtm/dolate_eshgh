@@ -282,6 +282,8 @@ textarea{resize:vertical;}
 .topic-form-toggle>summary::marker{content:"";}
 .topic-form-toggle[open]>summary{border-radius:8px 8px 0 0;}
 .topic-form-toggle[open]>.topic-form{margin-top:0;border-radius:0 0 10px 10px;background:#4A82DA;border-color:#4A82DA;}
+.topic-field-hint{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;flex-wrap:wrap;margin:2px 2px 8px;color:#e1eaff;font-size:11px;line-height:1.6;}
+.topic-char-count{color:#d2e0fb;font-size:11px;white-space:nowrap;font-variant-numeric:tabular-nums;}
 .card-form h3{margin-top:0;margin-bottom:8px;}
 .topic-picker{position:relative;margin-top:6px}
 .topic-picker-button{width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;text-align:right;background:#fff;color:#263238;border:1px solid #bbb;padding:10px 12px;border-radius:7px;font:inherit;line-height:1.8;margin:0;min-height:44px}
@@ -1145,9 +1147,12 @@ $removal_msg_key = (string)($_GET['removal_msg'] ?? '');
     <form action="add_topic.php" method="post">
       <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($community_duty_csrf, ENT_QUOTES, 'UTF-8') ?>">
       <input type="hidden" name="community_id" value="<?= (int)$community['id'] ?>">
-      <textarea name="topic_title" rows="2" maxlength="100" placeholder="عنوان موضوع*" aria-label="عنوان موضوع" required></textarea>
+      <textarea id="topic-title-input" name="topic_title" rows="2" maxlength="100" placeholder="عنوان موضوع*" aria-label="عنوان موضوع" required></textarea>
+      <div class="topic-field-hint"><span>عنوانی کوتاه و روشن برای مسئله یا چالش بنویسید.</span><span class="topic-char-count" data-for="topic-title-input">۰ از ۱۰۰ نویسه</span></div>
       <textarea id="topic-description" name="topic_description" rows="3" maxlength="500" placeholder="شرح موضوع (اختیاری)" aria-label="شرح موضوع (اختیاری)"></textarea>
+      <div class="topic-field-hint"><span>زمینه و جزئیات لازم را برای فهم بهتر موضوع توضیح دهید.</span><span class="topic-char-count" data-for="topic-description">۰ از ۵۰۰ نویسه</span></div>
       <textarea id="topic-initial-idea" name="topic_initial_idea" rows="4" maxlength="25000" placeholder="طرح ایده (اختیاری)" aria-label="طرح ایده (اختیاری)"></textarea>
+      <div class="topic-field-hint"><span>راه‌حل یا پیشنهاد خود را بنویسید؛ می‌توانید این بخش را خالی بگذارید.</span><span class="topic-char-count" data-for="topic-initial-idea">۰ از ۲۵٬۰۰۰ نویسه</span></div>
       <button type="submit">✅ ثبت موضوع و طرح ایده</button>
     </form>
   </div>
@@ -1367,6 +1372,21 @@ $losers_count  = (int)$arch_stats['losers'];
 
 <script>
 document.addEventListener("DOMContentLoaded", function() {
+    // شمارش زندهٔ نویسه‌ها در فرم ثبت موضوع و ایده
+    const faDigits = function(value) {
+        return String(value).replace(/[0-9]/g, function(d) { return '۰۱۲۳۴۵۶۷۸۹'[Number(d)]; });
+    };
+    document.querySelectorAll('.topic-char-count[data-for]').forEach(function(counter) {
+        const field = document.getElementById(counter.dataset.for);
+        if (!field) return;
+        const max = Number(field.getAttribute('maxlength')) || 0;
+        const updateCount = function() {
+            counter.textContent = faDigits(field.value.length) + ' از ' + faDigits(max) + ' نویسه';
+        };
+        field.addEventListener('input', updateCount);
+        updateCount();
+    });
+
     // شرح وظایف در موبایل پس از ۲۰۰ نویسه کوتاه می‌شود و با لمس باز می‌شود.
     const dutyDescription = document.querySelector('.community-duty-description');
     if (dutyDescription) {
