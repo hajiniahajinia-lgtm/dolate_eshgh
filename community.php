@@ -434,6 +434,33 @@ textarea{resize:vertical;}
 /* ===== پایان پیش‌نمایش چیدمان موبایلی جامعه ===== */
 
 
+/* فقط موبایل: دکمه‌های اولویت و تنظیم فوریت در یک ردیف و هم‌اندازه */
+@media (max-width: 720px) {
+  .topic-actions > .community-urgency-controls {
+    display: flex !important;
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+    width: auto !important;
+    margin: 0 !important;
+  }
+  .topic-actions > .community-urgency-controls > summary {
+    box-sizing: border-box !important;
+    display: inline-flex !important;
+    flex: 1 1 0 !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    height: 42px !important;
+    min-height: 42px !important;
+    max-height: 42px !important;
+    padding: 0 4px !important;
+    justify-content: center !important;
+    align-items: center !important;
+    white-space: nowrap !important;
+    font-size: 12px !important;
+  }
+}
+
 /* فقط موبایل: اولویت، کادر روزهای فوریت و دکمه فوریت در یک ردیف و هم‌اندازه */
 @media (max-width: 720px) {
   .topic-actions {
