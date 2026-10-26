@@ -230,6 +230,12 @@ textarea{resize:vertical;}
 .user-tooltip{position:relative;cursor:pointer;color:#2065d1;}
 .tooltip-box{position:absolute;top:26px;left:0;background:#fff;border:1px solid #ccc;border-radius:8px;padding:8px;min-width:180px;z-index:1000;box-shadow:0 2px 6px rgba(0,0,0,0.15);font-size:13px;display:none;}
 
+.topic-form-toggle{margin:12px 0 16px;}
+.topic-form-toggle>summary{display:block;list-style:none;background:#2065d1;color:#fff;cursor:pointer;border-radius:8px;padding:12px 14px;text-align:center;font-weight:bold;}
+.topic-form-toggle>summary::-webkit-details-marker{display:none;}
+.topic-form-toggle>summary::marker{content:"";}
+.topic-form-toggle[open]>summary{border-radius:8px 8px 0 0;}
+.topic-form-toggle[open]>.topic-form{margin-top:0;border-radius:0 0 10px 10px;}
 .card-form h3{margin-top:0;margin-bottom:8px;}
 .topic-picker{position:relative;margin-top:6px}
 .topic-picker-button{width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;text-align:right;background:#fff;color:#263238;border:1px solid #bbb;padding:10px 12px;border-radius:7px;font:inherit;line-height:1.8;margin:0;min-height:44px}
@@ -1015,19 +1021,20 @@ $removal_msg_key = (string)($_GET['removal_msg'] ?? '');
   </a>
 </div>
 
-<!-- ثبت موضوع -->
-<div class="card-form topic-form">
-  <h3>ثبت موضوع جدید</h3>
-  <form action="add_topic.php" method="post">
-    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($community_duty_csrf, ENT_QUOTES, 'UTF-8') ?>">
-    <input type="hidden" name="community_id" value="<?= (int)$community['id'] ?>">
-    <textarea name="topic_title" rows="2" maxlength="100" placeholder="عنوان موضوع*" aria-label="عنوان موضوع" required></textarea>
-    <textarea id="topic-description" name="topic_description" rows="3" maxlength="500" placeholder="شرح موضوع (اختیاری)" aria-label="شرح موضوع (اختیاری)"></textarea>
-    <small style="display:block;color:#666;margin-top:4px;">پر کردن این بخش اختیاری است.</small>
-    <textarea id="topic-initial-idea" name="topic_initial_idea" rows="4" maxlength="25000" placeholder="طرح ایده (اختیاری)" aria-label="طرح ایده (اختیاری)"></textarea>
-    <button type="submit">✅ ثبت موضوع</button>
-  </form>
-</div>
+<!-- ثبت موضوع و طرح ایده؛ فرم به‌صورت پیش‌فرض جمع‌شده است -->
+<details class="topic-form-toggle">
+  <summary>✍️ ثبت موضوع و طرح ایده</summary>
+  <div class="card-form topic-form">
+    <form action="add_topic.php" method="post">
+      <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($community_duty_csrf, ENT_QUOTES, 'UTF-8') ?>">
+      <input type="hidden" name="community_id" value="<?= (int)$community['id'] ?>">
+      <textarea name="topic_title" rows="2" maxlength="100" placeholder="عنوان موضوع*" aria-label="عنوان موضوع" required></textarea>
+      <textarea id="topic-description" name="topic_description" rows="3" maxlength="500" placeholder="شرح موضوع (اختیاری)" aria-label="شرح موضوع (اختیاری)"></textarea>
+      <textarea id="topic-initial-idea" name="topic_initial_idea" rows="4" maxlength="25000" placeholder="طرح ایده (اختیاری)" aria-label="طرح ایده (اختیاری)"></textarea>
+      <button type="submit">✅ ثبت موضوع و طرح ایده</button>
+    </form>
+  </div>
+</details>
 
 <!-- موضوعات در حال بحث و ایده‌ها -->
 <?php
