@@ -169,6 +169,14 @@ textarea{resize:vertical;}
 .community-duties-toggle>summary{display:block;list-style:none;background:#2065d1;color:#fff;cursor:pointer;border-radius:7px;padding:10px 14px;text-align:center;font-weight:bold;}
 .community-duties-toggle>summary::-webkit-details-marker{display:none;}
 .community-duties-toggle>summary::marker{content:"";}
+
+.final-voting-toggle{margin:0 0 16px;}
+.final-voting-toggle>summary{display:block;list-style:none;background:#27ae60;color:#fff;cursor:pointer;border-radius:8px;padding:12px 14px;text-align:center;font-weight:bold;}
+.final-voting-toggle>summary::-webkit-details-marker{display:none;}
+.final-voting-toggle>summary::marker{content:"";}
+.final-voting-toggle[open]>summary{border-radius:8px 8px 0 0;}
+.final-voting-content{margin-top:0;border-radius:0 0 10px 10px;}
+
 .community-duties-toggle[open]>summary{border-radius:7px 7px 0 0;}
 .community-duties h3{margin:0 0 6px;font-size:15px;color:#344054;}
 .community-duties-help,.community-duties-empty,.community-duties-notice{font-size:12px;line-height:1.9;color:#596579;margin:5px 0 9px;}
@@ -1189,7 +1197,7 @@ if ($remaining_seconds < 0) $remaining_seconds = 0;
 </div> <!-- topics-wrapper -->
 </div> <!-- box موضوعات در حال بحث -->
 
-<!-- موضوعات در حال رأی‌گیری -->
+<!-- موضوعات در حال رأی‌گیری؛ این بخش پس از سربرگ قرار می‌گیرد -->
 <?php
 $vote_count_q = $conn->prepare("
     SELECT COUNT(*) AS cnt
@@ -1204,15 +1212,15 @@ $vote_count_res = $vote_count_q->get_result()->fetch_assoc();
 $vote_count_q->close();
 $vote_count = (int)$vote_count_res['cnt'];
 ?>
-<div class="box">
-  <h3>🗳 موضوعات در حال رأی‌گیری نهایی (<?= $vote_count ?>)</h3>
-  <p>برای مشاهده و رأی‌گیری روی دکمه زیر کلیک کنید:</p>
-  <a href="votes.php?community_id=<?= $community['id'] ?>">
-    <button style="padding:8px 16px; font-size:14px; border-radius:6px; background:#27ae60; color:#fff; border:none; cursor:pointer;">
+<details class="final-voting-toggle" id="final-voting-toggle">
+  <summary>🗳 موضوعات در حال رأی‌گیری (<?= $vote_count ?>)</summary>
+  <div class="box final-voting-content">
+    <p>برای مشاهده و رأی‌گیری روی دکمه زیر کلیک کنید:</p>
+    <a href="votes.php?community_id=<?= (int)$community['id'] ?>" style="display:inline-block;padding:8px 16px;margin-top:10px;border-radius:6px;background:#27ae60;color:#fff;font-weight:bold;">
       مشاهده موضوعات رأی‌گیری
-    </button>
-  </a>
-</div>
+    </a>
+  </div>
+</details>
 
 <!-- کارت آرشیو موضوعات -->
 <?php
@@ -1593,6 +1601,15 @@ el.addEventListener('mouseleave', function(){
         });
     });
 });
+
+// قرار دادن کلید رأی‌گیری نهایی بلافاصله زیر سربرگ جامعه.
+(function(){
+  const votingToggle = document.getElementById('final-voting-toggle');
+  const communityHeader = document.querySelector('.community-header');
+  if (votingToggle && communityHeader) {
+    communityHeader.insertAdjacentElement('afterend', votingToggle);
+  }
+})();
 
 // در موبایل سه دسترسی اصلی زیر عنوان جامعه در یک ردیف قرار می‌گیرند؛
  // در دسکتاپ جای اصلی عناصر حفظ می‌شود.
