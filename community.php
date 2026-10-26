@@ -1175,6 +1175,7 @@ if ($remaining_seconds < 0) $remaining_seconds = 0;
           <input class="urgency-input" type="number" name="urgency_days" min="1" max="360" value="<?= $urgency ?>" required>
           <button class="urgency-btn" type="submit" title="فوریت را بر حسب روز ثبت می‌کند؛ میانگین پیشنهادهای اعضا زمان موضوع را تعیین می‌کند.">ثبت فوریت</button>
           <small class="community-urgency-help">زمان فوریت موضوع بر اساس میانگین پیشنهادهای ثبت‌شدهٔ اعضا محاسبه می‌شود.</small>
+          <small class="community-urgency-status" role="status" aria-live="polite"></small>
         </form>
       </details>
     </div>
@@ -1413,12 +1414,19 @@ document.addEventListener("DOMContentLoaded", function() {
                     if (!result.success) throw new Error("ثبت فوریت انجام نشد");
 
                     const urgency = Math.max(1, Math.min(360, Number(result.urgency_units) || 1));
-                    // مقدار داخل کادر، انتخاب شخصی همین عضو است؛ آن را با میانگین جامعه عوض نکن.
-                    // فقط مقدار فوریتِ جمعی و شمارش معکوس موضوع به‌روز می‌شود.
+                    // انتخاب شخصی عضو را نگه دار؛ میانگین جامعه جداگانه نمایش داده می‌شود.
+                    const chosenInput = form.querySelector(".urgency-input");
+                    const chosenDays = chosenInput ? chosenInput.value : "";
                     const currentSummary = currentTopic.querySelector(".topic-summary");
                     const summaryLines = currentSummary ? currentSummary.querySelectorAll("div") : [];
                     if (summaryLines.length > 1) {
-                        summaryLines[1].textContent = "⏱ فوریت: " + urgency + "روز";
+                        summaryLines[1].textContent = "⏱ فوریت: " + urgency + " روز (میانگین اعضا)";
+                    }
+
+                    const status = form.querySelector(".community-urgency-status");
+                    const voteCount = Number(result.vote_count) || 0;
+                    if (status) {
+                        status.textContent = "✓ انتخاب شما: " + chosenDays + " روز ثبت شد؛ میانگین جامعه: " + urgency + " روز (" + voteCount + " رأی فوریت).";
                     }
 
                     const currentCountdown = currentTopic.querySelector(".countdown");
