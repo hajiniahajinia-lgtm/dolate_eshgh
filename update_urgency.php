@@ -85,12 +85,20 @@ $created_sql->close();
 $created_ts = (int)($created_row['created_ts'] ?? time());
 $remaining_seconds = max(0, $created_ts + ($avg_urgency_units * 86400) - time());
 
+// تعداد پیشنهادهای فوریت برای نمایش نتیجه، بدون بارگذاری دوباره صفحه
+$count_sql = $conn->prepare("SELECT COUNT(*) AS vote_count FROM topic_urgency_votes WHERE topic_id = ?");
+$count_sql->bind_param("i", $topic_id);
+$count_sql->execute();
+$vote_count = (int)($count_sql->get_result()->fetch_assoc()['vote_count'] ?? 0);
+$count_sql->close();
+
 // درخواست AJAX پاسخ کوتاه می‌گیرد تا نیازی به دریافت کل صفحه نباشد.
 if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
     header('Content-Type: application/json; charset=utf-8');
     echo json_encode([
         'success' => true,
         'urgency_units' => $avg_urgency_units,
+        'vote_count' => $vote_count,
         'remaining_seconds' => $remaining_seconds
     ], JSON_UNESCAPED_UNICODE);
     exit;
