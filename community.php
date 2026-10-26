@@ -219,7 +219,7 @@ textarea{resize:vertical;}
 .topic-description{display:none;position:absolute;top:calc(100% + 6px);right:0;width:360px;max-width:calc(100vw - 60px);margin:0;padding:10px 12px;background:#fff;color:#374151;font-size:14px;line-height:1.9;white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid #9ac7ff;border-radius:8px;box-shadow:0 5px 16px rgba(0,0,0,.16);z-index:1500;font-weight:normal;}
 .topic-title-wrap:hover .topic-description,.topic-title-wrap:focus-within .topic-description{display:block;}
 .topic-header{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;}
-.topic-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
+.topic-actions{display:flex;gap:6px;align-items:center;flex-wrap:nowrap;}
 .topic-actions form{display:inline-flex;align-items:center;gap:6px;}
 .priority-btn, .urgency-btn{padding:6px 10px;font-size:13px;border-radius:6px;cursor:pointer;}
 .action-tooltip{position:relative;display:inline-flex;align-items:center;}
@@ -241,7 +241,7 @@ textarea{resize:vertical;}
 .idea-action-tooltip-text{display:none !important;}}
 .urgency-input{width:60px;text-align:center;padding:6px;font-size:13px;}
 .community-urgency-controls{position:relative;display:inline-block;max-width:100%;margin:0;}
-.community-urgency-controls>summary{display:block;list-style:none;background:#f1c40f;color:#222;cursor:pointer;border-radius:6px;padding:8px 10px;font-size:13px;font-weight:bold;text-align:center;white-space:nowrap;}
+.community-urgency-controls>summary{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;width:92px;min-width:92px;max-width:92px;height:36px;min-height:36px;padding:0 6px;list-style:none;background:#f1c40f;color:#222;cursor:pointer;border-radius:6px;font-family:Tahoma,Arial,sans-serif;font-size:13px;font-weight:bold;line-height:1;text-align:center;white-space:nowrap;}
 .community-urgency-controls>summary::-webkit-details-marker{display:none;}
 .community-urgency-controls>summary::marker{content:"";}
 .community-urgency-controls[open]>summary{border-radius:6px 6px 0 0;}
@@ -281,6 +281,7 @@ textarea{resize:vertical;}
 .card{background:#f7f8fa;border:1px solid #ccc;text-align:center;padding:14px;border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,0.04);}
 
 @media (min-width:721px){
+    .topic-actions>.community-urgency-controls{display:inline-block;flex:0 0 92px;width:92px;min-width:92px;}
     .idea-action-tooltip{width:160px;max-width:160px;}
     /* هم‌اندازه‌کردن دکمه فوریت با دکمه اولویت فقط در صفحه‌نمایش کامپیوتر */
     .topic-actions form[action="toggle_priority.php"] button,
