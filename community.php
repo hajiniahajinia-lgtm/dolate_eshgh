@@ -1653,6 +1653,19 @@ function toggleCommunityIdeaContent(id){
     if(!content) return;
     const button = content.parentElement.querySelector('.community-idea-read-more');
     const expanded = content.classList.toggle('is-expanded');
+    if(expanded){
+        content.style.display = 'block';
+        content.style.webkitLineClamp = 'unset';
+        content.style.overflow = 'visible';
+        content.style.maxHeight = 'none';
+        content.style.height = 'auto';
+    } else {
+        content.style.display = '-webkit-box';
+        content.style.webkitLineClamp = '3';
+        content.style.overflow = 'hidden';
+        content.style.maxHeight = '';
+        content.style.height = '';
+    }
     if(button){
         button.textContent = expanded ? 'بستن ادامه' : 'مشاهده ادامه';
         button.setAttribute('aria-expanded', expanded ? 'true' : 'false');
@@ -1662,7 +1675,23 @@ function setupCommunityIdeaReadMore(root){
     (root || document).querySelectorAll('.community-idea-content').forEach(function(content){
         const button = content.parentElement.querySelector('.community-idea-read-more');
         if(!button) return;
-        content.classList.remove('is-expanded');
+        const wasExpanded = content.classList.contains('is-expanded');
+        if(wasExpanded){
+            content.style.display = 'block';
+            content.style.webkitLineClamp = 'unset';
+            content.style.overflow = 'visible';
+            content.style.maxHeight = 'none';
+            content.style.height = 'auto';
+            button.textContent = 'بستن ادامه';
+            button.setAttribute('aria-expanded','true');
+            button.style.display = 'inline-block';
+            return;
+        }
+        content.style.display = '-webkit-box';
+        content.style.webkitLineClamp = '3';
+        content.style.overflow = 'hidden';
+        content.style.maxHeight = '';
+        content.style.height = '';
         button.textContent = 'مشاهده ادامه';
         button.setAttribute('aria-expanded','false');
         button.style.display = content.scrollHeight > content.clientHeight + 2 ? 'inline-block' : 'none';
