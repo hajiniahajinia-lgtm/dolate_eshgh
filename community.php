@@ -1048,7 +1048,8 @@ $removal_msg_key = (string)($_GET['removal_msg'] ?? '');
       <p class="topic-picker-error" id="topic-picker-error" role="alert" hidden>لطفاً یک موضوع انتخاب کنید.</p>
     </div>
     <label>متن ایده</label>
-    <textarea name="idea_text" rows="4" required placeholder="ایده خود را بنویسید..."></textarea>
+    <textarea name="idea_text" rows="4" maxlength="25000" required placeholder="ایده خود را بنویسید... (حداکثر ۲۵٬۰۰۰ نویسه؛ تقریباً ۱۰ صفحه کتاب)"></textarea>
+    <small style="display:block;color:#666;margin-top:4px;">حداکثر ۲۵٬۰۰۰ نویسه (تقریباً ۱۰ صفحه کتاب).</small>
     <button type="submit">✅ ثبت ایده</button>
   </form>
 </div>
@@ -1196,7 +1197,8 @@ if ($remaining_seconds < 0) $remaining_seconds = 0;
     <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($community_duty_csrf, ENT_QUOTES, 'UTF-8') ?>">
     <input type="hidden" name="community_id" value="<?= $community['id'] ?>">
     <input type="hidden" name="topic_id" value="<?= $tid ?>">
-    <textarea name="idea_text" placeholder="✍️ ثبت ایده جدید..." required></textarea>
+    <textarea name="idea_text" maxlength="25000" placeholder="✍️ ثبت ایده جدید... (حداکثر ۲۵٬۰۰۰ نویسه؛ تقریباً ۱۰ صفحه کتاب)" required></textarea>
+    <small style="display:block;color:#666;margin-top:4px;">حداکثر ۲۵٬۰۰۰ نویسه (تقریباً ۱۰ صفحه کتاب).</small>
     <button type="submit">➕ ثبت ایده</button>
   </form>
 </div>
