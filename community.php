@@ -1063,7 +1063,7 @@ $topics_count_res = $topics_count_q->get_result()->fetch_assoc();
 $topics_count_q->close();
 $topics_count = (int)$topics_count_res['cnt'];
 ?>
-<div class="box" style="background:#fff3a6;">
+<div class="box" style="background:#fff3a6; padding:20px;">
 <h3>📘 موضوعات در حال بحث (<?= $topics_count ?>)</h3>
 <div id="topics-wrapper" style="max-height:540px; overflow-y:auto; padding:10px;">
 <?php
