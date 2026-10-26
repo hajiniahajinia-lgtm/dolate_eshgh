@@ -561,6 +561,33 @@ body{
     overflow-wrap: break-word;
     white-space: normal;
 }
+.idea-content-preview{
+    display:-webkit-box;
+    -webkit-box-orient:vertical;
+    -webkit-line-clamp:3;
+    line-clamp:3;
+    overflow:hidden;
+    white-space:normal;
+    overflow-wrap:anywhere;
+}
+.idea-content-preview.is-expanded{
+    display:block;
+    -webkit-line-clamp:unset;
+    line-clamp:unset;
+    overflow:visible;
+}
+.idea-read-more{
+    display:none;
+    margin-top:5px;
+    padding:0;
+    border:0;
+    background:transparent;
+    color:#1769aa;
+    font:inherit;
+    font-weight:bold;
+    text-decoration:underline;
+    cursor:pointer;
+}
 
 .small{
     font-size:14px;
@@ -1379,7 +1406,8 @@ body{
           تعداد امتیازدهی‌ها: <?= $author_person_score_votes ?>
         </span>
       </span></strong><br>
-      <?= nl2br(htmlspecialchars($icontent, ENT_QUOTES, 'UTF-8')) ?>
+      <div class="idea-content-preview" id="idea-content-<?= $iid ?>"><?= nl2br(htmlspecialchars($icontent, ENT_QUOTES, 'UTF-8')) ?></div>
+      <button type="button" class="idea-read-more" aria-expanded="false" aria-controls="idea-content-<?= $iid ?>" onclick="toggleIdeaContent(<?= $iid ?>)">مشاهده ادامه</button>
   </div>
 
   <div class="small" style="margin-top:6px">
@@ -1572,6 +1600,32 @@ function toggleIdea(id){
         box.style.display = 'none';
     }
 }
+function toggleIdeaContent(id){
+    const content = document.getElementById('idea-content-' + id);
+    if(!content) return;
+    const button = content.parentElement.querySelector('.idea-read-more');
+    const expanded = content.classList.toggle('is-expanded');
+    if(button){
+        button.textContent = expanded ? 'بستن ادامه' : 'مشاهده ادامه';
+        button.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    }
+}
+function setupIdeaReadMore(){
+    document.querySelectorAll('.idea-content-preview').forEach(function(content){
+        const button = content.parentElement.querySelector('.idea-read-more');
+        if(!button) return;
+        content.classList.remove('is-expanded');
+        button.textContent = 'مشاهده ادامه';
+        button.setAttribute('aria-expanded','false');
+        button.style.display = content.scrollHeight > content.clientHeight + 2 ? 'inline-block' : 'none';
+    });
+}
+if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', setupIdeaReadMore);
+} else {
+    setupIdeaReadMore();
+}
+window.addEventListener('resize', setupIdeaReadMore);
 </script>
 <script>
 (function(){
