@@ -139,6 +139,12 @@ document.addEventListener("DOMContentLoaded", function() {
         pickerToggle.addEventListener("click", function() {
             pickerList.hidden = !pickerList.hidden;
         });
+        if (communitySelect.value) {
+            const selectedOption = pickerList.querySelector('.community-picker-option[data-value="' + communitySelect.value + '"]');
+            if (selectedOption) {
+                pickerToggle.textContent = selectedOption.querySelector(".community-name").textContent.replace(/^□\s*/, "");
+            }
+        }
         pickerList.querySelectorAll(".community-picker-option").forEach(function(option) {
             option.addEventListener("click", function() {
                 communitySelect.value = this.dataset.value;
