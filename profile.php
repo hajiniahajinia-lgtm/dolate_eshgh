@@ -515,6 +515,19 @@ $is_child = !empty($nc['parent_community_id']);
 <label>نام جامعه*</label>
 <input type="text" name="community_name" required>
 
+<label>نوع جامعه*</label>
+<select name="community_type" id="communityType" required>
+    <option value="کشور">کشور</option>
+    <option value="شهر">شهر</option>
+    <option value="روستا یا منطقه">روستا یا منطقه</option>
+    <option value="کارخانه یا محل کار">کارخانه یا محل کار</option>
+    <option value="دانشگاه یا مرکز آموزشی">دانشگاه یا مرکز آموزشی</option>
+    <option value="سازمان یا نهاد">سازمان یا نهاد</option>
+    <option value="گروه با هدف مشترک" selected>گروه با هدف مشترک</option>
+    <option value="سایر">سایر</option>
+</select>
+<input type="text" name="community_type_custom" id="communityTypeCustom" maxlength="100" placeholder="نوع جامعه را بنویسید" style="display:none;margin-top:8px;">
+
 <label>وظایف و رویکردها*</label>
 <textarea name="community_approach" required></textarea>
 
@@ -524,6 +537,21 @@ $is_child = !empty($nc['parent_community_id']);
 
 <button type="submit">✅ ایجاد جامعه</button>
 </form>
+<script>
+(function () {
+    const typeSelect = document.getElementById('communityType');
+    const customType = document.getElementById('communityTypeCustom');
+    if (!typeSelect || !customType) return;
+    function updateCustomType() {
+        const isOther = typeSelect.value === 'سایر';
+        customType.style.display = isOther ? 'block' : 'none';
+        customType.required = isOther;
+        if (!isOther) customType.value = '';
+    }
+    typeSelect.addEventListener('change', updateCustomType);
+    updateCustomType();
+})();
+</script>
 </div>
 </details>
 
