@@ -451,6 +451,52 @@ textarea{resize:vertical;}
   }
 }
 
+
+/* فقط موبایل: محبوبیت کاربر و معقول‌ترین ایده هم‌اندازه و کنار هم */
+@media (max-width: 720px) {
+  .idea-actions {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: stretch !important;
+    gap: 6px !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+  }
+  .idea-actions > .idea-action-tooltip,
+  .idea-actions > form {
+    display: flex !important;
+    flex: 1 1 0 !important;
+    flex-direction: row !important;
+    align-items: stretch !important;
+    min-width: 0 !important;
+    width: auto !important;
+    margin: 0 !important;
+  }
+  .idea-actions > .idea-action-tooltip > a,
+  .idea-actions > form > .idea-action-tooltip,
+  .idea-actions > form > .idea-action-tooltip > button {
+    display: flex !important;
+    flex: 1 1 0 !important;
+    align-items: center !important;
+    justify-content: center !important;
+    box-sizing: border-box !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    width: 100% !important;
+    height: 42px !important;
+    min-height: 42px !important;
+    max-height: 42px !important;
+    margin: 0 !important;
+    padding: 3px 4px !important;
+    font-size: 12px !important;
+    line-height: 1.25 !important;
+    text-align: center !important;
+    white-space: normal !important;
+  }
+}
+
 </style>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
