@@ -187,7 +187,7 @@ textarea{resize:vertical;}
 .archive-topics-toggle>summary::marker{content:"";}
 .archive-topics-toggle[open]>summary{border-radius:8px 8px 0 0;}
 .archive-topics-content{margin-top:0;border-radius:0 0 10px 10px;}
-@media(max-width:520px){.community-topic-shortcuts{gap:6px}.community-topic-shortcuts>.final-voting-toggle,.community-topic-shortcuts>.archive-topics-toggle{padding:10px 6px;font-size:13px;line-height:1.5;}}
+@media(max-width:520px){.community-topic-shortcuts{display:flex!important;flex-direction:row!important;flex-wrap:nowrap!important;align-items:stretch;gap:6px}.community-topic-shortcuts>.final-voting-toggle,.community-topic-shortcuts>.archive-topics-toggle{display:flex;flex:1 1 0;min-width:0;width:50%;align-items:center;justify-content:center;padding:9px 4px;font-size:12px;line-height:1.45;text-align:center;overflow-wrap:anywhere;}}
 
 
 .community-duties-toggle[open]>summary{border-radius:7px 7px 0 0;}
