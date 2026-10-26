@@ -945,7 +945,9 @@ $removal_messages = [
 ];
 $removal_msg_key = (string)($_GET['removal_msg'] ?? '');
 ?>
-<section class="box" style="text-align:right;border-color:#e6b8b8">
+<details class="box" style="text-align:right;border-color:#e6b8b8;padding:0;overflow:hidden">
+  <summary style="display:block;cursor:pointer;list-style:none;padding:12px 14px;background:#fff1f1;color:#8f1d1d;border-radius:10px;font-weight:bold">⚖️ رأی‌گیری برای اخراج عضو <span style="font-size:12px;font-weight:normal;color:#667085"> (برای مشاهده درخواست‌ها و رأی‌ها بزنید)</span></summary>
+  <div style="padding:14px">
   <h3 style="margin-bottom:8px">⚖️ رأی‌گیری برای اخراج عضو</h3>
   <?php if (isset($removal_messages[$removal_msg_key])): ?>
     <p style="padding:8px;background:#fff8e1;border-radius:6px;color:#624b00"><?= htmlspecialchars($removal_messages[$removal_msg_key], ENT_QUOTES, 'UTF-8') ?></p>
@@ -993,7 +995,8 @@ $removal_msg_key = (string)($_GET['removal_msg'] ?? '');
       </div>
     <?php endforeach; ?>
   <?php endif; ?>
-</section>
+  </div>
+</details>
 
 <div style="text-align:center; margin:15px 0;">
   <a href="community_stats.php?community_id=<?= $community['id'] ?>">
