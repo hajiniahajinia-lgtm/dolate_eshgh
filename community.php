@@ -1587,6 +1587,9 @@ el.addEventListener('mouseleave', function(){
 (function(){
   const actions = document.getElementById('communityMobileActions');
   if (!actions) return;
+  const header = actions.closest('.community-header');
+  const actionsPlaceholder = document.createComment('community-mobile-actions-position');
+  actions.parentNode.insertBefore(actionsPlaceholder, actions);
   const backLink = document.querySelector('.community-header a[href="profile.php"]');
   const backWrap = backLink ? backLink.parentElement : null;
   const leaveForm = document.querySelector('.community-header form[action="leave_community.php"]');
@@ -1601,7 +1604,10 @@ el.addEventListener('mouseleave', function(){
   function arrangeActions(){
     if (window.matchMedia('(max-width: 720px)').matches) {
       nodes.forEach(node => actions.appendChild(node));
+      // ردیف دکمه‌ها باید در پایین‌ترین بخش کادر سربرگ باشد.
+      header.appendChild(actions);
     } else {
+      if (actionsPlaceholder.parentNode) actionsPlaceholder.parentNode.insertBefore(actions, actionsPlaceholder);
       nodes.forEach(node => {
         const placeholder = placeholders.get(node);
         if (placeholder && placeholder.parentNode) placeholder.parentNode.insertBefore(node, placeholder);
