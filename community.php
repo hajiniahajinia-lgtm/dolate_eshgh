@@ -261,11 +261,12 @@ textarea{resize:vertical;}
 .tooltip-box{position:absolute;top:26px;left:0;background:#fff;border:1px solid #ccc;border-radius:8px;padding:8px;min-width:180px;z-index:1000;box-shadow:0 2px 6px rgba(0,0,0,0.15);font-size:13px;display:none;}
 
 .topic-form-toggle{margin:12px 0 16px;}
-.topic-form-toggle>summary{display:block;list-style:none;background:#2065d1;color:#fff;cursor:pointer;border-radius:8px;padding:12px 14px;text-align:center;font-weight:bold;}
+/* دکمه و زمینهٔ فرم ثبت موضوع/ایده؛ رنگ دکمه ۲۰٪ روشن‌تر شده است */
+.topic-form-toggle>summary{display:block;list-style:none;background:#4A82DA;color:#fff;cursor:pointer;border-radius:8px;padding:12px 14px;text-align:center;font-weight:bold;}
 .topic-form-toggle>summary::-webkit-details-marker{display:none;}
 .topic-form-toggle>summary::marker{content:"";}
 .topic-form-toggle[open]>summary{border-radius:8px 8px 0 0;}
-.topic-form-toggle[open]>.topic-form{margin-top:0;border-radius:0 0 10px 10px;}
+.topic-form-toggle[open]>.topic-form{margin-top:0;border-radius:0 0 10px 10px;background:#4A82DA;border-color:#4A82DA;}
 .card-form h3{margin-top:0;margin-bottom:8px;}
 .topic-picker{position:relative;margin-top:6px}
 .topic-picker-button{width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;text-align:right;background:#fff;color:#263238;border:1px solid #bbb;padding:10px 12px;border-radius:7px;font:inherit;line-height:1.8;margin:0;min-height:44px}
