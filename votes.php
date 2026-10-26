@@ -1159,7 +1159,6 @@ body{
   <div class="card" id="active-topics">
   <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
       <h3>موضوعات در حال رأی‌گیری (<?= $active_count ?>)</h3>
-      <span class="badge">فعال</span>
     </div>
 
 <?php while($t = $active_res->fetch_assoc()):
