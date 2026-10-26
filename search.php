@@ -9,6 +9,7 @@ $topics = [];
 $ideas = [];
 $communities = [];
 $users = [];
+$member_community_ids = [];
 $search_error = false;
 
 if ($q !== '') {
@@ -32,6 +33,18 @@ if ($q !== '') {
         $stmt->execute();
         $ideas = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
         $stmt->close();
+
+        if (isset($_SESSION['user_id'])) {
+            $membership_stmt = $conn->prepare("SELECT community_id FROM community_members WHERE user_id=?");
+            $logged_in_user_id = (int)$_SESSION['user_id'];
+            $membership_stmt->bind_param("i", $logged_in_user_id);
+            $membership_stmt->execute();
+            $membership_result = $membership_stmt->get_result();
+            while ($membership_row = $membership_result->fetch_assoc()) {
+                $member_community_ids[] = (int)$membership_row['community_id'];
+            }
+            $membership_stmt->close();
+        }
 
         $stmt = $conn->prepare("SELECT id, name FROM communities WHERE name LIKE ? ORDER BY name ASC LIMIT 30");
         $stmt->bind_param("s", $like);
@@ -103,7 +116,21 @@ h2{font-size:18px;margin:0 0 10px}.result{padding:12px 0;border-bottom:1px solid
 <?php endif; ?>
 <section class="panel"><h2>جامعه‌ها (<?= count($communities) ?>)</h2>
 <?php if (!$communities): ?><p class="empty">جامعه‌ای پیدا نشد.</p><?php endif; ?>
-<?php foreach ($communities as $item): ?><div class="result"><a class="result-title" href="community.php?id=<?= (int)$item['id'] ?>"><?= search_h($item['name']) ?></a></div><?php endforeach; ?>
+<?php foreach ($communities as $item): ?>
+<?php $community_is_member = in_array((int)$item['id'], $member_community_ids, true); ?>
+<div class="result">
+<?php if ($community_is_member): ?>
+<a class="result-title" href="community.php?id=<?= (int)$item['id'] ?>"><?= search_h($item['name']) ?></a>
+<div class="meta">شما عضو این جامعه هستید؛ برای ورود کلیک کنید.</div>
+<?php elseif (isset($_SESSION['user_id'])): ?>
+<a class="result-title" href="profile.php?join_community=<?= (int)$item['id'] ?>#join-community">عضویت در جامعهٔ «<?= search_h($item['name']) ?>» ←</a>
+<div class="meta">برای ورود به این جامعه، ابتدا باید عضو شوید.</div>
+<?php else: ?>
+<a class="result-title" href="login.php">ورود برای عضویت در جامعهٔ «<?= search_h($item['name']) ?>» ←</a>
+<div class="meta">ابتدا وارد حساب کاربری شوید و سپس عضویت را انجام دهید.</div>
+<?php endif; ?>
+</div>
+<?php endforeach; ?>
 </section>
 <section class="panel"><h2>کاربران دولت عشق (<?= count($users) ?>)</h2>
 <?php if (!$users): ?><p class="empty">کاربری با این نام پیدا نشد.</p><?php endif; ?>
