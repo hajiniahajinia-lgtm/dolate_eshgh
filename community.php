@@ -231,6 +231,8 @@ textarea{resize:vertical;}
 .idea-action-tooltip:hover .idea-action-tooltip-text,
 .idea-action-tooltip:focus-within .idea-action-tooltip-text{display:block;}
 @media (max-width:720px){
+    /* آبی پررنگ‌تر فقط برای کارت موضوعات در نسخه موبایل */
+    .topic{background:#B7D9F5;}
     .community-mobile-actions{display:flex;flex-direction:row;flex-wrap:nowrap;align-items:center;gap:6px;width:100%;margin:8px 0 12px;}
     .community-mobile-actions>*{flex:1 1 0;min-width:0;max-width:33.333%;margin:0!important;text-align:center!important;}
     .community-mobile-actions a,.community-mobile-actions form button,.community-mobile-actions .members-button{display:flex;align-items:center;justify-content:center;width:100%;min-height:42px;box-sizing:border-box;padding:7px 3px!important;font-size:10px!important;line-height:1.35;white-space:normal;margin:0!important;}
