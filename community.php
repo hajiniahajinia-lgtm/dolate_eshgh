@@ -612,12 +612,14 @@ document.addEventListener('DOMContentLoaded', function () {
   }
   ?>
   <p style="margin:10px 0 14px;line-height:1.9;"><strong>وظایف و رویکردهای جامعه:</strong><br>
+    <span class="community-duty-description">
     <?php if ($current_duty): ?>
       <?= nl2br(htmlspecialchars($current_duty['content'], ENT_QUOTES, 'UTF-8')) ?>
       <span style="display:inline-block;color:#946200;font-size:12px;">(<?= (int)$current_duty['vote_count'] ?> رأی معقولیت)</span>
     <?php else: ?>
       <?= nl2br(htmlspecialchars((string)($community['approach'] ?? ''), ENT_QUOTES, 'UTF-8')) ?>
     <?php endif; ?>
+    </span>
   </p>
   <details class="community-duties-toggle">
     <summary>پیشنهاد برای رویکردها و وظایف</summary>
@@ -1293,6 +1295,49 @@ $losers_count  = (int)$arch_stats['losers'];
 
 <script>
 document.addEventListener("DOMContentLoaded", function() {
+    // شرح وظایف در موبایل پس از ۲۰۰ نویسه کوتاه می‌شود و با لمس باز می‌شود.
+    const dutyDescription = document.querySelector('.community-duty-description');
+    if (dutyDescription) {
+        const originalHtml = dutyDescription.innerHTML;
+        const originalText = dutyDescription.textContent.trim();
+        const limit = 200;
+        let expanded = false;
+        function renderDutyDescription() {
+            if (window.matchMedia('(max-width: 720px)').matches && Array.from(originalText).length > limit) {
+                dutyDescription.style.cursor = 'pointer';
+                dutyDescription.setAttribute('role', 'button');
+                dutyDescription.setAttribute('tabindex', '0');
+                dutyDescription.setAttribute('aria-expanded', String(expanded));
+                if (expanded) {
+                    dutyDescription.innerHTML = originalHtml + ' <span style="color:#2065d1;font-size:12px;">(نمایش کمتر)</span>';
+                } else {
+                    dutyDescription.textContent = Array.from(originalText).slice(0, limit).join('') + '…';
+                }
+            } else {
+                dutyDescription.innerHTML = originalHtml;
+                dutyDescription.style.cursor = '';
+                dutyDescription.removeAttribute('role');
+                dutyDescription.removeAttribute('tabindex');
+                dutyDescription.removeAttribute('aria-expanded');
+                expanded = false;
+            }
+        }
+        function toggleDutyDescription() {
+            if (!window.matchMedia('(max-width: 720px)').matches || Array.from(originalText).length <= limit) return;
+            expanded = !expanded;
+            renderDutyDescription();
+        }
+        dutyDescription.addEventListener('click', toggleDutyDescription);
+        dutyDescription.addEventListener('keydown', function(event) {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                toggleDutyDescription();
+            }
+        });
+        renderDutyDescription();
+        window.addEventListener('resize', renderDutyDescription);
+    }
+
     // ثبت اولویت و فوریت بدون بارگذاری مجدد صفحه
     // استفاده از رویداددهی واگذار‌شده تا فرم‌های ایده‌ای که بعداً به‌روزرسانی می‌شوند نیز بدون رفرش کار کنند.
     document.addEventListener("submit", async function(event) {
