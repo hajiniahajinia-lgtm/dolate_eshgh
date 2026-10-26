@@ -542,6 +542,13 @@ body{
     font-weight:bold;
 }
 
+/* دکمهٔ جمع‌شوندهٔ تنظیم فوریت */
+.urgency-controls{margin-top:8px;text-align:right;}
+.urgency-controls summary{display:inline-block;cursor:pointer;list-style:none;padding:8px 12px;border-radius:7px;background:#f1c40f;color:#333;font-size:14px;font-weight:bold;}
+.urgency-controls summary::-webkit-details-marker{display:none;}
+.urgency-controls[open]{padding:8px;border:1px solid #e7d58a;border-radius:8px;background:#fffdf3;}
+.urgency-controls[open] summary{margin-bottom:8px;}
+.urgency-controls .form-inline{margin-top:4px;}
 /* فرم فوریت */
 .form-inline{
     display:flex;
@@ -780,19 +787,22 @@ body{
        <div class="small">زمان باقی‌مانده: 
     <span class="countdown" data-remaining="<?= $remaining_seconds ?>" data-start="<?= $voting_started_unix ?>"></span>
 </div>
-        <form class="form-inline" method="post" data-topic="<?= $tid ?>">
-          <input type="hidden" name="topic_id" value="<?= $tid ?>">
-          <label for="urgency-days-<?= $tid ?>">فوریت انتخابی شما (روز):</label>
-          <input id="urgency-days-<?= $tid ?>" type="number" name="urgency_days" min="1" max="365" value="<?= $my_urgency_days ?>" title="فوریت انتخابی شما بر حسب روز">
-          <span class="urgency-help-wrap">
-            <button type="submit" name="set_urgency" aria-describedby="urgency-help-<?= $tid ?>">ثبت فوریت</button>
-            <span class="urgency-tooltip" id="urgency-help-<?= $tid ?>" role="tooltip">
-              <strong>چرا فوریت را ثبت می‌کنیم؟</strong>
-              در «دولت عشق»، مدت رأی‌گیری با مشارکت اعضا تعیین می‌شود. هر عضو زمان مورد نیاز خود را انتخاب می‌کند و همهٔ رأی‌ها وزن یکسان دارند. سامانه میانگین انتخاب‌ها را محاسبه می‌کند و آن را به روز کامل بالاتر گرد می‌کند. اگر انتخابتان را تغییر دهید، رأی قبلی شما جایگزین می‌شود. با تغییر میانگین، زمان باقی‌مانده دوباره محاسبه می‌شود؛ شمارش از ابتدا آغاز نمی‌شود.
+        <details class="urgency-controls">
+          <summary>⏱ تنظیم فوریت</summary>
+          <form class="form-inline" method="post" data-topic="<?= $tid ?>">
+            <input type="hidden" name="topic_id" value="<?= $tid ?>">
+            <label for="urgency-days-<?= $tid ?>">فوریت انتخابی شما (روز):</label>
+            <input id="urgency-days-<?= $tid ?>" type="number" name="urgency_days" min="1" max="365" value="<?= $my_urgency_days ?>" title="فوریت انتخابی شما بر حسب روز">
+            <span class="urgency-help-wrap">
+              <button type="submit" name="set_urgency" aria-describedby="urgency-help-<?= $tid ?>">ثبت فوریت</button>
+              <span class="urgency-tooltip" id="urgency-help-<?= $tid ?>" role="tooltip">
+                <strong>چرا فوریت را ثبت می‌کنیم؟</strong>
+                در «دولت عشق»، مدت رأی‌گیری با مشارکت اعضا تعیین می‌شود. هر عضو زمان مورد نیاز خود را انتخاب می‌کند و همهٔ رأی‌ها وزن یکسان دارند. سامانه میانگین انتخاب‌ها را محاسبه می‌کند و آن را به روز کامل بالاتر گرد می‌کند. اگر انتخابتان را تغییر دهید، رأی قبلی شما جایگزین می‌شود. با تغییر میانگین، زمان باقی‌مانده دوباره محاسبه می‌شود؛ شمارش از ابتدا آغاز نمی‌شود.
+              </span>
             </span>
-          </span>
-          <div class="small urgency-own-status"><?= $has_urgency_vote ? 'انتخاب قبلی شما ثبت شده است.' : 'هنوز انتخابی ثبت نکرده‌اید؛ با ثبت فرم، مقدار این کادر به‌عنوان رأی شما ذخیره می‌شود.' ?></div>
-        </form>
+            <div class="small urgency-own-status"><?= $has_urgency_vote ? 'انتخاب قبلی شما ثبت شده است.' : 'هنوز انتخابی ثبت نکرده‌اید؛ با ثبت فرم، مقدار این کادر به‌عنوان رأی شما ذخیره می‌شود.' ?></div>
+          </form>
+        </details>
       </div>
     </div>
 
