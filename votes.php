@@ -512,6 +512,16 @@ body{
     box-shadow:0 2px 6px rgba(0,0,0,0.05);
 }
 
+/* هر موضوع در یک کلید باز و بسته‌شونده */
+.topic-collapse{width:100%;box-sizing:border-box;border:1px solid #d7b35d;border-radius:12px;background:#fffdf3;overflow:hidden;}
+.topic-collapse>summary{display:block;list-style:none;cursor:pointer;padding:13px 42px 13px 14px;background:#fff0c2;color:#4c3a0b;font-weight:bold;border-radius:11px;position:relative;overflow-wrap:anywhere;}
+.topic-collapse>summary::-webkit-details-marker{display:none;}
+.topic-collapse>summary:before{content:"＋";position:absolute;right:14px;top:50%;transform:translateY(-50%);font-size:18px;}
+.topic-collapse[open]>summary{border-radius:11px 11px 0 0;border-bottom:1px solid #e5d7ac;}
+.topic-collapse[open]>summary:before{content:"−";}
+.topic-collapse>.topic{border:0;border-radius:0;box-shadow:none;margin:0;}
+.topic-collapse .topic-title-wrap h4{display:none;}
+
 /* موضوع */
 .topic{
     background:#fffdf3;
@@ -1211,7 +1221,9 @@ body{
         $participation = participation_percent($conn,$tid);
     }
 ?>
-  <div class="topic" data-topic="<?= $tid ?>" style="<?= $is_finalized ? 'opacity:0.7;' : '' ?>">
+  <details class="topic-collapse">
+    <summary><?= htmlspecialchars($topic_title, ENT_QUOTES, 'UTF-8') ?></summary>
+    <div class="topic" data-topic="<?= $tid ?>" style="<?= $is_finalized ? 'opacity:0.7;' : '' ?>">
     <div class="header-row">
       <div style="flex:1 1 60%;">
         <div class="topic-title-wrap">
@@ -1407,6 +1419,7 @@ body{
     } // end ideas loop
     ?>
     </div>
+    </details>
   </div>
 <?php endwhile; $active_res->close(); ?>
   </div>
