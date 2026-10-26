@@ -1204,7 +1204,7 @@ if ($remaining_seconds < 0) $remaining_seconds = 0;
           <input type="hidden" name="topic_id" value="<?= $tid ?>">
           <input type="hidden" name="community_id" value="<?= $community['id'] ?>">
           <span class="action-tooltip">
-            <button type="submit" title="اولویت موضوع را ثبت یا لغو می‌کند؛ مجموع اولویت اعضا در مرتب‌سازی موضوعات اثر دارد." style="background:<?= $user_has_priority ? '#f1c40f' : '#ccc' ?>;">
+            <button type="submit" title="اولویت موضوع را ثبت یا لغو می‌کند؛ مجموع اولویت اعضا در مرتب‌سازی موضوعات اثر دارد." style="background:<?= $user_has_priority ? '#f1c40f' : '#ccc' ?>;color:#000;">
                 ⭐ اولویت
             </button>
             <span class="action-tooltip-text" role="tooltip">با ثبت اولویت، اهمیت این موضوع را برای جامعه نشان می‌دهید. موضوع‌ها بر اساس مجموع اولویت اعضا مرتب می‌شوند؛ با کلیک دوباره می‌توانید اولویت خود را لغو کنید.</span>
