@@ -879,7 +879,7 @@ document.addEventListener('DOMContentLoaded',function(){
   <div class="columns">
     <div class="column winners">
       <details class="archive-group">
-        <summary>🏆 برنده‌ها (<?= count($winners) ?>)</summary>
+        <summary>📌 موضوعات منتخب (<?= count($winners) ?>)</summary>
         <div class="archive-group-body">
         <?php if(!empty($winners)): foreach($winners as $row): ?>
         <div class="card">
@@ -950,7 +950,7 @@ document.addEventListener('DOMContentLoaded',function(){
             </div>
         </div>
         <?php endforeach; else: ?>
-        <p>هیچ موضوع برنده‌ای یافت نشد.</p>
+        <p>هنوز موضوع منتخبی در آرشیو وجود ندارد.</p>
         <?php endif; ?>
         </div>
       </details>
@@ -958,7 +958,7 @@ document.addEventListener('DOMContentLoaded',function(){
 
     <div class="column losers">
       <details class="archive-group">
-        <summary>❌ بازنده‌ها (<?= count($losers) ?>)</summary>
+        <summary>📝 موضوعات تأییدنشده (<?= count($losers) ?>)</summary>
         <div class="archive-group-body">
         <?php if(!empty($losers)): foreach($losers as $row): ?>
         <div class="card">
@@ -990,7 +990,7 @@ document.addEventListener('DOMContentLoaded',function(){
             </div>
         </div>
         <?php endforeach; else: ?>
-        <p>هیچ موضوع بازنده‌ای یافت نشد.</p>
+        <p>موضوع تأییدنشده‌ای در آرشیو وجود ندارد.</p>
         <?php endif; ?>
         </div>
       </details>
