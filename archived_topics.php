@@ -434,7 +434,9 @@ function updateElectionCountdowns(){
 }
 document.addEventListener('DOMContentLoaded',function(){
     // بعد از ثبت فرم‌های داوطلبی، رأی یا فوریت، موقعیت صفحه و ستون‌ها حفظ شود.
-    const scrollKey='archivedTopicsScroll:'+window.location.pathname+window.location.search;
+    const communityParam=new URLSearchParams(window.location.search).get('community_id')||'';
+    // کلید باید بعد از ریدایرکت وضعیت داوطلبی هم ثابت بماند.
+    const scrollKey='archivedTopicsScroll:'+window.location.pathname+'?community_id='+communityParam;
     try{
         const saved=JSON.parse(sessionStorage.getItem(scrollKey)||'null');
         if(saved){
