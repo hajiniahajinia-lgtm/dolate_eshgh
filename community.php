@@ -170,6 +170,9 @@ textarea{resize:vertical;}
 .community-duties-toggle>summary::-webkit-details-marker{display:none;}
 .community-duties-toggle>summary::marker{content:"";}
 
+.final-voting-toggle,.archive-topics-toggle{display:block;text-decoration:none;text-align:center;box-sizing:border-box;}
+.final-voting-toggle{background:#27ae60;color:#fff;border-radius:8px;padding:12px 14px;font-weight:bold;}
+.archive-topics-toggle{background:#2065d1;color:#fff;border-radius:8px;padding:12px 14px;font-weight:bold;}
 .final-voting-toggle{margin:0 0 16px;}
 .final-voting-toggle>summary{display:block;list-style:none;background:#27ae60;color:#fff;cursor:pointer;border-radius:8px;padding:12px 14px;text-align:center;font-weight:bold;}
 .final-voting-toggle>summary::-webkit-details-marker{display:none;}
@@ -184,7 +187,7 @@ textarea{resize:vertical;}
 .archive-topics-toggle>summary::marker{content:"";}
 .archive-topics-toggle[open]>summary{border-radius:8px 8px 0 0;}
 .archive-topics-content{margin-top:0;border-radius:0 0 10px 10px;}
-@media(max-width:520px){.community-topic-shortcuts{gap:6px}.community-topic-shortcuts>.final-voting-toggle>summary,.community-topic-shortcuts>.archive-topics-toggle>summary{padding:10px 6px;font-size:13px;line-height:1.5;}}
+@media(max-width:520px){.community-topic-shortcuts{gap:6px}.community-topic-shortcuts>.final-voting-toggle,.community-topic-shortcuts>.archive-topics-toggle{padding:10px 6px;font-size:13px;line-height:1.5;}}
 
 
 .community-duties-toggle[open]>summary{border-radius:7px 7px 0 0;}
@@ -1307,15 +1310,7 @@ $vote_count_res = $vote_count_q->get_result()->fetch_assoc();
 $vote_count_q->close();
 $vote_count = (int)$vote_count_res['cnt'];
 ?>
-<details class="final-voting-toggle" id="final-voting-toggle">
-  <summary>🗳 موضوعات در حال رأی‌گیری (<?= $vote_count ?>)</summary>
-  <div class="box final-voting-content">
-    <p>برای مشاهده و رأی‌گیری روی دکمه زیر کلیک کنید:</p>
-    <a href="votes.php?community_id=<?= (int)$community['id'] ?>" style="display:inline-block;padding:8px 16px;margin-top:10px;border-radius:6px;background:#27ae60;color:#fff;font-weight:bold;">
-      مشاهده موضوعات رأی‌گیری
-    </a>
-  </div>
-</details>
+<a class="final-voting-toggle" id="final-voting-toggle" href="votes.php?community_id=<?= (int)$community['id'] ?>">🗳 موضوعات در حال رأی‌گیری (<?= $vote_count ?>)</a>
 
 <!-- کارت آرشیو موضوعات -->
 <?php
@@ -1343,19 +1338,7 @@ $total_archived = (int)$arch_stats['total'];
 $winners_count = (int)$arch_stats['winners'];
 $losers_count  = (int)$arch_stats['losers'];
 ?>
-<details class="archive-topics-toggle" id="archive-topics-toggle">
-  <summary>📦 آرشیو موضوعات (<?= $total_archived ?>)</summary>
-  <div class="card archive-topics-content">
-    <div class="small" style="margin-bottom:8px">
-        مجموع آرشیو: <strong><?= $total_archived ?></strong> &nbsp;|&nbsp;
-        ✅ برنده‌ها: <strong><?= $winners_count ?></strong> &nbsp;|&nbsp;
-        ❌ بازنده‌ها: <strong><?= $losers_count ?></strong>
-    </div>
-    <a href="archived_topics.php?community_id=<?= (int)$community_id ?>" style="display:inline-block;padding:8px 14px;background:#2065d1;color:#fff;border-radius:8px;text-decoration:none;font-weight:bold">
-        مشاهده جزئیات آرشیو
-    </a>
-  </div>
-</details>
+<a class="archive-topics-toggle" id="archive-topics-toggle" href="archived_topics.php?community_id=<?= (int)$community_id ?>">📦 آرشیو موضوعات (<?= $total_archived ?>)</a>
 
 <?php else: ?>
 <div class="box">
