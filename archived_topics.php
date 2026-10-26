@@ -340,6 +340,14 @@ h1{margin:0 0 18px;font-size:22px;text-align:center}
 .column.winners{background:#e8f9e8}
 .column.losers{background:#ffe5e5}
 .column h2{margin-top:0;font-size:20px;text-align:center;font-weight:700;color:#222}
+.archive-group{width:100%;box-sizing:border-box;border-radius:10px;overflow:hidden;}
+.archive-group>summary{display:block;list-style:none;cursor:pointer;text-align:center;font-size:18px;font-weight:700;padding:13px 10px;border-radius:8px;}
+.archive-group>summary::-webkit-details-marker{display:none;}
+.archive-group>summary:after{content:"＋";float:left;font-size:18px;}
+.archive-group[open]>summary:after{content:"−";}
+.winners .archive-group>summary{background:#c9efc9;color:#20572a;}
+.losers .archive-group>summary{background:#ffd0d0;color:#8a2020;}
+.archive-group-body{padding-top:12px;}
 .card{background:#fff;border-radius:12px;padding:14px;box-shadow:0 2px 8px rgba(0,0,0,0.06);display:flex;gap:14px;align-items:flex-start;margin-bottom:12px;flex-direction:column; word-break:break-word; overflow-wrap:break-word; min-width:0;}
 .title{font-weight:700;color:#222;font-size:17px;margin-bottom:6px; word-break:break-word;}
 .title-wrap{position:relative;display:inline-block;max-width:100%;}
@@ -870,7 +878,9 @@ document.addEventListener('DOMContentLoaded',function(){
   <?php if(!$candidate_tables_ready): ?><div style="margin:0 0 14px;padding:10px;border-radius:8px;background:#fff3cd;color:#664d03;text-align:center">برای فعال‌شدن داوطلبی و انتخاب مجری، فایل <strong>migration_execution_candidates.sql</strong> را یک‌بار در پایگاه داده همین سایت اجرا کنید.</div><?php elseif(!$election_tables_ready): ?><div style="margin:0 0 14px;padding:10px;border-radius:8px;background:#fff3cd;color:#664d03;text-align:center">برای فعال‌شدن فوریت و نهایی‌شدن انتخابات مجری، فایل <strong>migration_execution_election_urgency.sql</strong> را یک‌بار و به‌صورت کنترل‌شده در پایگاه داده اجرا کنید.</div><?php endif; ?>
   <div class="columns">
     <div class="column winners">
-        <h2>🏆 برنده‌ها</h2>
+      <details class="archive-group">
+        <summary>🏆 برنده‌ها (<?= count($winners) ?>)</summary>
+        <div class="archive-group-body">
         <?php if(!empty($winners)): foreach($winners as $row): ?>
         <div class="card">
             <div class="title-wrap">
@@ -942,10 +952,14 @@ document.addEventListener('DOMContentLoaded',function(){
         <?php endforeach; else: ?>
         <p>هیچ موضوع برنده‌ای یافت نشد.</p>
         <?php endif; ?>
+        </div>
+      </details>
     </div>
 
     <div class="column losers">
-        <h2>❌ بازنده‌ها</h2>
+      <details class="archive-group">
+        <summary>❌ بازنده‌ها (<?= count($losers) ?>)</summary>
+        <div class="archive-group-body">
         <?php if(!empty($losers)): foreach($losers as $row): ?>
         <div class="card">
             <div class="title-wrap">
@@ -978,6 +992,8 @@ document.addEventListener('DOMContentLoaded',function(){
         <?php endforeach; else: ?>
         <p>هیچ موضوع بازنده‌ای یافت نشد.</p>
         <?php endif; ?>
+        </div>
+      </details>
     </div>
   </div>
 </div>
