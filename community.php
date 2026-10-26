@@ -270,6 +270,9 @@ textarea{resize:vertical;}
 .ideas-box{margin-top:10px;background:#fff;padding:10px;border-radius:8px;border:1px solid #ddd;max-height:200px;overflow-y:auto;}
 .idea{background:#fff;border:1px solid #e0f0ff;border-radius:8px;padding:10px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:flex-start;gap:8px;}
 .idea .text{flex:1 1 auto;max-width:100%;word-break:break-word;}
+.community-idea-content{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;line-clamp:3;overflow:hidden;white-space:normal;overflow-wrap:anywhere;}
+.community-idea-content.is-expanded{display:block;-webkit-line-clamp:unset;line-clamp:unset;overflow:visible;}
+.community-idea-read-more{display:none;margin-top:4px;padding:0;border:0;background:transparent;color:#1769aa;font:inherit;font-weight:bold;text-decoration:underline;cursor:pointer;}
 .idea-rationality button{background:#27ae60;color:#fff;padding:6px 8px;font-size:13px;border-radius:6px;white-space:nowrap;border:none;}
 
 .user-tooltip{position:relative;cursor:pointer;color:#2065d1;}
@@ -1264,7 +1267,8 @@ if ($remaining_seconds < 0) $remaining_seconds = 0;
             <div class="idea-meta" style="font-size:12px;color:#555;margin-bottom:4px;">
                 ⏱ ثبت شده در: <?= htmlspecialchars(community_format_jalali_datetime($i['created_at']), ENT_QUOTES, 'UTF-8') ?>
             </div>
-            <?= nl2br(htmlspecialchars($i['content'])) ?>
+            <div class="community-idea-content" id="community-idea-content-<?= (int)$i['id'] ?>"><?= nl2br(htmlspecialchars($i['content'])) ?></div>
+            <button type="button" class="community-idea-read-more" aria-expanded="false" aria-controls="community-idea-content-<?= (int)$i['id'] ?>" onclick="toggleCommunityIdeaContent(<?= (int)$i['id'] ?>)">مشاهده ادامه</button>
             <div class="tooltip-box" id="tooltip-<?= (int)$i['uid'] ?>"><p>در حال بارگذاری...</p></div>
         </div>
         <div class="idea-actions" style="display:flex; flex-direction:column; gap:6px; min-width:110px; text-align:right;">
@@ -1510,6 +1514,7 @@ document.addEventListener("DOMContentLoaded", function() {
                     const currentIdeasBox = currentTopic.querySelector(".ideas-box");
                     if (!freshIdeasBox || !currentIdeasBox) throw new Error("بخش ایده‌ها در پاسخ پیدا نشد");
                     currentIdeasBox.innerHTML = freshIdeasBox.innerHTML;
+                    setupCommunityIdeaReadMore(currentIdeasBox);
                     return;
                 }
 
@@ -1642,7 +1647,35 @@ document.addEventListener("DOMContentLoaded", function() {
     }
 
     // ===== شمارش معکوس: برای هر موضوع فقط یک تایمر فعال باشد =====
-    function startTopicCountdown(el, initialSeconds) {
+    
+function toggleCommunityIdeaContent(id){
+    const content = document.getElementById('community-idea-content-' + id);
+    if(!content) return;
+    const button = content.parentElement.querySelector('.community-idea-read-more');
+    const expanded = content.classList.toggle('is-expanded');
+    if(button){
+        button.textContent = expanded ? 'بستن ادامه' : 'مشاهده ادامه';
+        button.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    }
+}
+function setupCommunityIdeaReadMore(root){
+    (root || document).querySelectorAll('.community-idea-content').forEach(function(content){
+        const button = content.parentElement.querySelector('.community-idea-read-more');
+        if(!button) return;
+        content.classList.remove('is-expanded');
+        button.textContent = 'مشاهده ادامه';
+        button.setAttribute('aria-expanded','false');
+        button.style.display = content.scrollHeight > content.clientHeight + 2 ? 'inline-block' : 'none';
+    });
+}
+if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', function(){ setupCommunityIdeaReadMore(); });
+} else {
+    setupCommunityIdeaReadMore();
+}
+window.addEventListener('resize', function(){ setupCommunityIdeaReadMore(); });
+
+function startTopicCountdown(el, initialSeconds) {
         if (el._countdownTimer) clearTimeout(el._countdownTimer);
         const endTs = Date.now() + Math.max(0, initialSeconds) * 1000;
 
