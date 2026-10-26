@@ -1026,43 +1026,10 @@ $removal_msg_key = (string)($_GET['removal_msg'] ?? '');
     <label for="topic-description">شرح موضوع (اختیاری)</label>
     <textarea id="topic-description" name="topic_description" rows="3" maxlength="500" placeholder="شرح کوتاهی از موضوع بنویسید؛ حداکثر 500 کاراکتر..."></textarea>
     <small style="display:block;color:#666;margin-top:4px;">پر کردن این بخش اختیاری است.</small>
+    <label for="topic-initial-idea">طرح ایده (اختیاری)</label>
+    <textarea id="topic-initial-idea" name="topic_initial_idea" rows="4" maxlength="25000" placeholder="اگر ایده‌ای برای حل این موضوع دارید، اینجا بنویسید؛ اختیاری است."></textarea>
+    <small style="display:block;color:#666;margin-top:4px;">نوشتن طرح ایده اختیاری است.</small>
     <button type="submit">✅ ثبت موضوع</button>
-  </form>
-</div>
-
-<!-- ثبت ایده -->
-<div class="card-form idea-form">
-  <h3>ثبت ایده</h3>
-  <form action="add_idea.php" method="post">
-    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($community_duty_csrf, ENT_QUOTES, 'UTF-8') ?>">
-    <input type="hidden" name="community_id" value="<?= (int)$community['id'] ?>">
-    <label for="topic-picker-button">انتخاب موضوع*</label>
-    <div class="topic-picker" id="topic-picker">
-      <input type="hidden" name="topic_id" id="selected-topic-id" value="">
-      <button type="button" class="topic-picker-button" id="topic-picker-button" aria-haspopup="listbox" aria-expanded="false">
-        <span id="selected-topic-label">انتخاب موضوع...</span>
-        <span class="topic-picker-arrow" aria-hidden="true">▾</span>
-      </button>
-      <div class="topic-picker-list" id="topic-picker-list" role="listbox" aria-label="موضوع‌ها" hidden>
-      <?php
-      $tq = $conn->prepare("SELECT id,title FROM topics WHERE community_id=? ORDER BY id DESC");
-      $tq->bind_param("i",$community['id']);
-      $tq->execute();
-      $tres = $tq->get_result();
-      while($tt = $tres->fetch_assoc()):
-      ?>
-        <button type="button" class="topic-picker-option" role="option" data-topic-id="<?= (int)$tt['id'] ?>">
-          <span class="topic-picker-marker" aria-hidden="true">◆</span>
-          <span class="topic-picker-title"><?= htmlspecialchars($tt['title'], ENT_QUOTES, 'UTF-8') ?></span>
-        </button>
-      <?php endwhile; $tq->close(); ?>
-      </div>
-      <p class="topic-picker-error" id="topic-picker-error" role="alert" hidden>لطفاً یک موضوع انتخاب کنید.</p>
-    </div>
-    <label>متن ایده</label>
-    <textarea name="idea_text" rows="4" maxlength="25000" required placeholder="ایده خود را بنویسید... (حداکثر ۲۵٬۰۰۰ نویسه)"></textarea>
-    <small style="display:block;color:#666;margin-top:4px;">حداکثر ۲۵٬۰۰۰ نویسه.</small>
-    <button type="submit">✅ ثبت ایده</button>
   </form>
 </div>
 
