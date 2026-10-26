@@ -177,6 +177,16 @@ textarea{resize:vertical;}
 .final-voting-toggle[open]>summary{border-radius:8px 8px 0 0;}
 .final-voting-content{margin-top:0;border-radius:0 0 10px 10px;}
 
+.community-topic-shortcuts{display:flex;align-items:flex-start;gap:10px;margin:0 0 16px;width:100%;box-sizing:border-box;}
+.community-topic-shortcuts>.final-voting-toggle,.community-topic-shortcuts>.archive-topics-toggle{flex:1 1 0;min-width:0;margin:0;}
+.archive-topics-toggle>summary{display:block;list-style:none;background:#2065d1;color:#fff;cursor:pointer;border-radius:8px;padding:12px 14px;text-align:center;font-weight:bold;overflow-wrap:anywhere;}
+.archive-topics-toggle>summary::-webkit-details-marker{display:none;}
+.archive-topics-toggle>summary::marker{content:"";}
+.archive-topics-toggle[open]>summary{border-radius:8px 8px 0 0;}
+.archive-topics-content{margin-top:0;border-radius:0 0 10px 10px;}
+@media(max-width:520px){.community-topic-shortcuts{gap:6px}.community-topic-shortcuts>.final-voting-toggle>summary,.community-topic-shortcuts>.archive-topics-toggle>summary{padding:10px 6px;font-size:13px;line-height:1.5;}}
+
+
 .community-duties-toggle[open]>summary{border-radius:7px 7px 0 0;}
 .community-duties h3{margin:0 0 6px;font-size:15px;color:#344054;}
 .community-duties-help,.community-duties-empty,.community-duties-notice{font-size:12px;line-height:1.9;color:#596579;margin:5px 0 9px;}
@@ -1248,17 +1258,19 @@ $total_archived = (int)$arch_stats['total'];
 $winners_count = (int)$arch_stats['winners'];
 $losers_count  = (int)$arch_stats['losers'];
 ?>
-<div class="card">
-    <h3 style="margin:0 0 8px 0">📦 آرشیو موضوعات</h3>
+<details class="archive-topics-toggle" id="archive-topics-toggle">
+  <summary>📦 آرشیو موضوعات (<?= $total_archived ?>)</summary>
+  <div class="card archive-topics-content">
     <div class="small" style="margin-bottom:8px">
         مجموع آرشیو: <strong><?= $total_archived ?></strong> &nbsp;|&nbsp;
         ✅ برنده‌ها: <strong><?= $winners_count ?></strong> &nbsp;|&nbsp;
         ❌ بازنده‌ها: <strong><?= $losers_count ?></strong>
     </div>
-    <a href="archived_topics.php?community_id=<?= $community_id ?>" style="display:inline-block;padding:8px 14px;background:#2065d1;color:#fff;border-radius:8px;text-decoration:none;font-weight:bold">
+    <a href="archived_topics.php?community_id=<?= (int)$community_id ?>" style="display:inline-block;padding:8px 14px;background:#2065d1;color:#fff;border-radius:8px;text-decoration:none;font-weight:bold">
         مشاهده جزئیات آرشیو
     </a>
-</div>
+  </div>
+</details>
 
 <?php else: ?>
 <div class="box">
@@ -1605,9 +1617,14 @@ el.addEventListener('mouseleave', function(){
 // قرار دادن کلید رأی‌گیری نهایی بلافاصله زیر سربرگ جامعه.
 (function(){
   const votingToggle = document.getElementById('final-voting-toggle');
+  const archiveToggle = document.getElementById('archive-topics-toggle');
   const communityHeader = document.querySelector('.community-header');
-  if (votingToggle && communityHeader) {
-    communityHeader.insertAdjacentElement('afterend', votingToggle);
+  if (votingToggle && archiveToggle && communityHeader) {
+    const shortcuts = document.createElement('div');
+    shortcuts.className = 'community-topic-shortcuts';
+    communityHeader.insertAdjacentElement('afterend', shortcuts);
+    shortcuts.appendChild(votingToggle);
+    shortcuts.appendChild(archiveToggle);
   }
 })();
 
