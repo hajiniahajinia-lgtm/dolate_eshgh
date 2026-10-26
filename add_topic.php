@@ -28,6 +28,17 @@ if (!isset($_POST['topic_title']) || !isset($_POST['community_id'])) {
 // ⬅️ محدودیت 100 کاراکتر
 $title = mb_substr(trim($_POST['topic_title']), 0, 100);
 $description = mb_substr(trim($_POST['topic_description'] ?? ''), 0, 500);
+$initial_idea = trim((string)($_POST['topic_initial_idea'] ?? ''));
+if (function_exists('mb_strlen')) {
+    $initial_idea_length = mb_strlen($initial_idea, 'UTF-8');
+} else {
+    preg_match_all('/./us', $initial_idea, $initial_idea_characters);
+    $initial_idea_length = count($initial_idea_characters[0]);
+}
+if ($initial_idea_length > 25000) {
+    http_response_code(400);
+    exit('طرح ایده بیش از حد مجاز است. حداکثر ۲۵٬۰۰۰ نویسه وارد کنید.');
+}
 
 if ($title === "") {
     die("⚠️ عنوان موضوع نمی‌تواند خالی باشد");
@@ -69,10 +80,25 @@ $stmt->bind_param(
 );
 
 if ($stmt->execute()) {
-    header("Location: community.php?id=" . $community_id . "&success_topic=1");
+    $new_topic_id = (int)$conn->insert_id;
+    if ($initial_idea !== '') {
+        $idea_stmt = $conn->prepare("INSERT INTO ideas (topic_id, user_id, content) VALUES (?, ?, ?)");
+        $idea_stmt->bind_param("iis", $new_topic_id, $user_id, $initial_idea);
+        if (!$idea_stmt->execute()) {
+            echo "⚠️ موضوع ثبت شد، اما ذخیره طرح ایده ناموفق بود: " . htmlspecialchars($idea_stmt->error, ENT_QUOTES, 'UTF-8');
+            $idea_stmt->close();
+            $stmt->close();
+            $conn->close();
+            exit();
+        }
+        $idea_stmt->close();
+        header("Location: community.php?id=" . $community_id . "&success_topic=1&success_idea=1");
+    } else {
+        header("Location: community.php?id=" . $community_id . "&success_topic=1");
+    }
     exit();
 } else {
-    echo "❌ خطا در ذخیره موضوع: " . $stmt->error;
+    echo "❌ خطا در ذخیره موضوع: " . htmlspecialchars($stmt->error, ENT_QUOTES, 'UTF-8');
 }
 
 $stmt->close();
