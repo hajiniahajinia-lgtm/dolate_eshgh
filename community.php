@@ -1024,9 +1024,7 @@ $removal_msg_key = (string)($_GET['removal_msg'] ?? '');
     <textarea name="topic_title" rows="2" maxlength="100" placeholder="عنوان موضوع*" aria-label="عنوان موضوع" required></textarea>
     <textarea id="topic-description" name="topic_description" rows="3" maxlength="500" placeholder="شرح موضوع (اختیاری)" aria-label="شرح موضوع (اختیاری)"></textarea>
     <small style="display:block;color:#666;margin-top:4px;">پر کردن این بخش اختیاری است.</small>
-    <label for="topic-initial-idea">طرح ایده (اختیاری)</label>
-    <textarea id="topic-initial-idea" name="topic_initial_idea" rows="4" maxlength="25000" placeholder="اگر ایده‌ای برای حل این موضوع دارید، اینجا بنویسید؛ اختیاری است."></textarea>
-    <small style="display:block;color:#666;margin-top:4px;">نوشتن طرح ایده اختیاری است.</small>
+    <textarea id="topic-initial-idea" name="topic_initial_idea" rows="4" maxlength="25000" placeholder="طرح ایده (اختیاری)" aria-label="طرح ایده (اختیاری)"></textarea>
     <button type="submit">✅ ثبت موضوع</button>
   </form>
 </div>
