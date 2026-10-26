@@ -8,6 +8,7 @@ $like = '%' . $q . '%';
 $topics = [];
 $ideas = [];
 $communities = [];
+$users = [];
 $search_error = false;
 
 if ($q !== '') {
@@ -36,6 +37,13 @@ if ($q !== '') {
         $stmt->bind_param("s", $like);
         $stmt->execute();
         $communities = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+        $stmt->close();
+
+        // جست‌وجوی اعضا فقط بر اساس نام کاربری؛ اطلاعات خصوصی کاربران نمایش داده نمی‌شود.
+        $stmt = $conn->prepare("SELECT id, username FROM users WHERE username LIKE ? ORDER BY username ASC LIMIT 30");
+        $stmt->bind_param("s", $like);
+        $stmt->execute();
+        $users = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
         $stmt->close();
     } catch (Throwable $e) {
         $search_error = true;
@@ -96,6 +104,10 @@ h2{font-size:18px;margin:0 0 10px}.result{padding:12px 0;border-bottom:1px solid
 <section class="panel"><h2>جامعه‌ها (<?= count($communities) ?>)</h2>
 <?php if (!$communities): ?><p class="empty">جامعه‌ای پیدا نشد.</p><?php endif; ?>
 <?php foreach ($communities as $item): ?><div class="result"><a class="result-title" href="community.php?id=<?= (int)$item['id'] ?>"><?= search_h($item['name']) ?></a></div><?php endforeach; ?>
+</section>
+<section class="panel"><h2>کاربران دولت عشق (<?= count($users) ?>)</h2>
+<?php if (!$users): ?><p class="empty">کاربری با این نام پیدا نشد.</p><?php endif; ?>
+<?php foreach ($users as $item): ?><div class="result"><strong><?= search_h($item['username']) ?></strong><div class="meta">عضو دولت عشق</div></div><?php endforeach; ?>
 </section>
 <section class="panel"><h2>موضوعات (<?= count($topics) ?>)</h2>
 <?php if (!$topics): ?><p class="empty">موضوعی پیدا نشد.</p><?php endif; ?>
