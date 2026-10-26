@@ -171,10 +171,10 @@ textarea{resize:vertical;}
 .community-duties-toggle>summary::marker{content:"";}
 
 .final-voting-toggle,.archive-topics-toggle{display:block;text-decoration:none;text-align:center;box-sizing:border-box;}
-.final-voting-toggle{background:#27ae60;color:#fff;border-radius:8px;padding:12px 14px;font-weight:bold;}
+.final-voting-toggle{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;min-height:42px;background:#4A82DA;color:#fff;border-radius:9px;padding:10px 14px;font-weight:bold;text-align:center;}
 .archive-topics-toggle{background:#2065d1;color:#fff;border-radius:8px;padding:12px 14px;font-weight:bold;}
 .final-voting-toggle{margin:0 0 16px;}
-.final-voting-toggle>summary{display:block;list-style:none;background:#27ae60;color:#fff;cursor:pointer;border-radius:8px;padding:12px 14px;text-align:center;font-weight:bold;}
+.final-voting-toggle>summary{display:block;list-style:none;background:#4A82DA;color:#fff;cursor:pointer;border-radius:9px;padding:10px 14px;text-align:center;font-weight:bold;}
 .final-voting-toggle>summary::-webkit-details-marker{display:none;}
 .final-voting-toggle>summary::marker{content:"";}
 .final-voting-toggle[open]>summary{border-radius:8px 8px 0 0;}
@@ -187,7 +187,7 @@ textarea{resize:vertical;}
 .archive-topics-toggle>summary::marker{content:"";}
 .archive-topics-toggle[open]>summary{border-radius:8px 8px 0 0;}
 .archive-topics-content{margin-top:0;border-radius:0 0 10px 10px;}
-@media(max-width:520px){.community-topic-shortcuts{display:flex!important;flex-direction:row!important;flex-wrap:nowrap!important;align-items:stretch;gap:6px}.community-topic-shortcuts>.final-voting-toggle,.community-topic-shortcuts>.archive-topics-toggle{display:flex;flex:1 1 0;min-width:0;width:50%;align-items:center;justify-content:center;padding:9px 4px;font-size:12px;line-height:1.45;text-align:center;overflow-wrap:anywhere;}}
+@media(max-width:520px){.community-topic-shortcuts{display:flex!important;flex-direction:row!important;flex-wrap:nowrap!important;align-items:stretch;gap:6px}.community-topic-shortcuts>.final-voting-toggle,.community-topic-shortcuts>.archive-topics-toggle{display:flex;flex:1 1 0;min-width:0;width:50%;min-height:42px;align-items:center;justify-content:center;padding:10px 4px;border-radius:9px;font-size:12px;line-height:1.45;text-align:center;overflow-wrap:anywhere;}}
 
 
 .community-duties-toggle[open]>summary{border-radius:7px 7px 0 0;}
