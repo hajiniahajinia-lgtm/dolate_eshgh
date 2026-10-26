@@ -1648,7 +1648,7 @@ document.addEventListener("DOMContentLoaded", function() {
 
     // ===== شمارش معکوس: برای هر موضوع فقط یک تایمر فعال باشد =====
     
-function toggleCommunityIdeaContent(id){
+window.toggleCommunityIdeaContent = function(id){
     const content = document.getElementById('community-idea-content-' + id);
     if(!content) return;
     const button = content.parentElement.querySelector('.community-idea-read-more');
