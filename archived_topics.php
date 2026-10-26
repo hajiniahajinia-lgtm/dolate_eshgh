@@ -45,7 +45,7 @@ if($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['toggle_execution_candida
  $check=$conn->prepare("SELECT id FROM topic_execution_candidates WHERE topic_id=? AND idea_id=? AND user_id=? LIMIT 1");$check->bind_param("iii",$topic_id,$idea_id,$user_id);$check->execute();$existing=$check->get_result()->fetch_assoc();$check->close();
  if($existing){$del=$conn->prepare("DELETE FROM topic_execution_candidates WHERE id=?");$cid=(int)$existing['id'];$del->bind_param("i",$cid);$del->execute();$del->close();$delvotes=$conn->prepare("DELETE FROM topic_execution_candidate_votes WHERE topic_id=? AND idea_id=? AND candidate_user_id=?");$delvotes->bind_param("iii",$topic_id,$idea_id,$user_id);$delvotes->execute();$delvotes->close();$status='cancelled';}
  else{$ins=$conn->prepare("INSERT INTO topic_execution_candidates (topic_id,idea_id,user_id) VALUES (?,?,?)");$ins->bind_param("iii",$topic_id,$idea_id,$user_id);$ins->execute();$ins->close();$status='joined';}
- header('Location: archived_topics.php?community_id='.$community_id.'&candidate_signup_status='.$status);exit;
+ header('Location: archived_topics.php?community_id='.$community_id.'&candidate_signup_status='.$status.'#topic-card-'.$topic_id);exit;
 }
 if($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['set_execution_election_urgency'])){
  if(!$candidate_tables_ready||!$election_tables_ready){header('Location: archived_topics.php?community_id='.$community_id.'&urgency_status=missing_schema');exit;}
@@ -884,7 +884,7 @@ document.addEventListener('DOMContentLoaded',function(){
         <summary>📌 موضوعات منتخب (<?= count($winners) ?>)</summary>
         <div class="archive-group-body">
         <?php if(!empty($winners)): foreach($winners as $row): ?>
-        <div class="card">
+        <div class="card" id="topic-card-<?= (int)$row['id'] ?>">
             <div class="title-wrap">
               <div class="title" tabindex="0"><?= htmlspecialchars($row['title'], ENT_QUOTES, 'UTF-8') ?></div>
               <?php if (trim((string)($row['description'] ?? '')) !== ''): ?>
