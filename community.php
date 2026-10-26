@@ -240,6 +240,16 @@ textarea{resize:vertical;}
     .community-duty-vote-form{align-self:flex-start;}
 .idea-action-tooltip-text{display:none !important;}}
 .urgency-input{width:60px;text-align:center;padding:6px;font-size:13px;}
+.community-urgency-controls{position:relative;display:inline-block;max-width:100%;margin:0;}
+.community-urgency-controls>summary{display:block;list-style:none;background:#f1c40f;color:#222;cursor:pointer;border-radius:6px;padding:8px 10px;font-size:13px;font-weight:bold;text-align:center;white-space:nowrap;}
+.community-urgency-controls>summary::-webkit-details-marker{display:none;}
+.community-urgency-controls>summary::marker{content:"";}
+.community-urgency-controls[open]>summary{border-radius:6px 6px 0 0;}
+.community-urgency-controls>form{display:flex;flex-wrap:wrap;align-items:center;gap:7px;min-width:170px;max-width:260px;padding:10px;background:#fff;border:1px solid #e0c35b;border-radius:0 0 8px 8px;box-shadow:0 4px 12px rgba(0,0,0,.12);}
+.community-urgency-controls .community-urgency-label{flex-basis:100%;font-size:12px;}
+.community-urgency-controls .urgency-input{box-sizing:border-box;width:90px;min-height:36px;margin:0;text-align:center;}
+.community-urgency-controls .urgency-btn{margin:0;min-height:36px;background:#f1c40f;color:#222;padding:7px 12px;}
+.community-urgency-help{display:block;flex-basis:100%;font-size:11px;line-height:1.7;color:#596579;}
 .ideas-box{margin-top:10px;background:#fff;padding:10px;border-radius:8px;border:1px solid #ddd;max-height:200px;overflow-y:auto;}
 .idea{background:#fff;border:1px solid #e0f0ff;border-radius:8px;padding:10px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:flex-start;gap:8px;}
 .idea .text{flex:1 1 auto;max-width:100%;word-break:break-word;}
@@ -1125,16 +1135,18 @@ if ($remaining_seconds < 0) $remaining_seconds = 0;
             <span class="action-tooltip-text" role="tooltip">با ثبت اولویت، اهمیت این موضوع را برای جامعه نشان می‌دهید. موضوع‌ها بر اساس مجموع اولویت اعضا مرتب می‌شوند؛ با کلیک دوباره می‌توانید اولویت خود را لغو کنید.</span>
           </span>
       </form>
-      <form action="update_urgency.php" method="post">
-        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($community_duty_csrf, ENT_QUOTES, 'UTF-8') ?>">
-        <input type="hidden" name="topic_id" value="<?= $tid ?>">
-        <input type="hidden" name="community_id" value="<?= $community['id'] ?>">
-        <input class="urgency-input" type="number" name="urgency_days" min="1" max="360" value="<?= $urgency ?>" required>
-        <span class="action-tooltip">
-          <button class="urgency-btn" type="submit" title="فوریت را بر حسب روز ثبت می‌کند؛ میانگین پیشنهادهای اعضا زمان موضوع را تعیین می‌کند.">⏱ فوریت</button>
-          <span class="action-tooltip-text" role="tooltip">تعداد روزهای پیشنهادی تا پایان فرصت بحث را در کادر وارد کنید و روی این دکمه بزنید. زمان فوریت موضوع بر اساس میانگین پیشنهادهای ثبت‌شدهٔ اعضا محاسبه می‌شود.</span>
-        </span>
-      </form>
+      <details class="community-urgency-controls">
+        <summary>⏱ تنظیم فوریت</summary>
+        <form action="update_urgency.php" method="post">
+          <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($community_duty_csrf, ENT_QUOTES, 'UTF-8') ?>">
+          <input type="hidden" name="topic_id" value="<?= $tid ?>">
+          <input type="hidden" name="community_id" value="<?= $community['id'] ?>">
+          <label class="community-urgency-label">مدت فوریت (روز)</label>
+          <input class="urgency-input" type="number" name="urgency_days" min="1" max="360" value="<?= $urgency ?>" required>
+          <button class="urgency-btn" type="submit" title="فوریت را بر حسب روز ثبت می‌کند؛ میانگین پیشنهادهای اعضا زمان موضوع را تعیین می‌کند.">ثبت فوریت</button>
+          <small class="community-urgency-help">زمان فوریت موضوع بر اساس میانگین پیشنهادهای ثبت‌شدهٔ اعضا محاسبه می‌شود.</small>
+        </form>
+      </details>
     </div>
   </div>
   <div class="ideas-box">
