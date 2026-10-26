@@ -392,6 +392,65 @@ textarea{resize:vertical;}
 }
 /* ===== پایان پیش‌نمایش چیدمان موبایلی جامعه ===== */
 
+
+/* فقط موبایل: اولویت، کادر روزهای فوریت و دکمه فوریت در یک ردیف و هم‌اندازه */
+@media (max-width: 720px) {
+  .topic-actions {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: stretch !important;
+    gap: 6px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+  .topic-actions form[action="toggle_priority.php"] {
+    display: flex !important;
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+    width: auto !important;
+    margin: 0 !important;
+  }
+  .topic-actions form[action="update_urgency.php"] {
+    display: flex !important;
+    flex: 2 1 0 !important;
+    flex-direction: row !important;
+    align-items: stretch !important;
+    gap: 6px !important;
+    min-width: 0 !important;
+    width: auto !important;
+    margin: 0 !important;
+  }
+  .topic-actions form[action="toggle_priority.php"] .action-tooltip,
+  .topic-actions form[action="update_urgency.php"] .action-tooltip {
+    display: flex !important;
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+  }
+  .topic-actions form[action="toggle_priority.php"] button,
+  .topic-actions form[action="update_urgency.php"] .urgency-btn,
+  .topic-actions form[action="update_urgency.php"] .urgency-input {
+    box-sizing: border-box !important;
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    width: 100% !important;
+    height: 42px !important;
+    min-height: 42px !important;
+    max-height: 42px !important;
+    margin: 0 !important;
+    padding: 0 3px !important;
+    font-size: 12px !important;
+    line-height: 1.2 !important;
+    text-align: center !important;
+  }
+  .topic-actions form[action="update_urgency.php"] .urgency-input {
+    -moz-appearance: textfield;
+  }
+}
+
 </style>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
