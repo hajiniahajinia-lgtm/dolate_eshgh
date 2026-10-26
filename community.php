@@ -542,7 +542,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
 <?php if ($community): ?>
 <div class="box community-header">
-  <h2><?=htmlspecialchars($community['name'])?></h2>
+  <div class="community-header-top" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+    <h2 style="margin:0;flex:1 1 auto;min-width:0;"><?=htmlspecialchars($community['name'])?></h2>
+    <a href="community_stats.php?community_id=<?= (int)$community['id'] ?>" style="display:inline-flex;align-items:center;justify-content:center;gap:6px;background:#0099cc;color:#fff;text-decoration:none;padding:9px 13px;border-radius:8px;font-size:13px;font-weight:bold;white-space:nowrap;box-sizing:border-box;">📊 گزارش آماری جامعه</a>
+  </div>
   <div class="community-mobile-actions" id="communityMobileActions" aria-label="دسترسی‌های جامعه"></div>
   <div style="margin:0 0 12px;text-align:right;">
     <a href="profile.php" style="display:inline-block;background:#2065d1;color:#fff;text-decoration:none;padding:9px 14px;border-radius:8px;font-weight:bold;font-size:14px;">↩ بازگشت به پروفایل</a>
@@ -1013,13 +1016,7 @@ $removal_msg_key = (string)($_GET['removal_msg'] ?? '');
   </div>
 </details>
 
-<div style="text-align:center; margin:15px 0;">
-  <a href="community_stats.php?community_id=<?= $community['id'] ?>">
-    <button style="background:#0099cc;color:#fff;border:none;padding:10px 18px;border-radius:8px;font-size:14px;cursor:pointer;">
-      📊 گزارش آماری جامعه
-    </button>
-  </a>
-</div>
+
 
 <!-- ثبت موضوع و طرح ایده؛ فرم به‌صورت پیش‌فرض جمع‌شده است -->
 <details class="topic-form-toggle">
