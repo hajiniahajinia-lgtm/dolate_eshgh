@@ -58,8 +58,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $asset_id = (int)$conn->insert_id;
         $move_type = 'registered'; $notes = 'ثبت اولیهٔ مال در دفتر جامعه';
         $mv = $conn->prepare("INSERT INTO community_asset_movements (asset_id,community_id,movement_type,quantity_change,to_location,notes,created_by) VALUES (?,?,?, ?,?,?,?)");
-        $mv->bind_param('iis dssi', $asset_id, $community_id, $move_type, $quantity, $location, $notes, $user_id);
-        $mv->close();
         $mv = $conn->prepare("INSERT INTO community_asset_movements (asset_id,community_id,movement_type,quantity_change,to_location,notes,created_by) VALUES (?,?,?,?,?,?,?)");
         $mv->bind_param('iisdssi', $asset_id, $community_id, $move_type, $quantity, $location, $notes, $user_id);
         $mv->execute(); $mv->close();
