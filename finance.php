@@ -76,7 +76,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
       $ins = $conn->prepare("INSERT INTO community_budget_requests (community_id,requested_by,request_type,title,description,requested_amount,status) VALUES (?,?,?,?,?,?,'voting')");
       $ins->bind_param('iisssd', $community_id, $user_id, $request_type, $title, $description, $amount);
-      if ($ins->execute()) $message = 'درخواست بودجه ثبت شد و برای اعضا قابل مشاهده است. تصویب نهایی و پرداخت در این مرحله خودکار نیست.';
+      if ($ins->execute()) $message = ($request_type === 'expense' ? 'درخواست هزینه' : 'درخواست بودجه') . ' ثبت شد و برای اعضا قابل مشاهده است. تصویب نهایی و پرداخت در این مرحله خودکار نیست.';
       else $error = 'ثبت درخواست بودجه انجام نشد.';
       $ins->close();
     }
