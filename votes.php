@@ -745,6 +745,7 @@ body{
 }
 /* سربرگ جامعه در صفحه رأی‌گیری */
 .community-header{background:linear-gradient(125deg,#ff9fba 0%,#ffc878 20%,#b8e88a 40%,#91d8ff 60%,#b3a0ff 80%,#ff9bd4 100%);border-color:#e2dff0;text-align:right;}
+.finance-bank-toggle{display:block;width:100%;box-sizing:border-box;background:#147d64;color:#fff;border-radius:8px;padding:12px 14px;font-weight:bold;text-align:center;text-decoration:none;margin:8px 0 12px;}
 .community-mobile-actions{display:none;}
 .community-duties{margin:12px 0 8px;padding:12px;background:rgba(255,255,255,.76);border:1px solid #d9d6e9;border-radius:9px;text-align:right;}
 .community-duties-toggle{margin:12px 0 8px;}
@@ -786,6 +787,7 @@ body{
     <a href="community_stats.php?community_id=<?= (int)$community['id'] ?>" style="display:inline-flex;align-items:center;justify-content:center;gap:6px;background:#0099cc;color:#fff;text-decoration:none;padding:9px 13px;border-radius:8px;font-size:13px;font-weight:bold;white-space:nowrap;box-sizing:border-box;">📊 گزارش آماری جامعه</a>
   </div>
   <div class="community-mobile-actions" id="communityMobileActions" aria-label="دسترسی‌های جامعه"></div>
+  <a class="finance-bank-toggle" href="finance.php?community_id=<?= (int)$community_id ?>">🏦 بانک مالی و اموال جامعه</a>
   <div style="margin:0 0 12px;text-align:right;">
     <a href="profile.php" style="display:inline-block;background:#2065d1;color:#fff;text-decoration:none;padding:9px 14px;border-radius:8px;font-weight:bold;font-size:14px;">↩ بازگشت به پروفایل</a>
   </div>
