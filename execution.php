@@ -30,7 +30,10 @@ $stmt->bind_param('ii',$idea_id,$topic_id); $stmt->execute(); $plan=$stmt->get_r
 if (!$plan) { http_response_code(404); exit('طرح برنده یا مجری نهایی پیدا نشد.'); }
 $community_id=(int)$plan['community_id'];
 $finance_schema_q=$conn->query("SELECT COUNT(*) AS n FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN ('community_finance_settings','community_finance_transactions','community_assets','community_asset_movements','community_budget_requests','community_budget_request_votes')");
-$finance_schema_ready=$finance_schema_q && (int)$finance_schema_q->fetch_assoc()['n']===6;
+$finance_tables_ready=$finance_schema_q && (int)$finance_schema_q->fetch_assoc()['n']===6;
+$finance_columns_q=$conn->query("SELECT COUNT(*) AS n FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='community_budget_requests' AND column_name IN ('request_type','topic_id','idea_id','execution_plan_id')");
+$finance_columns_ready=$finance_columns_q && (int)$finance_columns_q->fetch_assoc()['n']===4;
+$finance_schema_ready=$finance_tables_ready && $finance_columns_ready;
 $member=$conn->prepare("SELECT 1 FROM community_members WHERE community_id=? AND user_id=? LIMIT 1");$member->bind_param('ii',$community_id,$user_id);$member->execute();$is_member=(bool)$member->get_result()->fetch_assoc();$member->close();
 if (!$is_member) { http_response_code(403); exit('فقط اعضای این جامعه می‌توانند صفحهٔ نظارت را ببینند.'); }
 if (empty($_SESSION['execution_monitor_csrf'])) $_SESSION['execution_monitor_csrf']=bin2hex(random_bytes(32));
