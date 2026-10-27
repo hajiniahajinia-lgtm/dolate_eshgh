@@ -757,7 +757,7 @@ document.addEventListener('DOMContentLoaded', function () {
     </span>
   </p>
   <details class="community-duties-toggle">
-    <summary>پیشنهاد برای رویکردها و وظایف</summary>
+    <summary>پیشنهاد برای رویکردها و وظایف این جامعه</summary>
     <div class="community-duties" id="community-duties">
     <h3>🌱 وظایف و رویکردها</h3>
     <p class="community-duties-help">اعضای جامعه پیشنهاد می‌دهند و با رأی معقولیت، مناسب‌ترین پیشنهادها در صدر قرار می‌گیرند.</p>
