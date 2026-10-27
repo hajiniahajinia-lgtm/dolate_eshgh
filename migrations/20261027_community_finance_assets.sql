@@ -68,6 +68,10 @@ CREATE TABLE IF NOT EXISTS community_budget_requests (
   id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
   community_id INT NOT NULL,
   requested_by INT NOT NULL,
+  request_type ENUM('budget','expense') NOT NULL DEFAULT 'budget',
+  topic_id INT NULL,
+  idea_id INT NULL,
+  execution_plan_id INT NULL,
   title VARCHAR(200) NOT NULL,
   description TEXT NOT NULL,
   requested_amount DECIMAL(18,2) NOT NULL,
@@ -81,7 +85,9 @@ CREATE TABLE IF NOT EXISTS community_budget_requests (
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   KEY idx_cbr_community_status (community_id, status, created_at),
-  KEY idx_cbr_requester (requested_by)
+  KEY idx_cbr_requester (requested_by),
+  KEY idx_cbr_topic_idea (topic_id, idea_id),
+  KEY idx_cbr_execution_plan (execution_plan_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS community_budget_request_votes (
