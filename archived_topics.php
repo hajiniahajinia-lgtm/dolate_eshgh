@@ -64,7 +64,7 @@ if($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['set_execution_election_u
  header('Location: archived_topics.php?community_id='.$community_id.'&urgency_status=saved');exit;
 }
 if($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['vote_for_candidate'])){
- if(!$candidate_tables_ready){header('Location: archived_topics.php?community_id='.$community_id.'&candidate_vote_status=missing_schema');exit;}
+ if(!$candidate_tables_ready||!$candidate_plans_ready){header('Location: archived_topics.php?community_id='.$community_id.'&candidate_vote_status=missing_schema');exit;}
  $topic_id=(int)($_POST['topic_id']??0);$idea_id=(int)($_POST['idea_id']??0);$candidate_uid=(int)($_POST['candidate_user_id']??0);
  $ms=$conn->prepare("SELECT 1 FROM community_members WHERE community_id=? AND user_id=? LIMIT 1");$ms->bind_param("ii",$community_id,$user_id);$ms->execute();$is_member=(bool)$ms->get_result()->fetch_assoc();$ms->close();
  $ws=$conn->prepare("SELECT 1 FROM topics t JOIN topic_voting_meta m ON m.topic_id=t.id JOIN topic_winners w ON w.topic_id=t.id AND w.idea_id=? WHERE t.id=? AND t.community_id=? AND m.finalized=1 LIMIT 1");$ws->bind_param("iii",$idea_id,$topic_id,$community_id);$ws->execute();$is_winner=(bool)$ws->get_result()->fetch_assoc();$ws->close();
@@ -278,7 +278,7 @@ while($row=$result->fetch_assoc()){
       }
     }
     $execution_candidates=[];$my_is_candidate=false;
-    if($status==='winner' && $winner_idea_is_enforceable && $candidate_tables_ready && !empty($winner_idea['idea_id'])){
+    if($status==='winner' && $winner_idea_is_enforceable && $candidate_tables_ready && $candidate_plans_ready && !empty($winner_idea['idea_id'])){
       $winner_idea_id=(int)$winner_idea['idea_id'];
       $mine=$conn->prepare("SELECT 1 FROM topic_execution_candidates WHERE topic_id=? AND idea_id=? AND user_id=? LIMIT 1");$mine->bind_param("iii",$topic_id,$winner_idea_id,$user_id);$mine->execute();$my_is_candidate=(bool)$mine->get_result()->fetch_assoc();$mine->close();
       $cl=$conn->prepare("SELECT c.user_id,u.username,p.initial_plan,p.estimated_days FROM topic_execution_candidates c JOIN topic_execution_candidate_plans p ON p.topic_id=c.topic_id AND p.idea_id=c.idea_id AND p.user_id=c.user_id JOIN users u ON u.id=c.user_id JOIN community_members cm ON cm.user_id=c.user_id AND cm.community_id=? WHERE c.topic_id=? AND c.idea_id=? ORDER BY u.username ASC");
@@ -909,7 +909,7 @@ document.addEventListener('DOMContentLoaded',function(){
             </div>
             <?php endif; ?>
 
-            <?php if($candidate_tables_ready && !empty($row['idea']['idea_id']) && empty($row['election']['final_candidate_user_id'])): ?>
+            <?php if($candidate_tables_ready && $candidate_plans_ready && !empty($row['idea']['idea_id']) && empty($row['election']['final_candidate_user_id'])): ?>
             <details class="execution-details">
               <summary>🙋 داوطلبان طرح منتخب (<?= count($row['execution_candidates']) ?>)</summary>
               <div class="execution-details-body">
