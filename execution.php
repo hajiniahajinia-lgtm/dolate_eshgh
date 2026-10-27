@@ -51,7 +51,20 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
 $updates=[];$uq=$conn->prepare("SELECT u.*,COALESCE(us.username,CONCAT('عضو ',u.user_id)) AS username FROM topic_execution_updates u LEFT JOIN users us ON us.id=u.user_id WHERE u.execution_plan_id=? ORDER BY u.created_at DESC,u.id DESC LIMIT 200");$pid=(int)$execution['id'];$uq->bind_param('i',$pid);$uq->execute();$ur=$uq->get_result();while($r=$ur->fetch_assoc())$updates[]=$r;$uq->close();
 $executor_name='';$us=$conn->prepare("SELECT username FROM users WHERE id=? LIMIT 1");$executor=(int)$plan['final_candidate_user_id'];$us->bind_param('i',$executor);$us->execute();$executor_name=$us->get_result()->fetch_assoc()['username']??('عضو '.$executor);$us->close();
 function em_h($v){return htmlspecialchars((string)$v,ENT_QUOTES,'UTF-8');}
-function em_date($v){if(!$v)return '—';$ts=strtotime($v);return $ts?date('Y/m/d H:i',$ts):'—';}
+function em_date($v){
+ if(!$v)return '—';$ts=strtotime($v);if(!$ts)return '—';
+ $gy=(int)date('Y',$ts);$gm=(int)date('n',$ts);$gd=(int)date('j',$ts);
+ $gdm=[31,28,31,30,31,30,31,31,30,31,30,31];$jy=0;
+ if($gy>1600){$jy=979;$gy-=1600;}else{$jy=0;$gy-=621;}
+ $gy2=($gm>2)?$gy+1:$gy;
+ $days=(365*$gy)+(int)(($gy2+3)/4)-(int)(($gy2+99)/100)+(int)(($gy2+399)/400)-80+$gd;
+ for($i=0;$i<$gm-1;$i++)$days+=$gdm[$i];
+ $jy+=33*(int)($days/12053);$days%=12053;$jy+=4*(int)($days/1461);$days%=1461;
+ if($days>365){$jy+=(int)(($days-1)/365);$days=($days-1)%365;}
+ if($days<186){$jm=1+(int)($days/31);$jd=1+($days%31);}else{$days-=186;$jm=7+(int)($days/30);$jd=1+($days%30);}
+ $fa=strtr(sprintf('%04d/%02d/%02d %02d:%02d',$jy,$jm,$jd,(int)date('H',$ts),(int)date('i',$ts)),['0'=>'۰','1'=>'۱','2'=>'۲','3'=>'۳','4'=>'۴','5'=>'۵','6'=>'۶','7'=>'۷','8'=>'۸','9'=>'۹']);
+ return $fa;
+}
 $labels=['preparing'=>'آماده‌سازی','in_progress'=>'در حال اجرا','blocked'=>'دارای مانع','completed'=>'تکمیل‌شده','progress'=>'گزارش پیشرفت','discussion'=>'هم‌اندیشی','problem'=>'مشکل اجرایی','delay'=>'گزارش تأخیر','misconduct'=>'گزارش تخلف احتمالی','response'=>'پاسخ مجری'];
 ?>
 <!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>نظارت و اجرای طرح</title>
