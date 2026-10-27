@@ -182,9 +182,9 @@ textarea{resize:vertical;}
 .community-duties-toggle>summary::-webkit-details-marker{display:none;}
 .community-duties-toggle>summary::marker{content:"";}
 
-.final-voting-toggle,.archive-topics-toggle{display:block;text-decoration:none;text-align:center;box-sizing:border-box;}
+.final-voting-toggle,.archive-topics-toggle,.finance-bank-toggle{display:block;text-decoration:none;text-align:center;box-sizing:border-box;}
 .final-voting-toggle{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;min-height:42px;background:#4A82DA;color:#fff;border-radius:9px;padding:10px 14px;font-weight:bold;text-align:center;}
-.archive-topics-toggle{background:#2065d1;color:#fff;border-radius:8px;padding:12px 14px;font-weight:bold;}
+.archive-topics-toggle{background:#2065d1;color:#fff;border-radius:8px;padding:12px 14px;font-weight:bold;}\n.finance-bank-toggle{background:#147d64;color:#fff;border-radius:8px;padding:12px 14px;font-weight:bold;margin:0 0 16px;}
 .final-voting-toggle{margin:0 0 16px;}
 .final-voting-toggle>summary{display:block;list-style:none;background:#4A82DA;color:#fff;cursor:pointer;border-radius:9px;padding:10px 14px;text-align:center;font-weight:bold;}
 .final-voting-toggle>summary::-webkit-details-marker{display:none;}
@@ -1365,7 +1365,7 @@ $total_archived = (int)$arch_stats['total'];
 $winners_count = (int)$arch_stats['winners'];
 $losers_count  = (int)$arch_stats['losers'];
 ?>
-<a class="archive-topics-toggle" id="archive-topics-toggle" href="archived_topics.php?community_id=<?= (int)$community_id ?>">📦 آرشیو موضوعات (<?= $total_archived ?>)</a>
+<a class="archive-topics-toggle" id="archive-topics-toggle" href="archived_topics.php?community_id=<?= (int)$community_id ?>">📦 آرشیو موضوعات (<?= $total_archived ?>)</a>\n<a class="finance-bank-toggle" id="finance-bank-toggle" href="finance.php?community_id=<?= (int)$community_id ?>">🏦 بانک مالی و اموال جامعه</a>
 
 <?php else: ?>
 <div class="box">
