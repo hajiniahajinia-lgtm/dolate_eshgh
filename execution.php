@@ -1,5 +1,20 @@
 <?php
 session_start();
+
+// Temporary diagnostic handler for the execution page's HTTP 500.
+// It avoids exposing diagnostic details to visitors who are not logged in.
+set_exception_handler(function ($e) {
+    error_log('execution.php failure: ' . get_class($e) . ': ' . $e->getMessage());
+    http_response_code(500);
+    if (!empty($_SESSION['user_id'])) {
+        $detail = htmlspecialchars(get_class($e) . ': ' . $e->getMessage(), ENT_QUOTES, 'UTF-8');
+        echo '<!doctype html><html lang="fa" dir="rtl"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>خطای صفحهٔ اجرا</title><body style="font-family:tahoma;max-width:850px;margin:30px auto;padding:16px;line-height:2"><h2>خطا در صفحهٔ نظارت و اجرای طرح</h2><p>این پیام برای تشخیص خطاست؛ لطفاً متن زیر را برای پشتیبانی بفرستید.</p><pre style="white-space:pre-wrap;overflow-wrap:anywhere;background:#f3f4f6;padding:12px;border-radius:8px">' . $detail . '</pre><p><a href="javascript:history.back()">بازگشت</a></p></body></html>';
+    } else {
+        echo 'خطای داخلی سرور. لطفاً دوباره وارد شوید.';
+    }
+    exit;
+});
+
 include __DIR__ . '/db.php';
 if (empty($_SESSION['user_id'])) { header('Location: login.php'); exit; }
 $user_id = (int)$_SESSION['user_id'];
