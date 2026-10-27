@@ -52,12 +52,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       $error = 'تاریخ ثبت‌شده معتبر نیست.';
     } else {
       $ins = $conn->prepare("INSERT INTO community_assets (community_id,asset_name,category,description,quantity,unit,estimated_value,location,asset_condition,acquired_on,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)");
-      $ins->bind_param('isssdsdss sii', $community_id, $name, $category, $description, $quantity, $unit, $value, $location, $condition, $acquired, $user_id, $user_id);
-      // bind_param type string without spaces
-      $ins->close();
-      $ins = $conn->prepare("INSERT INTO community_assets (community_id,asset_name,category,description,quantity,unit,estimated_value,location,asset_condition,acquired_on,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)");
-      $types = 'isssdsdss sii';
-      $types = str_replace(' ', '', $types);
+      $types = 'isssdsdsssii';
       $ins->bind_param($types, $community_id, $name, $category, $description, $quantity, $unit, $value, $location, $condition, $acquired, $user_id, $user_id);
       if ($ins->execute()) {
         $asset_id = (int)$conn->insert_id;
