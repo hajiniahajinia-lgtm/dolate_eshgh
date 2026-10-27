@@ -44,6 +44,7 @@ if (!$execution) {
   $executor=(int)$plan['final_candidate_user_id'];$initial=(string)$plan['initial_plan'];$ins->bind_param('iiiis',$topic_id,$idea_id,$community_id,$executor,$initial);$ins->execute();$ins->close();
   $state=$conn->prepare("SELECT * FROM topic_execution_plans WHERE topic_id=? AND idea_id=? LIMIT 1");$state->bind_param('ii',$topic_id,$idea_id);$state->execute();$execution=$state->get_result()->fetch_assoc();$state->close();
 }
+$pid=(int)$execution['id'];
 if ($_SERVER['REQUEST_METHOD']==='POST') {
   if (!hash_equals($csrf,(string)($_POST['csrf_token']??''))) { http_response_code(403); exit('درخواست معتبر نیست؛ صفحه را تازه‌سازی کنید.'); }
   $action=(string)($_POST['action']??'');
