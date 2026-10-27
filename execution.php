@@ -38,6 +38,9 @@ $member=$conn->prepare("SELECT 1 FROM community_members WHERE community_id=? AND
 if (!$is_member) { http_response_code(403); exit('فقط اعضای این جامعه می‌توانند صفحهٔ نظارت را ببینند.'); }
 if (empty($_SESSION['execution_monitor_csrf'])) $_SESSION['execution_monitor_csrf']=bin2hex(random_bytes(32));
 $csrf=$_SESSION['execution_monitor_csrf']; $message='';
+$stage_schema_q=$conn->query("SELECT COUNT(*) AS n FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='topic_execution_stages'");
+$stages_ready=$stage_schema_q && (int)$stage_schema_q->fetch_assoc()['n']===1;
+$stages=[];
 $state=$conn->prepare("SELECT * FROM topic_execution_plans WHERE topic_id=? AND idea_id=? LIMIT 1");$state->bind_param('ii',$topic_id,$idea_id);$state->execute();$execution=$state->get_result()->fetch_assoc();$state->close();
 if (!$execution) {
   $ins=$conn->prepare("INSERT IGNORE INTO topic_execution_plans (topic_id,idea_id,community_id,executor_user_id,initial_plan, status) VALUES (?,?,?,?,?,'preparing')");
@@ -106,6 +109,52 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
         }
       }
     }
+  } elseif ($action==='add_stage' || $action==='update_stage') {
+    if (!$stages_ready) {
+      $message='ساختار مرحله‌های اجرا هنوز نصب نشده است؛ فایل migrations/20261029_execution_stages.sql باید اجرا شود.';
+    } elseif ($user_id!==(int)$plan['final_candidate_user_id']) {
+      $message='فقط مجری منتخب می‌تواند مراحل برنامه را ثبت یا ویرایش کند.';
+    } else {
+      $stage_id=(int)($_POST['stage_id']??0);
+      $title=trim((string)($_POST['stage_title']??''));
+      $description=trim((string)($_POST['stage_description']??''));
+      $expected=trim((string)($_POST['expected_result']??''));
+      $start=em_jalali_to_gregorian($_POST['start_date']??'');
+      $due=em_jalali_to_gregorian($_POST['due_date']??'');
+      $status=(string)($_POST['stage_status']??'planned');
+      $progress=filter_var($_POST['progress_percent']??0,FILTER_VALIDATE_INT);
+      $note=trim((string)($_POST['completion_note']??''));
+      if (!in_array($status,['planned','in_progress','completed','delayed'],true)) $status='planned';
+      if ($status==='completed') $progress=100;
+      if ($progress===false || $progress<0 || $progress>100) $progress=0;
+      if ($title==='' || mb_strlen($title)>200 || $description==='' || mb_strlen($description)>10000 || mb_strlen($expected)>5000 || mb_strlen($note)>5000 || $start===false || $due===false || ($start && $due && $due<$start)) {
+        $message='عنوان، شرح یا تاریخ‌ها معتبر نیستند. تاریخ‌ها را به‌شکل شمسی ۱۴۰۵/۰۸/۰۵ وارد کنید و پایان را پیش از شروع نگذارید.';
+      } elseif ($action==='update_stage' && $stage_id<1) {
+        $message='شناسهٔ مرحله معتبر نیست.';
+      } else {
+        if ($action==='add_stage') {
+          $ins=$conn->prepare("INSERT INTO topic_execution_stages (execution_plan_id,title,description,expected_result,start_date,due_date,status,progress_percent,completion_note,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?)");
+          $ins->bind_param('issssssisii',$pid,$title,$description,$expected,$start,$due,$status,$progress,$note,$user_id,$user_id);
+          $ok=$ins->execute();$ins->close();
+        } else {
+          $check=$conn->prepare("SELECT id FROM topic_execution_stages WHERE id=? AND execution_plan_id=? LIMIT 1");
+          $check->bind_param('ii',$stage_id,$pid);$check->execute();$exists=(bool)$check->get_result()->fetch_assoc();$check->close();
+          if (!$exists) {$ok=false;$message='این مرحله برای همین طرح پیدا نشد.';}
+          else {
+            $upd=$conn->prepare("UPDATE topic_execution_stages SET title=?,description=?,expected_result=?,start_date=?,due_date=?,status=?,progress_percent=?,completion_note=?,updated_by=? WHERE id=? AND execution_plan_id=?");
+            $upd->bind_param('ssssssisiii',$title,$description,$expected,$start,$due,$status,$progress,$note,$user_id,$stage_id,$pid);
+            $ok=$upd->execute();$upd->close();
+          }
+        }
+        if ($ok) {
+          $type='progress';$log_title=($action==='add_stage'?'افزودن مرحلهٔ برنامه':'به‌روزرسانی مرحلهٔ برنامه');
+          $log_body='مرحله: '.$title.' | وضعیت: '.$status.' | پیشرفت: '.$progress.'٪';
+          $log=$conn->prepare("INSERT INTO topic_execution_updates (execution_plan_id,user_id,update_type,title,body) VALUES (?,?,?,?,?)");
+          $log->bind_param('iisss',$pid,$user_id,$type,$log_title,$log_body);$log->execute();$log->close();
+          $message=$action==='add_stage'?'مرحلهٔ جدید به برنامه اضافه شد.':'مرحلهٔ برنامه به‌روزرسانی شد.';
+        }
+      }
+    }
   } elseif ($action==='add_update') {
     $types=['progress','discussion','problem','delay','misconduct','response'];
     $type=(string)($_POST['update_type']??'discussion');if(!in_array($type,$types,true))$type='discussion';
@@ -129,9 +178,33 @@ if ($finance_schema_ready) {
     ORDER BY r.created_at DESC,r.id DESC LIMIT 100");
   $pid=(int)$execution['id'];$fr->bind_param('iiiii',$user_id,$community_id,$topic_id,$idea_id,$pid);$fr->execute();$frr=$fr->get_result();while($r=$frr->fetch_assoc())$finance_requests[]=$r;$fr->close();
 }
+$stages=[];
+if ($stages_ready) {
+ $sq=$conn->prepare("SELECT * FROM topic_execution_stages WHERE execution_plan_id=? ORDER BY CASE status WHEN 'delayed' THEN 0 WHEN 'in_progress' THEN 1 WHEN 'planned' THEN 2 ELSE 3 END, COALESCE(due_date,'9999-12-31'),id");
+ $pid=(int)$execution['id'];$sq->bind_param('i',$pid);$sq->execute();$sr=$sq->get_result();while($row=$sr->fetch_assoc())$stages[]=$row;$sq->close();
+}
 $updates=[];$uq=$conn->prepare("SELECT u.*,COALESCE(us.username,CONCAT('عضو ',u.user_id)) AS username FROM topic_execution_updates u LEFT JOIN users us ON us.id=u.user_id WHERE u.execution_plan_id=? ORDER BY u.created_at DESC,u.id DESC LIMIT 200");$pid=(int)$execution['id'];$uq->bind_param('i',$pid);$uq->execute();$ur=$uq->get_result();while($r=$ur->fetch_assoc())$updates[]=$r;$uq->close();
 $executor_name='';$us=$conn->prepare("SELECT username FROM users WHERE id=? LIMIT 1");$executor=(int)$plan['final_candidate_user_id'];$us->bind_param('i',$executor);$us->execute();$executor_name=$us->get_result()->fetch_assoc()['username']??('عضو '.$executor);$us->close();
 function em_h($v){return htmlspecialchars((string)$v,ENT_QUOTES,'UTF-8');}
+function em_jalali_to_gregorian($value){
+ $value=strtr(trim((string)$value),['۰'=>'0','۱'=>'1','۲'=>'2','۳'=>'3','۴'=>'4','۵'=>'5','۶'=>'6','۷'=>'7','۸'=>'8','۹'=>'9','٠'=>'0','١'=>'1','٢'=>'2','٣'=>'3','٤'=>'4','٥'=>'5','٦'=>'6','٧'=>'7','٨'=>'8','٩'=>'9']);
+ if($value==='')return null;
+ if(!preg_match('/^(\\d{4})[\\/-](\\d{1,2})[\\/-](\\d{1,2})$/',$value,$m))return false;
+ $jy=(int)$m[1];$jm=(int)$m[2];$jd=(int)$m[3];
+ if($jm<1||$jm>12||$jd<1||$jd>($jm<=6?31:($jm<=11?30:30)))return false;
+ $jy+=1595;
+ $days=-355668+(365*$jy)+(int)($jy/33)*8+(int)((($jy%33)+3)/4)+$jd;
+ $days+=($jm<7)?(($jm-1)*31):((($jm-7)*30)+186);
+ $gy=400*(int)($days/146097);$days%=146097;
+ if($days>36524){$gy+=100*(int)(--$days/36524);$days%=36524;if($days>=365)$days++;}
+ $gy+=4*(int)($days/1461);$days%=1461;
+ if($days>365){$gy+=(int)(($days-1)/365);$days=($days-1)%365;}
+ $gd=$days+1;$leap=(($gy%4===0&&$gy%100!==0)||$gy%400===0);
+ $months=[31,$leap?29:28,31,30,31,30,31,31,30,31,30,31];$gm=1;
+ while($gm<=12&&$gd>$months[$gm-1]){$gd-=$months[$gm-1];$gm++;}
+ if($gm>12)return false;
+ return sprintf('%04d-%02d-%02d',$gy,$gm,$gd);
+}
 function em_date($v){
  if(!$v)return '—';$ts=strtotime($v);if(!$ts)return '—';
  $gy=(int)date('Y',$ts);$gm=(int)date('n',$ts);$gd=(int)date('j',$ts);
@@ -146,7 +219,7 @@ function em_date($v){
  $fa=strtr(sprintf('%04d/%02d/%02d %02d:%02d',$jy,$jm,$jd,(int)date('H',$ts),(int)date('i',$ts)),['0'=>'۰','1'=>'۱','2'=>'۲','3'=>'۳','4'=>'۴','5'=>'۵','6'=>'۶','7'=>'۷','8'=>'۸','9'=>'۹']);
  return $fa;
 }
-$labels=['preparing'=>'آماده‌سازی','in_progress'=>'در حال اجرا','blocked'=>'دارای مانع','completed'=>'تکمیل‌شده','progress'=>'گزارش پیشرفت','discussion'=>'هم‌اندیشی','problem'=>'مشکل اجرایی','delay'=>'گزارش تأخیر','misconduct'=>'گزارش تخلف احتمالی','response'=>'پاسخ مجری'];
+$labels=['planned'=>'در انتظار شروع','in_progress'=>'در حال اجرا','completed'=>'تکمیل‌شده','delayed'=>'دارای تأخیر','preparing'=>'آماده‌سازی','in_progress'=>'در حال اجرا','blocked'=>'دارای مانع','completed'=>'تکمیل‌شده','progress'=>'گزارش پیشرفت','discussion'=>'هم‌اندیشی','problem'=>'مشکل اجرایی','delay'=>'گزارش تأخیر','misconduct'=>'گزارش تخلف احتمالی','response'=>'پاسخ مجری'];
 ?>
 <!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>نظارت و اجرای طرح</title>
 <style>body{margin:0;padding:14px;background:#f2f6fb;color:#263548;font-family:tahoma,Arial,sans-serif;line-height:1.9}.wrap{max-width:950px;margin:auto}.box{background:white;border:1px solid #dce5ef;border-radius:12px;padding:15px;margin:12px 0;overflow-wrap:anywhere}.hero{background:#eaf4ff;border-color:#bad8f8}.muted{font-size:13px;color:#667085}.field{display:block;width:100%;box-sizing:border-box;font:inherit;padding:9px;border:1px solid #cbd5e1;border-radius:7px;margin:5px 0 12px}button,.btn{display:inline-block;border:0;border-radius:7px;background:#2065d1;color:#fff;padding:9px 14px;font:inherit;text-decoration:none;cursor:pointer}.notice{background:#e9f8ec;border:1px solid #b7dfbf;padding:9px;border-radius:7px}.entry{border-top:1px solid #e5eaf0;padding:12px 0}.entry:first-child{border-top:0}.tag{display:inline-block;background:#edf3fc;border-radius:5px;padding:1px 7px;font-size:12px}</style></head><body><main class="wrap">
@@ -155,6 +228,26 @@ $labels=['preparing'=>'آماده‌سازی','in_progress'=>'در حال اجر
 <?php if($message!==''): ?><p class="notice"><?= em_h($message) ?></p><?php endif; ?>
 <section class="box"><h2>برنامهٔ تفصیلی و زمان‌بندی اعلام‌شده</h2><?php if(trim((string)($execution['detailed_plan']??''))===''): ?><p class="muted">مجری هنوز جزئیات برنامه را ثبت نکرده است.</p><?php else: ?><div><?= nl2br(em_h($execution['detailed_plan'])) ?></div><?php endif; ?><h3>زمان‌بندی مراحل</h3><?php if(trim((string)($execution['timeline']??''))===''): ?><p class="muted">زمان‌بندی تفصیلی هنوز اعلام نشده است.</p><?php else: ?><div><?= nl2br(em_h($execution['timeline'])) ?></div><?php endif; ?></section>
 <?php if($user_id===(int)$plan['final_candidate_user_id']): ?><section class="box"><h2>برنامهٔ تفصیلی مجری</h2><p class="muted">برنامهٔ اولیه برای رأی‌گیری ثبت شده بود؛ در اینجا جزئیات مراحل و زمان‌بندی را اعلام و در طول اجرا به‌روزرسانی کنید.</p><form method="post"><input type="hidden" name="csrf_token" value="<?= em_h($csrf) ?>"><input type="hidden" name="action" value="save_plan"><label>جزئیات مراحل اجرا<textarea class="field" name="detailed_plan" rows="6" maxlength="20000"><?= em_h($execution['detailed_plan']??'') ?></textarea></label><label>زمان‌بندی و مهلت هر مرحله<textarea class="field" name="timeline" rows="5" maxlength="12000"><?= em_h($execution['timeline']??'') ?></textarea></label><label>وضعیت اجرا<select class="field" name="status"><?php foreach(['preparing','in_progress','blocked','completed'] as $st): ?><option value="<?= $st ?>" <?= $execution['status']===$st?'selected':'' ?>><?= em_h($labels[$st]) ?></option><?php endforeach; ?></select></label><button type="submit">ذخیرهٔ برنامه و وضعیت</button></form></section><?php endif; ?>
+<section class="box"><h2>مراحل اجرایی و زمان‌بندی</h2>
+<p class="muted">تاریخ‌ها را به تقویم شمسی وارد کنید. وضعیت و درصد پیشرفت هر مرحله جداگانه ثبت می‌شود.</p>
+<?php if(!$stages_ready): ?><p class="notice">برای فعال‌شدن ثبت مرحله‌ها، فایل migrations/20261029_execution_stages.sql باید یک‌بار در پایگاه دادهٔ هاست اجرا شود. این فایل فقط جدول جدید می‌سازد و اطلاعات فعلی را حذف نمی‌کند.</p>
+<?php else: ?>
+<?php if(!$stages): ?><p class="muted">هنوز مرحله‌ای ثبت نشده است.</p><?php else: foreach($stages as $sg): $overdue=($sg['due_date'] && $sg['due_date']<date('Y-m-d') && $sg['status']!=='completed'); ?>
+<article class="entry"><h3><?= em_h($sg['title']) ?> <span class="tag"><?= em_h($labels[$overdue?'delayed':$sg['status']]??$sg['status']) ?></span></h3>
+<div><?= nl2br(em_h($sg['description'])) ?></div>
+<?php if(trim((string)$sg['expected_result'])!==''): ?><p><strong>نتیجهٔ مورد انتظار:</strong> <?= nl2br(em_h($sg['expected_result'])) ?></p><?php endif; ?>
+<p class="muted">شروع: <?= $sg['start_date']?em_h(substr(em_date($sg['start_date']),0,10)):'اعلام نشده' ?> · مهلت پایان: <?= $sg['due_date']?em_h(substr(em_date($sg['due_date']),0,10)):'اعلام نشده' ?></p>
+<p>پیشرفت: <strong><?= (int)$sg['progress_percent'] ?>٪</strong><progress value="<?= (int)$sg['progress_percent'] ?>" max="100" style="width:100%;height:18px"></progress></p>
+<?php if(trim((string)$sg['completion_note'])!==''): ?><p><strong>گزارش آخر مرحله:</strong> <?= nl2br(em_h($sg['completion_note'])) ?></p><?php endif; ?>
+<?php if($user_id===(int)$plan['final_candidate_user_id']): ?><details><summary>ویرایش این مرحله</summary><form method="post"><input type="hidden" name="csrf_token" value="<?= em_h($csrf) ?>"><input type="hidden" name="action" value="update_stage"><input type="hidden" name="stage_id" value="<?= (int)$sg['id'] ?>">
+<label>عنوان مرحله<input class="field" name="stage_title" maxlength="200" required value="<?= em_h($sg['title']) ?>"></label><label>شرح کار<textarea class="field" name="stage_description" rows="3" maxlength="10000" required><?= em_h($sg['description']) ?></textarea></label><label>نتیجهٔ مورد انتظار<textarea class="field" name="expected_result" rows="2" maxlength="5000"><?= em_h($sg['expected_result']) ?></textarea></label>
+<label>تاریخ شروع شمسی<input class="field" name="start_date" placeholder="۱۴۰۵/۰۸/۰۵" value="<?= $sg['start_date']?em_h(substr(em_date($sg['start_date']),0,10)):'' ?>"></label><label>مهلت پایان شمسی<input class="field" name="due_date" placeholder="۱۴۰۵/۰۸/۲۰" value="<?= $sg['due_date']?em_h(substr(em_date($sg['due_date']),0,10)):'' ?>"></label>
+<label>وضعیت<select class="field" name="stage_status"><?php foreach(['planned','in_progress','delayed','completed'] as $sst): ?><option value="<?= $sst ?>" <?= $sg['status']===$sst?'selected':'' ?>><?= em_h($labels[$sst]) ?></option><?php endforeach; ?></select></label>
+<label>درصد پیشرفت (۰ تا ۱۰۰)<input class="field" name="progress_percent" type="number" min="0" max="100" value="<?= (int)$sg['progress_percent'] ?>"></label><label>گزارش پیشرفت یا نتیجه<textarea class="field" name="completion_note" rows="2" maxlength="5000"><?= em_h($sg['completion_note']) ?></textarea></label><button type="submit">ذخیرهٔ تغییرات مرحله</button></form></details><?php endif; ?></article>
+<?php endforeach; endif; ?>
+<?php if($user_id===(int)$plan['final_candidate_user_id']): ?><details><summary class="btn">افزودن مرحلهٔ جدید</summary><form method="post" class="entry"><input type="hidden" name="csrf_token" value="<?= em_h($csrf) ?>"><input type="hidden" name="action" value="add_stage">
+<label>عنوان مرحله<input class="field" name="stage_title" maxlength="200" required></label><label>شرح کار<textarea class="field" name="stage_description" rows="3" maxlength="10000" required></textarea></label><label>نتیجهٔ مورد انتظار<textarea class="field" name="expected_result" rows="2" maxlength="5000"></textarea></label><label>تاریخ شروع شمسی<input class="field" name="start_date" placeholder="۱۴۰۵/۰۸/۰۵"></label><label>مهلت پایان شمسی<input class="field" name="due_date" placeholder="۱۴۰۵/۰۸/۲۰"></label><label>وضعیت اولیه<select class="field" name="stage_status"><option value="planned">در انتظار شروع</option><option value="in_progress">در حال اجرا</option><option value="delayed">دارای تأخیر</option><option value="completed">تکمیل‌شده</option></select></label><label>درصد پیشرفت<input class="field" name="progress_percent" type="number" min="0" max="100" value="0"></label><label>گزارش اولیه<textarea class="field" name="completion_note" rows="2" maxlength="5000"></textarea></label><button type="submit">ثبت مرحله در برنامه</button></form></details><?php endif; ?>
+<?php endif; ?></section>
 <section class="box"><h2>💰 درخواست بودجه یا هزینهٔ این طرح</h2>
 <p class="muted">درخواست در همین صفحه به طرح منتخب پیوند می‌خورد و در بانک مالی جامعه نیز دیده می‌شود. ثبت درخواست یا رأی مثبت به معنی پرداخت نیست.</p>
 <?php if(!$finance_schema_ready): ?><p class="notice">برای فعال‌شدن این بخش، ابتدا فایل migrations/20261027_community_finance_assets.sql باید در پایگاه دادهٔ هاست اجرا شود.</p>
