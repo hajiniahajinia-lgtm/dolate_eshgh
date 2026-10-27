@@ -185,7 +185,7 @@ textarea{resize:vertical;}
 .final-voting-toggle,.archive-topics-toggle,.finance-bank-toggle{display:block;text-decoration:none;text-align:center;box-sizing:border-box;}
 .final-voting-toggle{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;min-height:42px;background:#4A82DA;color:#fff;border-radius:9px;padding:10px 14px;font-weight:bold;text-align:center;}
 .archive-topics-toggle{background:#2065d1;color:#fff;border-radius:8px;padding:12px 14px;font-weight:bold;}
-.finance-bank-toggle{background:#147d64;color:#fff;border-radius:8px;padding:12px 14px;font-weight:bold;margin:0 0 16px;}
+.finance-bank-toggle{display:block;width:100%;background:#147d64;color:#fff;border-radius:8px;padding:12px 14px;font-weight:bold;margin:8px 0 12px;}
 .final-voting-toggle{margin:0 0 16px;}
 .final-voting-toggle>summary{display:block;list-style:none;background:#4A82DA;color:#fff;cursor:pointer;border-radius:9px;padding:10px 14px;text-align:center;font-weight:bold;}
 .final-voting-toggle>summary::-webkit-details-marker{display:none;}
@@ -674,6 +674,7 @@ document.addEventListener('DOMContentLoaded', function () {
     <a href="search.php" style="display:inline-flex;align-items:center;justify-content:center;gap:6px;background:#1769aa;color:#fff;text-decoration:none;padding:9px 13px;border-radius:8px;font-size:13px;font-weight:bold;white-space:nowrap;box-sizing:border-box;">🔎 سرچ</a>
   </div>
   <div class="community-mobile-actions" id="communityMobileActions" aria-label="دسترسی‌های جامعه"></div>
+  <a class="finance-bank-toggle" id="finance-bank-toggle" href="finance.php?community_id=<?= (int)$community_id ?>">🏦 بانک مالی و اموال جامعه</a>
   <div style="margin:0 0 12px;text-align:right;">
     <a href="profile.php" style="display:inline-block;background:#2065d1;color:#fff;text-decoration:none;padding:9px 14px;border-radius:8px;font-weight:bold;font-size:14px;">↩ بازگشت به پروفایل</a>
   </div>
@@ -1367,7 +1368,6 @@ $winners_count = (int)$arch_stats['winners'];
 $losers_count  = (int)$arch_stats['losers'];
 ?>
 <a class="archive-topics-toggle" id="archive-topics-toggle" href="archived_topics.php?community_id=<?= (int)$community_id ?>">📦 آرشیو موضوعات (<?= $total_archived ?>)</a>
-<a class="finance-bank-toggle" id="finance-bank-toggle" href="finance.php?community_id=<?= (int)$community_id ?>">🏦 بانک مالی و اموال جامعه</a>
 
 <?php else: ?>
 <div class="box">
