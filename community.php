@@ -1222,6 +1222,13 @@ if($topics_res2->num_rows == 0){
     echo "<p style='padding:10px;color:#666'>موضوعی برای بحث وجود ندارد.</p>";
 }
 
+$topic_discussions_ready = false;
+$discussion_table_check = $conn->query("SHOW TABLES LIKE 'community_topic_discussions'");
+if ($discussion_table_check instanceof mysqli_result) {
+    $topic_discussions_ready = $discussion_table_check->num_rows > 0;
+    $discussion_table_check->free();
+}
+
 $topic_sections = [
     'important' => ['title' => '⭐ موضوعات مهم', 'items' => []],
     'new'       => ['title' => '🆕 موضوعات تازه', 'items' => []],
@@ -1377,12 +1384,6 @@ if ($remaining_seconds < 0) $remaining_seconds = 0;
   <div class="topic-discussion">
     <h5>💬 مباحثه دربارهٔ موضوع</h5>
     <?php
-    $topic_discussions_ready = false;
-    $discussion_table_check = $conn->query("SHOW TABLES LIKE 'community_topic_discussions'");
-    if ($discussion_table_check instanceof mysqli_result) {
-        $topic_discussions_ready = $discussion_table_check->num_rows > 0;
-        $discussion_table_check->free();
-    }
     if ($topic_discussions_ready):
         $discussion_q = $conn->prepare("SELECT d.content, d.created_at, u.username FROM community_topic_discussions d JOIN users u ON u.id=d.user_id WHERE d.topic_id=? ORDER BY d.created_at ASC, d.id ASC");
         $discussion_q->bind_param("i", $tid);
