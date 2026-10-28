@@ -235,7 +235,14 @@ textarea{resize:vertical;}
 .member-entry:hover .member-profile,.member-entry:focus-within .member-profile{display:block;}
 .members-dropdown:hover .members-list,.members-dropdown:focus-within .members-list{display:block;}
 
-.topic{background:#eef7ff;border:1px solid #9ac7ff;border-radius:10px;padding:12px;margin-bottom:14px;word-wrap:break-word;}
+.topic{background:#eef7ff;border:1px solid #9ac7ff;border-radius:10px;padding:0;margin-bottom:10px;word-wrap:break-word;overflow:visible;}
+.community-topic-item>summary{display:flex;align-items:center;justify-content:space-between;gap:10px;list-style:none;cursor:pointer;padding:12px;font-weight:bold;line-height:1.8;}
+.community-topic-item>summary::-webkit-details-marker{display:none;}
+.community-topic-item>summary::marker{content:"";}
+.community-topic-item>summary:after{content:"＋";flex:0 0 auto;color:#2065d1;font-size:18px;}
+.community-topic-item[open]>summary:after{content:"−";}
+.community-topic-title{margin:0;font-size:16px;word-break:break-word;}
+.community-topic-body{padding:0 12px 12px;}
 .topic-title-wrap{position:relative;flex:1 1 auto;min-width:0;}
 .topic-header h2{margin:0;font-size:16px;word-break:break-word;}
 .topic-description{display:none;position:absolute;top:calc(100% + 6px);right:0;width:360px;max-width:calc(100vw - 60px);margin:0;padding:10px 12px;background:#fff;color:#374151;font-size:14px;line-height:1.9;white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid #9ac7ff;border-radius:8px;box-shadow:0 5px 16px rgba(0,0,0,.16);z-index:1500;font-weight:normal;}
@@ -1222,14 +1229,13 @@ if ($remaining_seconds < 0) $remaining_seconds = 0;
   $user_has_priority = ($priority_res->num_rows>0);
   $priority_check->close();
 ?>
-<div class="topic" id="topic-<?= (int)$tid ?>" style="<?= $is_closed ? 'opacity:0.6;' : '' ?>">
+<details class="topic community-topic-item" id="topic-<?= (int)$tid ?>" style="<?= $is_closed ? 'opacity:0.6;' : '' ?>">
+  <summary><span class="community-topic-title"><?= htmlspecialchars($t2['title'], ENT_QUOTES, 'UTF-8') ?></span></summary>
+  <div class="community-topic-body">
+  <?php if (trim((string)($t2['description'] ?? '')) !== ''): ?>
+    <div style="margin:0 0 10px;padding:8px 10px;background:rgba(255,255,255,.75);border-radius:7px;line-height:1.8;font-size:13px;"><?= nl2br(htmlspecialchars($t2['description'], ENT_QUOTES, 'UTF-8')) ?></div>
+  <?php endif; ?>
   <div class="topic-header">
-    <div class="topic-title-wrap">
-      <h2><?= htmlspecialchars($t2['title']) ?></h2>
-      <?php if (trim((string)($t2['description'] ?? '')) !== ''): ?>
-        <div class="topic-description"><?= htmlspecialchars($t2['description'], ENT_QUOTES, 'UTF-8') ?></div>
-      <?php endif; ?>
-    </div>
     <div class="topic-meta" style="font-size:13px;color:#333;margin-top:4px;">
         ⏱ ثبت شده در: <?= htmlspecialchars(community_format_jalali_datetime($t2['created_at']), ENT_QUOTES, 'UTF-8') ?>
     </div>
@@ -1331,7 +1337,8 @@ if ($remaining_seconds < 0) $remaining_seconds = 0;
     <?php endif; ?>
 
   </div> <!-- ideas-box -->
-</div> <!-- topic -->
+  </div> <!-- community-topic-body -->
+</details> <!-- topic -->
 <?php endwhile; $topics_list->close(); ?>
 </div> <!-- topics-wrapper -->
 <?php if ($topics_count > 5): ?>
