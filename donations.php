@@ -90,7 +90,7 @@ $status_labels = ['pending'=>'در انتظار تأیید','accepted'=>'تأی�
 <input type="hidden" name="csrf_token" value="<?= donation_h($csrf) ?>"><input type="hidden" name="community_id" value="<?= $community_id ?>"><input type="hidden" name="action" value="add_donation">
 <label>نام اهداکننده<input class="field" name="donor_name" maxlength="200" required></label>
 <label>نوع کمک<select class="field" name="donation_type" id="donation-type" required><option value="cash">کمک نقدی</option><option value="immovable">کمک غیرمنقول (زمین، ساختمان و مانند آن)</option></select></label>
-<div id="cash-fields"><label>مبلغ کمک<input class="field" name="amount" type="number" min="0.01" step="0.01"></label><label>واحد پول (کد سه‌حرفی)<input class="field" name="currency_code" maxlength="10" value="IRR" pattern="[A-Za-z]{3,10}" required></label></div>
+<div id="cash-fields"><label>مبلغ کمک<input class="field" name="amount" type="number" min="0.01" step="0.01"></label><label>واحد پول (کد سه‌حرفی)<input class="field" name="currency_code" maxlength="10" value="IRR" pattern="[A-Za-z]{3,10}"></label></div>
 <div id="property-fields" hidden><label>شرح ملک یا دارایی غیرمنقول<textarea class="field" name="asset_description" rows="3" maxlength="10000"></textarea></label><label>ارزش تخمینی (اختیاری)<input class="field" name="estimated_value" type="number" min="0" step="0.01"></label><label>نشانی یا محل ملک<input class="field" name="location" maxlength="255"></label></div>
 <label>تاریخ کمک<input class="field" name="donation_date" type="date" value="<?= date('Y-m-d') ?>" required></label>
 <label>توضیحات تکمیلی<textarea class="field" name="notes" rows="3" maxlength="10000"></textarea></label>
