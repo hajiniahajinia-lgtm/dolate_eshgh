@@ -183,6 +183,12 @@ textarea{resize:vertical;}
 .community-duties-toggle>summary::marker{content:"";}
 
 .final-voting-toggle,.archive-topics-toggle,.finance-bank-toggle{display:block;text-decoration:none;text-align:center;box-sizing:border-box;}
+.community-topics-toggle{margin:0 0 10px;}
+.community-topics-toggle>summary{display:block;list-style:none;background:#2065d1;color:#fff;cursor:pointer;border-radius:8px;padding:12px 14px;text-align:center;font-weight:bold;}
+.community-topics-toggle>summary::-webkit-details-marker{display:none;}
+.community-topics-toggle>summary::marker{content:"";}
+.community-topics-toggle[open]>summary{border-radius:8px 8px 0 0;}
+.community-topics-toggle #topics-wrapper{margin-top:0;}
 .final-voting-toggle{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;min-height:42px;background:#4A82DA;color:#fff;border-radius:9px;padding:10px 14px;font-weight:bold;text-align:center;}
 .archive-topics-toggle{background:#2065d1;color:#fff;border-radius:8px;padding:12px 14px;font-weight:bold;}
 .finance-bank-toggle{display:block;width:100%;background:#147d64;color:#fff;border-radius:8px;padding:12px 14px;font-weight:bold;margin:8px 0 12px;}
@@ -1174,8 +1180,14 @@ $topics_count_q->close();
 $topics_count = (int)$topics_count_res['cnt'];
 ?>
 <div class="box" style="background:#fff3a6; padding:20px;">
+<?php if ($topics_count > 5): ?>
+<details class="community-topics-toggle">
+  <summary>📘 نمایش موضوعات در حال بحث (<?= $topics_count ?>)</summary>
+  <div id="topics-wrapper" style="max-height:540px; overflow-y:auto; padding:10px;">
+<?php else: ?>
 <h3>📘 موضوعات در حال بحث (<?= $topics_count ?>)</h3>
 <div id="topics-wrapper" style="max-height:540px; overflow-y:auto; padding:10px;">
+<?php endif; ?>
 <?php
 $topics_list = $conn->prepare("
     SELECT t.*, 
@@ -1322,6 +1334,9 @@ if ($remaining_seconds < 0) $remaining_seconds = 0;
 </div> <!-- topic -->
 <?php endwhile; $topics_list->close(); ?>
 </div> <!-- topics-wrapper -->
+<?php if ($topics_count > 5): ?>
+</details>
+<?php endif; ?>
 </div> <!-- box موضوعات در حال بحث -->
 
 <!-- موضوعات در حال رأی‌گیری؛ این بخش پس از سربرگ قرار می‌گیرد -->
