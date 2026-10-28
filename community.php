@@ -243,6 +243,9 @@ textarea{resize:vertical;}
 .community-topic-item[open]>summary:after{content:"−";}
 .community-topic-title{margin:0;font-size:16px;word-break:break-word;}
 .community-topic-body{padding:0 12px 12px;}
+.community-topic-section{margin:0 0 16px;padding:0 0 8px;border-bottom:1px solid #d5e4f3;}
+.community-topic-section:last-child{border-bottom:0;margin-bottom:0;}
+.community-topic-section-title{margin:0 0 8px;padding:8px 10px;background:#e5f1ff;border-radius:7px;color:#214d7a;font-size:14px;line-height:1.7;}
 .topic-title-wrap{position:relative;flex:1 1 auto;min-width:0;}
 .topic-header h2{margin:0;font-size:16px;word-break:break-word;}
 .topic-description{display:none;position:absolute;top:calc(100% + 6px);right:0;width:360px;max-width:calc(100vw - 60px);margin:0;padding:10px 12px;background:#fff;color:#374151;font-size:14px;line-height:1.9;white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid #9ac7ff;border-radius:8px;box-shadow:0 5px 16px rgba(0,0,0,.16);z-index:1500;font-weight:normal;}
@@ -1213,7 +1216,35 @@ if($topics_res2->num_rows == 0){
     echo "<p style='padding:10px;color:#666'>موضوعی برای بحث وجود ندارد.</p>";
 }
 
-while($t2 = $topics_res2->fetch_assoc()):
+$topic_sections = [
+    'important' => ['title' => '⭐ موضوعات مهم', 'items' => []],
+    'new'       => ['title' => '🆕 موضوعات تازه', 'items' => []],
+    'other'     => ['title' => '📚 سایر موضوعات', 'items' => []],
+];
+$new_topic_cutoff = time() - (3 * 24 * 60 * 60);
+while ($topic_row = $topics_res2->fetch_assoc()) {
+    $topic_priority_count = (int)$topic_row['total_priority'];
+    $topic_created_time = strtotime((string)$topic_row['created_at']) ?: 0;
+    if ($topic_priority_count > 0) {
+        $topic_sections['important']['items'][] = $topic_row;
+    } elseif ($topic_created_time >= $new_topic_cutoff) {
+        $topic_sections['new']['items'][] = $topic_row;
+    } else {
+        $topic_sections['other']['items'][] = $topic_row;
+    }
+}
+// موضوعات مهم بر اساس اولویت؛ تازه‌ها بر اساس زمان ثبت (جدیدترین ابتدا)؛ بقیه بر اساس اولویت.
+usort($topic_sections['new']['items'], static function ($a, $b) {
+    return (strtotime((string)$b['created_at']) ?: 0) <=> (strtotime((string)$a['created_at']) ?: 0);
+});
+
+foreach ($topic_sections as $topic_section):
+    if (empty($topic_section['items'])) continue;
+?>
+    <section class="community-topic-section">
+      <h4 class="community-topic-section-title"><?= htmlspecialchars($topic_section['title'], ENT_QUOTES, 'UTF-8') ?> (<?= count($topic_section['items']) ?>)</h4>
+      <?php foreach ($topic_section['items'] as $t2): ?>
+<?php
   $tid = $t2['id'];
   $created = strtotime($t2['created_at']);
   $urgency = intval($t2['urgency']); 
@@ -1339,7 +1370,9 @@ if ($remaining_seconds < 0) $remaining_seconds = 0;
   </div> <!-- ideas-box -->
   </div> <!-- community-topic-body -->
 </details> <!-- topic -->
-<?php endwhile; $topics_list->close(); ?>
+<?php endforeach; ?>
+    </section>
+<?php endforeach; $topics_list->close(); ?>
 </div> <!-- topics-wrapper -->
 <?php if ($topics_count > 5): ?>
 </details>
