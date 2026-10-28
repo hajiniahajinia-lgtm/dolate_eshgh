@@ -246,6 +246,12 @@ textarea{resize:vertical;}
 .community-topic-section{margin:0 0 16px;padding:0 0 8px;border-bottom:1px solid #d5e4f3;}
 .community-topic-section:last-child{border-bottom:0;margin-bottom:0;}
 .community-topic-section-title{margin:0 0 8px;padding:8px 10px;background:#e5f1ff;border-radius:7px;color:#214d7a;font-size:14px;line-height:1.7;}
+.topic-discussion{margin-top:14px;padding:12px;background:#f0f8ff;border:1px solid #b7d9f5;border-radius:9px;}
+.topic-discussion h5{margin:0 0 8px;font-size:14px;color:#214d7a;}
+.topic-discussion-entry{margin:8px 0;padding:9px 10px;background:#fff;border:1px solid #dceaf7;border-radius:7px;line-height:1.8;overflow-wrap:anywhere;}
+.topic-discussion-entry-meta{font-size:12px;color:#687789;margin-bottom:4px;}
+.topic-discussion textarea{box-sizing:border-box;width:100%;min-height:76px;margin-top:8px;padding:9px;border:1px solid #b8cde0;border-radius:7px;font:inherit;resize:vertical;}
+.topic-discussion button{margin-top:7px;padding:7px 12px;border:0;border-radius:6px;background:#2065d1;color:#fff;cursor:pointer;font:inherit;}
 .topic-title-wrap{position:relative;flex:1 1 auto;min-width:0;}
 .topic-header h2{margin:0;font-size:16px;word-break:break-word;}
 .topic-description{display:none;position:absolute;top:calc(100% + 6px);right:0;width:360px;max-width:calc(100vw - 60px);margin:0;padding:10px 12px;background:#fff;color:#374151;font-size:14px;line-height:1.9;white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid #9ac7ff;border-radius:8px;box-shadow:0 5px 16px rgba(0,0,0,.16);z-index:1500;font-weight:normal;}
@@ -1191,7 +1197,7 @@ $topics_count = (int)$topics_count_res['cnt'];
 ?>
 <div class="box" style="background:#fff3a6; padding:20px;">
 <?php if ($topics_count > 5): ?>
-<details class="community-topics-toggle">
+<details class="community-topics-toggle"<?= (isset($_GET['open_topic']) && (int)$_GET['open_topic'] > 0) ? ' open' : '' ?>>
   <summary>📘 نمایش موضوعات در حال بحث (<?= $topics_count ?>)</summary>
   <div id="topics-wrapper" style="max-height:540px; overflow-y:auto; padding:10px;">
 <?php else: ?>
@@ -1260,7 +1266,7 @@ if ($remaining_seconds < 0) $remaining_seconds = 0;
   $user_has_priority = ($priority_res->num_rows>0);
   $priority_check->close();
 ?>
-<details class="topic community-topic-item" id="topic-<?= (int)$tid ?>" style="<?= $is_closed ? 'opacity:0.6;' : '' ?>">
+<details class="topic community-topic-item" id="topic-<?= (int)$tid ?>"<?= (isset($_GET['open_topic']) && (int)$_GET['open_topic'] === (int)$tid) ? ' open' : '' ?> style="<?= $is_closed ? 'opacity:0.6;' : '' ?>">
   <summary><span class="community-topic-title"><?= htmlspecialchars($t2['title'], ENT_QUOTES, 'UTF-8') ?></span></summary>
   <div class="community-topic-body">
   <?php if (trim((string)($t2['description'] ?? '')) !== ''): ?>
@@ -1368,6 +1374,50 @@ if ($remaining_seconds < 0) $remaining_seconds = 0;
     <?php endif; ?>
 
   </div> <!-- ideas-box -->
+  <div class="topic-discussion">
+    <h5>💬 مباحثه دربارهٔ موضوع</h5>
+    <?php
+    $topic_discussions_ready = false;
+    $discussion_table_check = $conn->query("SHOW TABLES LIKE 'community_topic_discussions'");
+    if ($discussion_table_check instanceof mysqli_result) {
+        $topic_discussions_ready = $discussion_table_check->num_rows > 0;
+        $discussion_table_check->free();
+    }
+    if ($topic_discussions_ready):
+        $discussion_q = $conn->prepare("SELECT d.content, d.created_at, u.username FROM community_topic_discussions d JOIN users u ON u.id=d.user_id WHERE d.topic_id=? ORDER BY d.created_at ASC, d.id ASC");
+        $discussion_q->bind_param("i", $tid);
+        $discussion_q->execute();
+        $discussion_res = $discussion_q->get_result();
+        if ($discussion_res->num_rows === 0):
+    ?>
+      <p style="margin:0;color:#61758a;font-size:13px;">هنوز مباحثه‌ای ثبت نشده است. با احترام به دیدگاه دیگران، برای پخته‌تر شدن راه‌حل‌ها گفت‌وگو را آغاز کنید.</p>
+    <?php
+        endif;
+        while ($discussion = $discussion_res->fetch_assoc()):
+    ?>
+      <div class="topic-discussion-entry">
+        <div class="topic-discussion-entry-meta">👤 <?= htmlspecialchars($discussion['username'], ENT_QUOTES, 'UTF-8') ?> · <?= htmlspecialchars(community_format_jalali_datetime($discussion['created_at']), ENT_QUOTES, 'UTF-8') ?></div>
+        <div><?= nl2br(htmlspecialchars($discussion['content'], ENT_QUOTES, 'UTF-8')) ?></div>
+      </div>
+    <?php
+        endwhile;
+        $discussion_q->close();
+    else:
+    ?>
+      <p style="margin:0;color:#8a5b00;font-size:13px;">بخش مباحثه پس از آماده‌شدن جدول پایگاه داده فعال می‌شود.</p>
+    <?php endif; ?>
+    <?php if (!$is_closed && $topic_discussions_ready): ?>
+      <form action="add_topic_discussion.php" method="post">
+        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($community_duty_csrf, ENT_QUOTES, 'UTF-8') ?>">
+        <input type="hidden" name="topic_id" value="<?= (int)$tid ?>">
+        <input type="hidden" name="community_id" value="<?= (int)$community['id'] ?>">
+        <textarea name="discussion_text" maxlength="5000" placeholder="دیدگاه، پرسش یا راه‌حل خود را برای مباحثه بنویسید (حداکثر ۵۰۰۰ نویسه)" required></textarea>
+        <button type="submit">💬 ثبت در مباحثه</button>
+      </form>
+    <?php elseif ($is_closed): ?>
+      <p style="margin:8px 0 0;color:#687789;font-size:12px;">این موضوع بسته شده است؛ امکان افزودن پیام تازه وجود ندارد.</p>
+    <?php endif; ?>
+  </div>
   </div> <!-- community-topic-body -->
 </details> <!-- topic -->
 <?php endforeach; ?>
