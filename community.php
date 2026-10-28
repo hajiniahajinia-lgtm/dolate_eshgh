@@ -236,7 +236,7 @@ textarea{resize:vertical;}
 .members-dropdown:hover .members-list,.members-dropdown:focus-within .members-list{display:block;}
 
 .topic{background:#eef7ff;border:1px solid #9ac7ff;border-radius:10px;padding:0;margin-bottom:10px;word-wrap:break-word;overflow:visible;}
-.community-topic-item>summary{display:flex;align-items:center;justify-content:space-between;gap:10px;list-style:none;cursor:pointer;padding:12px;width:70%;box-sizing:border-box;font-weight:bold;line-height:1.8;}
+.community-topic-item>summary{display:flex;align-items:center;justify-content:space-between;gap:10px;list-style:none;cursor:pointer;padding:7px 12px;font-weight:bold;line-height:1.4;}
 .community-topic-item>summary::-webkit-details-marker{display:none;}
 .community-topic-item>summary::marker{content:"";}
 .community-topic-item>summary:after{content:"＋";flex:0 0 auto;color:#2065d1;font-size:18px;}
