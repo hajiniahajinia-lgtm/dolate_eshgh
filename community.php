@@ -1235,13 +1235,23 @@ $topics_count = (int)$topics_count_res['cnt'];
   <button type="button" class="community-topic-filter" data-topic-filter="stagnant" aria-pressed="false">⏸ موضوعات راکد</button>
 </div>
 <?php
+$topic_discussions_ready = false;
+$discussion_table_check = $conn->query("SHOW TABLES LIKE 'community_topic_discussions'");
+if ($discussion_table_check instanceof mysqli_result) {
+    $topic_discussions_ready = $discussion_table_check->num_rows > 0;
+    $discussion_table_check->free();
+}
+$discussion_activity_sql = $topic_discussions_ready
+    ? "COALESCE((SELECT MAX(d.created_at) FROM community_topic_discussions d WHERE d.topic_id=t.id), t.created_at)"
+    : "t.created_at";
+
 $topics_list = $conn->prepare("
     SELECT t.*,
            COUNT(tp.user_id) AS total_priority,
            GREATEST(
              COALESCE((SELECT MAX(p.created_at) FROM topic_priority_votes p WHERE p.topic_id=t.id), t.created_at),
              COALESCE((SELECT MAX(i.created_at) FROM ideas i WHERE i.topic_id=t.id), t.created_at),
-             COALESCE((SELECT MAX(d.created_at) FROM community_topic_discussions d WHERE d.topic_id=t.id), t.created_at),
+             " . $discussion_activity_sql . ",
              COALESCE((SELECT MAX(v.created_at) FROM topic_voting_ballots v WHERE v.topic_id=t.id), t.created_at),
              COALESCE((SELECT MAX(u.created_at) FROM topic_voting_urgency_votes u WHERE u.topic_id=t.id), t.created_at)
            ) AS last_activity_at
