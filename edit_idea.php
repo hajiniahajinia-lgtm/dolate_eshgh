@@ -23,8 +23,8 @@ $community_id = (int)($_POST['community_id'] ?? 0);
 $content = trim((string)($_POST['idea_text'] ?? ''));
 $revision_note = trim((string)($_POST['revision_note'] ?? ''));
 
-$length = function_exists('mb_strlen') ? mb_strlen($content, 'UTF-8') : strlen($content);
-$note_length = function_exists('mb_strlen') ? mb_strlen($revision_note, 'UTF-8') : strlen($revision_note);
+$length = function_exists('mb_strlen') ? mb_strlen($content, 'UTF-8') : preg_match_all('/./us', $content, $content_chars);
+$note_length = function_exists('mb_strlen') ? mb_strlen($revision_note, 'UTF-8') : preg_match_all('/./us', $revision_note, $note_chars);
 if ($idea_id < 1 || $community_id < 1 || $content === '') {
     http_response_code(400);
     exit("لطفاً متن ایده را وارد کنید.");
