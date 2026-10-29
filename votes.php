@@ -197,7 +197,7 @@ if($_SERVER['REQUEST_METHOD'] === 'POST'){
         $save_vote = $conn->prepare("
             INSERT INTO topic_voting_urgency_votes (topic_id, user_id, urgency_days)
             VALUES (?, ?, ?)
-            ON DUPLICATE KEY UPDATE urgency_days = VALUES(urgency_days)
+            ON DUPLICATE KEY UPDATE urgency_days = VALUES(urgency_days), created_at = CURRENT_TIMESTAMP
         ");
         $save_vote->bind_param("iii", $topic_id, $user_id, $urg);
         $save_vote->execute();
