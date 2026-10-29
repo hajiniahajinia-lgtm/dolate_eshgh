@@ -668,6 +668,9 @@ textarea{resize:vertical;}
   }
 }
 
+
+.community-idea-review-feedback{display:inline-block;margin:8px 0;padding:8px 12px;border:0;border-radius:7px;background:#dcefe5;color:#20583b;font:inherit;cursor:pointer}
+.community-idea-review-feedback:hover{background:#cce5d7}
 </style>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
@@ -1363,7 +1366,7 @@ if ($remaining_seconds < 0) $remaining_seconds = 0;
             <div class="community-idea-content" id="community-idea-content-<?= (int)$i['id'] ?>"><?= nl2br(htmlspecialchars($i['content'], ENT_QUOTES, 'UTF-8')) ?></div>
             <button type="button" class="community-idea-read-more" aria-expanded="false" aria-controls="community-idea-content-<?= (int)$i['id'] ?>" onclick="toggleCommunityIdeaContent(<?= (int)$i['id'] ?>)">مشاهده ادامه</button>
             <?php if ($idea_revisions_ready): ?>
-              <details class="community-idea-edit">
+              <details class="community-idea-edit" id="community-idea-edit-<?= (int)$i['id'] ?>">
                 <summary>📜 نسخه‌های قبلی و اصلاح ایده</summary>
                 <?php if (!$is_closed && (int)$i['uid'] === $user_id): ?>
                   <form action="edit_idea.php" method="post">
@@ -1409,6 +1412,9 @@ if ($remaining_seconds < 0) $remaining_seconds = 0;
                 $feedback_count = $feedback_res->num_rows;
                 ?>
                 <summary>💬 پیشنهادها و نظرها دربارهٔ این ایده (<?= (int)$feedback_count ?>)</summary>
+                <?php if (!$is_closed && (int)$i['uid'] === $user_id): ?>
+                  <button type="button" class="community-idea-review-feedback" onclick="document.getElementById('community-idea-edit-<?= (int)$i[\'id\'] ?>').open=true; document.getElementById('community-idea-edit-<?= (int)$i[\'id\'] ?>').scrollIntoView({behavior:'smooth',block:'center'});">📝 بررسی پیشنهادها و اصلاح ایده</button>
+                <?php endif; ?>
                 <?php if ($feedback_count === 0): ?>
                   <p style="margin:7px 0;color:#61758a;">هنوز پیشنهادی برای این ایده ثبت نشده است.</p>
                 <?php endif; ?>
