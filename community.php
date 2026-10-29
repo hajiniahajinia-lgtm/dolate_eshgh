@@ -252,6 +252,16 @@ textarea{resize:vertical;}
 .topic-discussion-entry-meta{font-size:12px;color:#687789;margin-bottom:4px;}
 .topic-discussion textarea{box-sizing:border-box;width:100%;min-height:76px;margin-top:8px;padding:9px;border:1px solid #b8cde0;border-radius:7px;font:inherit;resize:vertical;}
 .topic-discussion button{margin-top:7px;padding:7px 12px;border:0;border-radius:6px;background:#2065d1;color:#fff;cursor:pointer;font:inherit;}
+.community-idea-edit{margin-top:9px;padding:8px;background:#f5f9ff;border:1px solid #c9def4;border-radius:7px;font-size:13px;}
+.community-idea-edit>summary{cursor:pointer;color:#245b92;font-weight:bold;}
+.community-idea-edit form{margin-top:8px;}
+.community-idea-edit label{display:block;margin-top:7px;font-size:12px;}
+.community-idea-edit textarea{width:100%;min-height:120px;box-sizing:border-box;padding:8px;border:1px solid #b8cde0;border-radius:6px;font:inherit;}
+.community-idea-edit input[type=text]{width:100%;box-sizing:border-box;padding:8px;border:1px solid #b8cde0;border-radius:6px;font:inherit;}
+.community-idea-history{margin-top:10px;padding-top:8px;border-top:1px solid #d6e5f4;}
+.community-idea-history>strong{display:block;margin-bottom:6px;}
+.community-idea-history details{margin-top:5px;padding:7px;background:#fff;border:1px solid #e0e8f0;border-radius:6px;}
+.community-idea-history summary{cursor:pointer;color:#475569;}
 .topic-title-wrap{position:relative;flex:1 1 auto;min-width:0;}
 .topic-header h2{margin:0;font-size:16px;word-break:break-word;}
 .topic-description{display:none;position:absolute;top:calc(100% + 6px);right:0;width:360px;max-width:calc(100vw - 60px);margin:0;padding:10px 12px;background:#fff;color:#374151;font-size:14px;line-height:1.9;white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid #9ac7ff;border-radius:8px;box-shadow:0 5px 16px rgba(0,0,0,.16);z-index:1500;font-weight:normal;}
@@ -1228,6 +1238,12 @@ if ($discussion_table_check instanceof mysqli_result) {
     $topic_discussions_ready = $discussion_table_check->num_rows > 0;
     $discussion_table_check->free();
 }
+$idea_revisions_ready = false;
+$idea_revisions_table_check = $conn->query("SHOW TABLES LIKE 'community_idea_revisions'");
+if ($idea_revisions_table_check instanceof mysqli_result) {
+    $idea_revisions_ready = $idea_revisions_table_check->num_rows > 0;
+    $idea_revisions_table_check->free();
+}
 
 $topic_sections = [
     'important' => ['title' => '⭐ موضوعات مهم', 'items' => []],
@@ -1332,8 +1348,41 @@ if ($remaining_seconds < 0) $remaining_seconds = 0;
             <div class="idea-meta" style="font-size:12px;color:#555;margin-bottom:4px;">
                 ⏱ ثبت شده در: <?= htmlspecialchars(community_format_jalali_datetime($i['created_at']), ENT_QUOTES, 'UTF-8') ?>
             </div>
-            <div class="community-idea-content" id="community-idea-content-<?= (int)$i['id'] ?>"><?= nl2br(htmlspecialchars($i['content'])) ?></div>
+            <div class="community-idea-content" id="community-idea-content-<?= (int)$i['id'] ?>"><?= nl2br(htmlspecialchars($i['content'], ENT_QUOTES, 'UTF-8')) ?></div>
             <button type="button" class="community-idea-read-more" aria-expanded="false" aria-controls="community-idea-content-<?= (int)$i['id'] ?>" onclick="toggleCommunityIdeaContent(<?= (int)$i['id'] ?>)">مشاهده ادامه</button>
+            <?php if (!$is_closed && $idea_revisions_ready && (int)$i['uid'] === $user_id): ?>
+              <details class="community-idea-edit">
+                <summary>✏️ اصلاح ایده پس از مباحثه</summary>
+                <form action="edit_idea.php" method="post">
+                  <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($community_duty_csrf, ENT_QUOTES, 'UTF-8') ?>">
+                  <input type="hidden" name="idea_id" value="<?= (int)$i['id'] ?>">
+                  <input type="hidden" name="community_id" value="<?= (int)$community['id'] ?>">
+                  <label>متن اصلاح‌شده</label>
+                  <textarea name="idea_text" maxlength="25000" required><?= htmlspecialchars($i['content'], ENT_QUOTES, 'UTF-8') ?></textarea>
+                  <label>دلیل اصلاح (اختیاری)</label>
+                  <input type="text" name="revision_note" maxlength="1000" placeholder="مثلاً: با توجه به پیشنهادهای مباحثه">
+                  <button type="submit">ذخیره نسخهٔ اصلاح‌شده</button>
+                </form>
+                <?php
+                $revisions_q = $conn->prepare("SELECT r.previous_content, r.revision_note, r.created_at, u.username FROM community_idea_revisions r JOIN users u ON u.id=r.editor_user_id WHERE r.idea_id=? ORDER BY r.id DESC");
+                $revisions_q->bind_param("i", $i['id']);
+                $revisions_q->execute();
+                $revisions_res = $revisions_q->get_result();
+                if ($revisions_res->num_rows > 0):
+                ?>
+                  <div class="community-idea-history">
+                    <strong>📜 نسخه‌های قبلی</strong>
+                    <?php while ($revision = $revisions_res->fetch_assoc()): ?>
+                      <details>
+                        <summary><?= htmlspecialchars(community_format_jalali_datetime($revision['created_at']), ENT_QUOTES, 'UTF-8') ?> — <?= htmlspecialchars($revision['username'], ENT_QUOTES, 'UTF-8') ?></summary>
+                        <?php if (!empty($revision['revision_note'])): ?><p><?= htmlspecialchars($revision['revision_note'], ENT_QUOTES, 'UTF-8') ?></p><?php endif; ?>
+                        <div><?= nl2br(htmlspecialchars($revision['previous_content'], ENT_QUOTES, 'UTF-8')) ?></div>
+                      </details>
+                    <?php endwhile; ?>
+                  </div>
+                <?php endif; $revisions_q->close(); ?>
+              </details>
+            <?php endif; ?>
             <div class="tooltip-box" id="tooltip-<?= (int)$i['uid'] ?>"><p>در حال بارگذاری...</p></div>
         </div>
         <div class="idea-actions" style="display:flex; flex-direction:column; gap:6px; min-width:110px; text-align:right;">
