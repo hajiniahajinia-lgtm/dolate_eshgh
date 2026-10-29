@@ -1413,7 +1413,7 @@ if ($remaining_seconds < 0) $remaining_seconds = 0;
                 ?>
                 <summary>💬 پیشنهادها و نظرها دربارهٔ این ایده (<?= (int)$feedback_count ?>)</summary>
                 <?php if (!$is_closed && (int)$i['uid'] === $user_id): ?>
-                  <button type="button" class="community-idea-review-feedback" onclick="document.getElementById('community-idea-edit-<?= (int)$i[\'id\'] ?>').open=true; document.getElementById('community-idea-edit-<?= (int)$i[\'id\'] ?>').scrollIntoView({behavior:'smooth',block:'center'});">📝 بررسی پیشنهادها و اصلاح ایده</button>
+                  <button type="button" class="community-idea-review-feedback" onclick="document.getElementById('community-idea-edit-<?= (int)$i['id'] ?>').open=true; document.getElementById('community-idea-edit-<?= (int)$i['id'] ?>').scrollIntoView({behavior:'smooth',block:'center'});">📝 بررسی پیشنهادها و اصلاح ایده</button>
                 <?php endif; ?>
                 <?php if ($feedback_count === 0): ?>
                   <p style="margin:7px 0;color:#61758a;">هنوز پیشنهادی برای این ایده ثبت نشده است.</p>
