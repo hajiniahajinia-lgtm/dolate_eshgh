@@ -246,6 +246,10 @@ textarea{resize:vertical;}
 .community-topic-section{margin:0 0 16px;padding:0 0 8px;border-bottom:1px solid #d5e4f3;}
 .community-topic-section:last-child{border-bottom:0;margin-bottom:0;}
 .community-topic-section-title{margin:0 0 8px;padding:8px 10px;background:#e5f1ff;border-radius:7px;color:#214d7a;font-size:14px;line-height:1.7;}
+.community-topic-filterbar{display:flex;flex-wrap:nowrap;gap:5px;margin:10px 0 12px;overflow-x:auto;padding:2px 1px 7px;-webkit-overflow-scrolling:touch;}
+.community-topic-filter{flex:1 0 auto;min-width:0;padding:7px 9px;border:1px solid #9bbbe0;border-radius:7px;background:#f4f8ff;color:#214d7a;font-size:12px;line-height:1.4;white-space:nowrap;cursor:pointer;}
+.community-topic-filter[aria-pressed="true"]{background:#245b92;color:#fff;border-color:#245b92;}
+@media(max-width:520px){.community-topic-filterbar{gap:3px}.community-topic-filter{padding:7px 6px;font-size:11px;}}
 .topic-discussion{margin-top:14px;padding:12px;background:#f0f8ff;border:1px solid #b7d9f5;border-radius:9px;}
 .topic-discussion h5{margin:0 0 8px;font-size:14px;color:#214d7a;}
 .topic-discussion-entry{margin:8px 0;padding:9px 10px;background:#fff;border:1px solid #dceaf7;border-radius:7px;line-height:1.8;overflow-wrap:anywhere;}
@@ -1223,14 +1227,28 @@ $topics_count = (int)$topics_count_res['cnt'];
 <h3>📘 موضوعات در حال بحث (<?= $topics_count ?>)</h3>
 <div id="topics-wrapper" style="max-height:540px; overflow-y:auto; padding:10px;">
 <?php endif; ?>
+<div class="community-topic-filterbar" role="group" aria-label="فیلتر موضوعات">
+  <button type="button" class="community-topic-filter" data-topic-filter="important" aria-pressed="false">⭐ موضوعات مهم</button>
+  <button type="button" class="community-topic-filter" data-topic-filter="new" aria-pressed="false">🆕 موضوعات تازه</button>
+  <button type="button" class="community-topic-filter" data-topic-filter="other" aria-pressed="false">📚 سایر موضوعات</button>
+  <button type="button" class="community-topic-filter" data-topic-filter="active" aria-pressed="false">🟢 موضوعات فعال</button>
+  <button type="button" class="community-topic-filter" data-topic-filter="stagnant" aria-pressed="false">⏸ موضوعات راکد</button>
+</div>
 <?php
 $topics_list = $conn->prepare("
-    SELECT t.*, 
-           COUNT(tp.user_id) AS total_priority 
-    FROM topics t 
-    LEFT JOIN topic_priority_votes tp ON t.id=tp.topic_id 
-    WHERE t.community_id=? AND t.closed=0 
-    GROUP BY t.id 
+    SELECT t.*,
+           COUNT(tp.user_id) AS total_priority,
+           GREATEST(
+             COALESCE((SELECT MAX(p.created_at) FROM topic_priority_votes p WHERE p.topic_id=t.id), t.created_at),
+             COALESCE((SELECT MAX(i.created_at) FROM ideas i WHERE i.topic_id=t.id), t.created_at),
+             COALESCE((SELECT MAX(d.created_at) FROM community_topic_discussions d WHERE d.topic_id=t.id), t.created_at),
+             COALESCE((SELECT MAX(v.created_at) FROM topic_voting_ballots v WHERE v.topic_id=t.id), t.created_at),
+             COALESCE((SELECT MAX(u.created_at) FROM topic_voting_urgency_votes u WHERE u.topic_id=t.id), t.created_at)
+           ) AS last_activity_at
+    FROM topics t
+    LEFT JOIN topic_priority_votes tp ON t.id=tp.topic_id
+    WHERE t.community_id=? AND t.closed=0
+    GROUP BY t.id
     ORDER BY total_priority DESC, t.id ASC
 ");
 $topics_list->bind_param("i", $community['id']);
@@ -1282,10 +1300,10 @@ usort($topic_sections['new']['items'], static function ($a, $b) {
     return (strtotime((string)$b['created_at']) ?: 0) <=> (strtotime((string)$a['created_at']) ?: 0);
 });
 
-foreach ($topic_sections as $topic_section):
+foreach ($topic_sections as $topic_section_key => $topic_section):
     if (empty($topic_section['items'])) continue;
 ?>
-    <section class="community-topic-section">
+    <section class="community-topic-section" data-topic-section="<?= htmlspecialchars($topic_section_key, ENT_QUOTES, 'UTF-8') ?>">
       <h4 class="community-topic-section-title"><?= htmlspecialchars($topic_section['title'], ENT_QUOTES, 'UTF-8') ?> (<?= count($topic_section['items']) ?>)</h4>
       <?php foreach ($topic_section['items'] as $t2): ?>
 <?php
@@ -1304,7 +1322,8 @@ if ($remaining_seconds < 0) $remaining_seconds = 0;
   $user_has_priority = ($priority_res->num_rows>0);
   $priority_check->close();
 ?>
-<details class="topic community-topic-item" id="topic-<?= (int)$tid ?>"<?= (isset($_GET['open_topic']) && (int)$_GET['open_topic'] === (int)$tid) ? ' open' : '' ?> style="<?= $is_closed ? 'opacity:0.6;' : '' ?>">
+<?php $last_activity_timestamp = strtotime((string)($t2['last_activity_at'] ?? $t2['created_at'])) ?: $created; $is_stagnant = $last_activity_timestamp < (time() - 7 * 24 * 60 * 60); ?>
+<details class="topic community-topic-item" data-topic-group="<?= htmlspecialchars($topic_section_key, ENT_QUOTES, 'UTF-8') ?>" data-topic-status="<?= $is_stagnant ? 'stagnant' : 'active' ?>" id="topic-<?= (int)$tid ?>"<?= (isset($_GET['open_topic']) && (int)$_GET['open_topic'] === (int)$tid) ? ' open' : '' ?> style="<?= $is_closed ? 'opacity:0.6;' : '' ?>">
   <summary><span class="community-topic-title"><?= htmlspecialchars($t2['title'], ENT_QUOTES, 'UTF-8') ?></span></summary>
   <div class="community-topic-body">
   <?php if (trim((string)($t2['description'] ?? '')) !== ''): ?>
@@ -1613,6 +1632,29 @@ $losers_count  = (int)$arch_stats['losers'];
 
 <script>
 document.addEventListener("DOMContentLoaded", function() {
+    // فیلتر پنج‌گانهٔ موضوعات؛ انتخاب هر کلید فقط همان گروه یا وضعیت را نمایش می‌دهد.
+    const topicFilterButtons = document.querySelectorAll('.community-topic-filter[data-topic-filter]');
+    const topicFilterSections = document.querySelectorAll('.community-topic-section[data-topic-section]');
+    topicFilterButtons.forEach(function(button) {
+        button.addEventListener('click', function() {
+            const filter = button.dataset.topicFilter;
+            topicFilterButtons.forEach(function(item) {
+                item.setAttribute('aria-pressed', item === button ? 'true' : 'false');
+            });
+            topicFilterSections.forEach(function(section) {
+                const topics = section.querySelectorAll('.community-topic-item[data-topic-group]');
+                let visibleCount = 0;
+                topics.forEach(function(topic) {
+                    const visible = (filter === 'active' || filter === 'stagnant')
+                        ? topic.dataset.topicStatus === filter
+                        : topic.dataset.topicGroup === filter;
+                    topic.hidden = !visible;
+                    if (visible) visibleCount++;
+                });
+                section.hidden = visibleCount === 0;
+            });
+        });
+    });
     // شمارش زندهٔ نویسه‌ها در فرم ثبت موضوع و ایده
     const faDigits = function(value) {
         return String(value).replace(/[0-9]/g, function(d) { return '۰۱۲۳۴۵۶۷۸۹'[Number(d)]; });
