@@ -1350,19 +1350,21 @@ if ($remaining_seconds < 0) $remaining_seconds = 0;
             </div>
             <div class="community-idea-content" id="community-idea-content-<?= (int)$i['id'] ?>"><?= nl2br(htmlspecialchars($i['content'], ENT_QUOTES, 'UTF-8')) ?></div>
             <button type="button" class="community-idea-read-more" aria-expanded="false" aria-controls="community-idea-content-<?= (int)$i['id'] ?>" onclick="toggleCommunityIdeaContent(<?= (int)$i['id'] ?>)">مشاهده ادامه</button>
-            <?php if (!$is_closed && $idea_revisions_ready && (int)$i['uid'] === $user_id): ?>
+            <?php if ($idea_revisions_ready): ?>
               <details class="community-idea-edit">
-                <summary>✏️ اصلاح ایده پس از مباحثه</summary>
-                <form action="edit_idea.php" method="post">
-                  <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($community_duty_csrf, ENT_QUOTES, 'UTF-8') ?>">
-                  <input type="hidden" name="idea_id" value="<?= (int)$i['id'] ?>">
-                  <input type="hidden" name="community_id" value="<?= (int)$community['id'] ?>">
-                  <label>متن اصلاح‌شده</label>
-                  <textarea name="idea_text" maxlength="25000" required><?= htmlspecialchars($i['content'], ENT_QUOTES, 'UTF-8') ?></textarea>
-                  <label>دلیل اصلاح (اختیاری)</label>
-                  <input type="text" name="revision_note" maxlength="1000" placeholder="مثلاً: با توجه به پیشنهادهای مباحثه">
-                  <button type="submit">ذخیره نسخهٔ اصلاح‌شده</button>
-                </form>
+                <summary>📜 نسخه‌های قبلی و اصلاح ایده</summary>
+                <?php if (!$is_closed && (int)$i['uid'] === $user_id): ?>
+                  <form action="edit_idea.php" method="post">
+                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($community_duty_csrf, ENT_QUOTES, 'UTF-8') ?>">
+                    <input type="hidden" name="idea_id" value="<?= (int)$i['id'] ?>">
+                    <input type="hidden" name="community_id" value="<?= (int)$community['id'] ?>">
+                    <label>متن اصلاح‌شده (فقط صاحب ایده می‌تواند آن را تغییر دهد)</label>
+                    <textarea name="idea_text" maxlength="25000" required><?= htmlspecialchars($i['content'], ENT_QUOTES, 'UTF-8') ?></textarea>
+                    <label>دلیل اصلاح (اختیاری)</label>
+                    <input type="text" name="revision_note" maxlength="1000" placeholder="مثلاً: با توجه به پیشنهادهای مباحثه">
+                    <button type="submit">ذخیره نسخهٔ اصلاح‌شده</button>
+                  </form>
+                <?php endif; ?>
                 <?php
                 $revisions_q = $conn->prepare("SELECT r.previous_content, r.revision_note, r.created_at, u.username FROM community_idea_revisions r JOIN users u ON u.id=r.editor_user_id WHERE r.idea_id=? ORDER BY r.id DESC");
                 $revisions_q->bind_param("i", $i['id']);
@@ -1371,7 +1373,7 @@ if ($remaining_seconds < 0) $remaining_seconds = 0;
                 if ($revisions_res->num_rows > 0):
                 ?>
                   <div class="community-idea-history">
-                    <strong>📜 نسخه‌های قبلی</strong>
+                    <strong>📜 سابقهٔ نسخه‌ها (برای همهٔ اعضا قابل مشاهده)</strong>
                     <?php while ($revision = $revisions_res->fetch_assoc()): ?>
                       <details>
                         <summary><?= htmlspecialchars(community_format_jalali_datetime($revision['created_at']), ENT_QUOTES, 'UTF-8') ?> — <?= htmlspecialchars($revision['username'], ENT_QUOTES, 'UTF-8') ?></summary>
@@ -1380,6 +1382,8 @@ if ($remaining_seconds < 0) $remaining_seconds = 0;
                       </details>
                     <?php endwhile; ?>
                   </div>
+                <?php else: ?>
+                  <p style="font-size:12px;color:#687789;">هنوز نسخهٔ قبلی ثبت نشده است.</p>
                 <?php endif; $revisions_q->close(); ?>
               </details>
             <?php endif; ?>
