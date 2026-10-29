@@ -265,21 +265,14 @@ function participation_percent($conn,$topic_id){
     $voters = (int)$r2->get_result()->fetch_assoc()['voters']; $r2->close();
     return round(($voters/$total)*100,1);
 }
-$conn->query("
-    INSERT INTO topic_voting_meta (topic_id, urgency_days, voting_started, finalized)
-    SELECT t.id, 5, t.created_at, 0
-    FROM topics t
-    LEFT JOIN topic_voting_meta m ON m.topic_id = t.id
-    WHERE t.closed=1 AND m.topic_id IS NULL
-");
 // =========================
 // نهایی‌سازی اتوماتیک موضوعات
 // =========================
 
-// ساخت meta برای تمام موضوعات بسته شده که meta ندارند
+// فقط برای جامعهٔ جاری meta بساز؛ مهلت از زمان شروع واقعی رأی‌گیری محاسبه می‌شود
 $conn->query("
     INSERT INTO topic_voting_meta (topic_id, urgency_days, voting_started, finalized)
-    SELECT t.id, 5, t.created_at, 0
+    SELECT t.id, 5, NOW(), 0
     FROM topics t
     LEFT JOIN topic_voting_meta m ON m.topic_id = t.id
     WHERE t.community_id=$community_id AND t.closed=1 AND m.topic_id IS NULL
