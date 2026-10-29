@@ -1236,25 +1236,39 @@ $topics_count = (int)$topics_count_res['cnt'];
 </div>
 <?php
 $topic_discussions_ready = false;
-$discussion_table_check = $conn->query("SHOW TABLES LIKE 'community_topic_discussions'");
-if ($discussion_table_check instanceof mysqli_result) {
-    $topic_discussions_ready = $discussion_table_check->num_rows > 0;
-    $discussion_table_check->free();
+$activity_expressions = ["t.created_at"];
+$activity_sources = [
+    ["table" => "topic_priority_votes", "alias" => "p", "sql" => "COALESCE((SELECT MAX(p.created_at) FROM topic_priority_votes p WHERE p.topic_id=t.id), t.created_at)"],
+    ["table" => "ideas", "alias" => "i", "sql" => "COALESCE((SELECT MAX(i.created_at) FROM ideas i WHERE i.topic_id=t.id), t.created_at)"],
+    ["table" => "community_topic_discussions", "alias" => "d", "sql" => "COALESCE((SELECT MAX(d.created_at) FROM community_topic_discussions d WHERE d.topic_id=t.id), t.created_at)"],
+    ["table" => "topic_voting_ballots", "alias" => "v", "sql" => "COALESCE((SELECT MAX(v.created_at) FROM topic_voting_ballots v WHERE v.topic_id=t.id), t.created_at)"],
+    ["table" => "topic_voting_urgency_votes", "alias" => "u", "sql" => "COALESCE((SELECT MAX(u.created_at) FROM topic_voting_urgency_votes u WHERE u.topic_id=t.id), t.created_at)"],
+];
+$activity_column_check = $conn->prepare("
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema=DATABASE() AND table_name=? AND column_name='created_at'
+    LIMIT 1
+");
+foreach ($activity_sources as $activity_source) {
+    $activity_table = $activity_source["table"];
+    $activity_column_check->bind_param("s", $activity_table);
+    $activity_column_check->execute();
+    $activity_column_exists = (bool)$activity_column_check->get_result()->fetch_row();
+    if ($activity_column_exists) {
+        $activity_expressions[] = $activity_source["sql"];
+        if ($activity_table === "community_topic_discussions") {
+            $topic_discussions_ready = true;
+        }
+    }
 }
-$discussion_activity_sql = $topic_discussions_ready
-    ? "COALESCE((SELECT MAX(d.created_at) FROM community_topic_discussions d WHERE d.topic_id=t.id), t.created_at)"
-    : "t.created_at";
+$activity_column_check->close();
+$last_activity_sql = "GREATEST(" . implode(", ", $activity_expressions) . ")";
 
 $topics_list = $conn->prepare("
     SELECT t.*,
            COUNT(tp.user_id) AS total_priority,
-           GREATEST(
-             COALESCE((SELECT MAX(p.created_at) FROM topic_priority_votes p WHERE p.topic_id=t.id), t.created_at),
-             COALESCE((SELECT MAX(i.created_at) FROM ideas i WHERE i.topic_id=t.id), t.created_at),
-             " . $discussion_activity_sql . ",
-             COALESCE((SELECT MAX(v.created_at) FROM topic_voting_ballots v WHERE v.topic_id=t.id), t.created_at),
-             COALESCE((SELECT MAX(u.created_at) FROM topic_voting_urgency_votes u WHERE u.topic_id=t.id), t.created_at)
-           ) AS last_activity_at
+           " . $last_activity_sql . " AS last_activity_at
     FROM topics t
     LEFT JOIN topic_priority_votes tp ON t.id=tp.topic_id
     WHERE t.community_id=? AND t.closed=0
