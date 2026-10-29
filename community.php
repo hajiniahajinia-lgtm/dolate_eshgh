@@ -1238,11 +1238,14 @@ $topics_count = (int)$topics_count_res['cnt'];
 $topic_discussions_ready = false;
 $activity_expressions = ["t.created_at"];
 $activity_sources = [
-    ["table" => "topic_priority_votes", "alias" => "p", "sql" => "COALESCE((SELECT MAX(p.created_at) FROM topic_priority_votes p WHERE p.topic_id=t.id), t.created_at)"],
-    ["table" => "ideas", "alias" => "i", "sql" => "COALESCE((SELECT MAX(i.created_at) FROM ideas i WHERE i.topic_id=t.id), t.created_at)"],
-    ["table" => "community_topic_discussions", "alias" => "d", "sql" => "COALESCE((SELECT MAX(d.created_at) FROM community_topic_discussions d WHERE d.topic_id=t.id), t.created_at)"],
-    ["table" => "topic_voting_ballots", "alias" => "v", "sql" => "COALESCE((SELECT MAX(v.created_at) FROM topic_voting_ballots v WHERE v.topic_id=t.id), t.created_at)"],
-    ["table" => "topic_voting_urgency_votes", "alias" => "u", "sql" => "COALESCE((SELECT MAX(u.created_at) FROM topic_voting_urgency_votes u WHERE u.topic_id=t.id), t.created_at)"],
+    ["table" => "topic_priority_votes", "sql" => "COALESCE((SELECT MAX(p.created_at) FROM topic_priority_votes p WHERE p.topic_id=t.id), t.created_at)"],
+    ["table" => "topic_votes", "sql" => "COALESCE((SELECT MAX(tv.created_at) FROM topic_votes tv WHERE tv.topic_id=t.id), t.created_at)"],
+    ["table" => "ideas", "sql" => "COALESCE((SELECT MAX(i.created_at) FROM ideas i WHERE i.topic_id=t.id), t.created_at)"],
+    ["table" => "idea_votes", "sql" => "COALESCE((SELECT MAX(iv.created_at) FROM idea_votes iv WHERE iv.topic_id=t.id), t.created_at)"],
+    ["table" => "community_topic_discussions", "sql" => "COALESCE((SELECT MAX(d.created_at) FROM community_topic_discussions d WHERE d.topic_id=t.id), t.created_at)"],
+    ["table" => "topic_voting_ballots", "sql" => "COALESCE((SELECT MAX(v.created_at) FROM topic_voting_ballots v WHERE v.topic_id=t.id), t.created_at)"],
+    ["table" => "topic_voting_urgency_votes", "sql" => "COALESCE((SELECT MAX(u.created_at) FROM topic_voting_urgency_votes u WHERE u.topic_id=t.id), t.created_at)"],
+    ["table" => "topic_enforce_votes", "sql" => "COALESCE((SELECT MAX(ev.created_at) FROM topic_enforce_votes ev WHERE ev.topic_id=t.id), t.created_at)"],
 ];
 $activity_column_check = $conn->prepare("
     SELECT 1
