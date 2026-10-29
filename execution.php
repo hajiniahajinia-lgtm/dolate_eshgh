@@ -223,7 +223,7 @@ function em_date($v){
 $labels=['planned'=>'در انتظار شروع','in_progress'=>'در حال اجرا','completed'=>'تکمیل‌شده','delayed'=>'دارای تأخیر','preparing'=>'آماده‌سازی','in_progress'=>'در حال اجرا','blocked'=>'دارای مانع','completed'=>'تکمیل‌شده','progress'=>'گزارش پیشرفت','discussion'=>'هم‌اندیشی','problem'=>'مشکل اجرایی','delay'=>'گزارش تأخیر','misconduct'=>'گزارش تخلف احتمالی','response'=>'پاسخ مجری'];
 ?>
 <!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>نظارت و اجرای طرح</title>
-<style>body{margin:0;padding:14px;background:#f2f6fb;color:#263548;font-family:tahoma,Arial,sans-serif;line-height:1.9}.wrap{max-width:950px;margin:auto}.box{background:white;border:1px solid #dce5ef;border-radius:12px;padding:15px;margin:12px 0;overflow-wrap:anywhere}.hero{background:#eaf4ff;border-color:#bad8f8}.muted{font-size:13px;color:#667085}.field{display:block;width:100%;box-sizing:border-box;font:inherit;padding:9px;border:1px solid #cbd5e1;border-radius:7px;margin:5px 0 12px}button,.btn{display:inline-block;border:0;border-radius:7px;background:#2065d1;color:#fff;padding:9px 14px;font:inherit;text-decoration:none;cursor:pointer}.notice{background:#e9f8ec;border:1px solid #b7dfbf;padding:9px;border-radius:7px}.entry{border-top:1px solid #e5eaf0;padding:12px 0}.entry:first-child{border-top:0}.tag{display:inline-block;background:#edf3fc;border-radius:5px;padding:1px 7px;font-size:12px}</style></head><body><main class="wrap">
+<style>body{margin:0;padding:14px;background:#f2f6fb;color:#263548;font-family:tahoma,Arial,sans-serif;line-height:1.9}.wrap{max-width:950px;margin:auto}.box{background:white;border:1px solid #dce5ef;border-radius:12px;padding:15px;margin:12px 0;overflow-wrap:anywhere}.hero{background:#eaf4ff;border-color:#bad8f8}.muted{font-size:13px;color:#667085}.field{display:block;width:100%;box-sizing:border-box;font:inherit;padding:9px;border:1px solid #cbd5e1;border-radius:7px;margin:5px 0 12px}button,.btn{display:inline-block;border:0;border-radius:7px;background:#2065d1;color:#fff;padding:9px 14px;font:inherit;text-decoration:none;cursor:pointer}.notice{background:#e9f8ec;border:1px solid #b7dfbf;padding:9px;border-radius:7px}.entry{border-top:1px solid #e5eaf0;padding:12px 0}.entry:first-child{border-top:0}.tag{display:inline-block;background:#edf3fc;border-radius:5px;padding:1px 7px;font-size:12px}.panel-toggle{display:block;cursor:pointer;font-weight:bold;list-style:none;position:relative;padding-left:28px}.panel-toggle::-webkit-details-marker{display:none}.panel-toggle:after{content:"＋";position:absolute;left:4px;top:0;font-size:18px;color:#2065d1}.panel-toggle:focus{outline:2px solid #8ab8f5;outline-offset:3px}.panel-toggle .muted{font-weight:normal}.box[open]>.panel-toggle:after{content:"−"}.panel-content{padding-top:10px}.box:not([open])>.panel-content{display:none}</style></head><body><main class="wrap">
 <p><a class="btn" href="community.php?id=<?= $community_id ?>">بازگشت به جامعه</a> <a class="btn" href="archived_topics.php?community_id=<?= $community_id ?>">بازگشت به آرشیو</a> <a class="btn" href="finance.php?community_id=<?= $community_id ?>">🏦 بانک مالی جامعه</a></p>
 <h1>🔎 نظارت و اجرای طرح</h1><section class="box hero"><div class="muted"><?= em_h($plan['community_name']) ?></div><h2><?= em_h($plan['title']) ?></h2><h3>طرح منتخب</h3><div><?= nl2br(em_h($plan['idea_content'])) ?></div><p>مجری منتخب: <strong><?= em_h($executor_name) ?></strong></p><p>برنامهٔ اولیهٔ ارائه‌شده هنگام نامزدی:</p><div><?= nl2br(em_h($plan['initial_plan'])) ?></div><p>مدت تخمینی اولیه: <?= $plan['estimated_days'] ? (int)$plan['estimated_days'].' روز' : 'اعلام نشده' ?></p><p>وضعیت فعلی: <strong><?= em_h($labels[$execution['status']]??$execution['status']) ?></strong></p></section>
 <?php if($message!==''): ?><p class="notice"><?= em_h($message) ?></p><?php endif; ?>
@@ -258,4 +258,26 @@ $labels=['planned'=>'در انتظار شروع','in_progress'=>'در حال ا�
 <?php endif; ?></section>
 <section class="box"><h2>ثبت گزارش، پرسش یا هم‌اندیشی</h2><p class="muted">اعضا می‌توانند پیشرفت، مشکل، تأخیر یا تخلف احتمالی را گزارش کنند. گزارش تخلف به‌تنهایی اثبات تخلف نیست و باید بررسی شود.</p><form method="post"><input type="hidden" name="csrf_token" value="<?= em_h($csrf) ?>"><input type="hidden" name="action" value="add_update"><label>نوع ثبت<select class="field" name="update_type"><?php foreach(['discussion','progress','problem','delay','misconduct','response'] as $st): ?><option value="<?= $st ?>"><?= em_h($labels[$st]) ?></option><?php endforeach; ?></select></label><label>عنوان<input class="field" name="title" maxlength="200" required></label><label>شرح<textarea class="field" name="body" rows="5" maxlength="10000" required></textarea></label><button type="submit">ثبت در سابقهٔ نظارت</button></form></section>
 <section class="box"><h2>سابقهٔ اجرا و نظارت (<?= count($updates) ?>)</h2><?php if(!$updates): ?><p class="muted">هنوز گزارشی ثبت نشده است.</p><?php else: foreach($updates as $u): ?><article class="entry"><span class="tag"><?= em_h($labels[$u['update_type']]??$u['update_type']) ?></span><strong><?= em_h($u['title']) ?></strong><div class="muted"><?= em_h($u['username']) ?> — <?= em_h(em_date($u['created_at'])) ?></div><div><?= nl2br(em_h($u['body'])) ?></div></article><?php endforeach; endif; ?></section>
+
+<script data-collapsible-panels>
+document.addEventListener('DOMContentLoaded', function () {
+  document.querySelectorAll('main.wrap > section.box').forEach(function (panel) {
+    var heading = panel.querySelector('h2');
+    var label = heading ? heading.textContent.trim() : 'اطلاعات طرح منتخب';
+    if (panel.classList.contains('hero')) label = 'اطلاعات طرح منتخب و مجری';
+    var details = document.createElement('details');
+    details.className = panel.className;
+    details.classList.add('compact-panel');
+    var summary = document.createElement('summary');
+    summary.className = 'panel-toggle';
+    summary.textContent = label;
+    var content = document.createElement('div');
+    content.className = 'panel-content';
+    while (panel.firstChild) content.appendChild(panel.firstChild);
+    details.appendChild(summary);
+    details.appendChild(content);
+    panel.replaceWith(details);
+  });
+});
+</script>
 </main></body></html>
