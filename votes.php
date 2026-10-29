@@ -269,6 +269,18 @@ function participation_percent($conn,$topic_id){
 // نهایی‌سازی اتوماتیک موضوعات
 // =========================
 
+// اصلاح metaهای قدیمیِ هنوز نهایی‌نشده که زمان شروعشان اشتباهاً همان زمان ایجاد موضوع است.
+// این کار فقط زمان مهلت را اصلاح می‌کند و رأی‌ها یا نتیجه‌ها را تغییر نمی‌دهد.
+$conn->query("
+    UPDATE topic_voting_meta m
+    JOIN topics t ON t.id = m.topic_id
+    SET m.voting_started = NOW()
+    WHERE t.community_id = $community_id
+      AND t.closed = 1
+      AND m.finalized = 0
+      AND m.voting_started = t.created_at
+");
+
 // فقط برای جامعهٔ جاری meta بساز؛ مهلت از زمان شروع واقعی رأی‌گیری محاسبه می‌شود
 $conn->query("
     INSERT INTO topic_voting_meta (topic_id, urgency_days, voting_started, finalized)
