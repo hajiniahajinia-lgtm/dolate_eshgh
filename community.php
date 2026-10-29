@@ -1405,7 +1405,7 @@ if ($remaining_seconds < 0) $remaining_seconds = 0;
             <?php if ($idea_feedback_ready): ?>
               <details class="community-idea-feedback" id="community-idea-feedback-<?= (int)$i['id'] ?>">
                 <?php
-                $feedback_q = $conn->prepare("SELECT f.content, f.created_at, u.username FROM community_idea_feedback f JOIN users u ON u.id=f.user_id WHERE f.idea_id=? ORDER BY f.id ASC");
+                $feedback_q = $conn->prepare("SELECT f.id, f.content, f.created_at, f.review_status, u.username FROM community_idea_feedback f JOIN users u ON u.id=f.user_id WHERE f.idea_id=? ORDER BY f.id ASC");
                 $feedback_q->bind_param("i", $i['id']);
                 $feedback_q->execute();
                 $feedback_res = $feedback_q->get_result();
@@ -1419,9 +1419,33 @@ if ($remaining_seconds < 0) $remaining_seconds = 0;
                   <p style="margin:7px 0;color:#61758a;">هنوز پیشنهادی برای این ایده ثبت نشده است.</p>
                 <?php endif; ?>
                 <?php while ($feedback = $feedback_res->fetch_assoc()): ?>
-                  <div class="community-idea-feedback-entry">
+                  <?php
+                    $feedback_status = (string)($feedback['review_status'] ?? 'pending');
+                    $feedback_status_labels = ['pending' => 'در انتظار بررسی', 'accepted' => 'پذیرفته‌شده', 'rejected' => 'پذیرفته‌نشده'];
+                    if (!isset($feedback_status_labels[$feedback_status])) {
+                        $feedback_status = 'pending';
+                    }
+                  ?>
+                  <div class="community-idea-feedback-entry" id="community-idea-feedback-item-<?= (int)$feedback['id'] ?>">
                     <div class="community-idea-feedback-meta">👤 <?= htmlspecialchars($feedback['username'], ENT_QUOTES, 'UTF-8') ?> · <?= htmlspecialchars(community_format_jalali_datetime($feedback['created_at']), ENT_QUOTES, 'UTF-8') ?></div>
                     <div><?= nl2br(htmlspecialchars($feedback['content'], ENT_QUOTES, 'UTF-8')) ?></div>
+                    <div style="margin-top:7px;font-size:12px;color:#176b56;"><strong>وضعیت:</strong> <?= htmlspecialchars($feedback_status_labels[$feedback_status], ENT_QUOTES, 'UTF-8') ?></div>
+                    <?php if (!$is_closed && (int)$i['uid'] === $user_id): ?>
+                      <form action="update_idea_feedback_status.php" method="post" style="margin-top:7px;">
+                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($community_duty_csrf, ENT_QUOTES, 'UTF-8') ?>">
+                        <input type="hidden" name="feedback_id" value="<?= (int)$feedback['id'] ?>">
+                        <input type="hidden" name="idea_id" value="<?= (int)$i['id'] ?>">
+                        <input type="hidden" name="topic_id" value="<?= (int)$tid ?>">
+                        <input type="hidden" name="community_id" value="<?= (int)$community['id'] ?>">
+                        <label style="display:block;font-size:12px;margin-top:5px;">تغییر وضعیت پیشنهاد</label>
+                        <select name="review_status" aria-label="وضعیت بررسی پیشنهاد">
+                          <option value="pending" <?= $feedback_status === 'pending' ? 'selected' : '' ?>>در انتظار بررسی</option>
+                          <option value="accepted" <?= $feedback_status === 'accepted' ? 'selected' : '' ?>>پذیرفته‌شده</option>
+                          <option value="rejected" <?= $feedback_status === 'rejected' ? 'selected' : '' ?>>پذیرفته‌نشده</option>
+                        </select>
+                        <button type="submit">ثبت وضعیت</button>
+                      </form>
+                    <?php endif; ?>
                   </div>
                 <?php endwhile; $feedback_q->close(); ?>
                 <?php if (!$is_closed): ?>
