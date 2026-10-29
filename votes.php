@@ -194,11 +194,24 @@ if($_SERVER['REQUEST_METHOD'] === 'POST'){
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
         ");
 
-        $save_vote = $conn->prepare("
-            INSERT INTO topic_voting_urgency_votes (topic_id, user_id, urgency_days)
-            VALUES (?, ?, ?)
-            ON DUPLICATE KEY UPDATE urgency_days = VALUES(urgency_days), created_at = CURRENT_TIMESTAMP
+        $urgency_created_at_check = $conn->query("
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema=DATABASE()
+              AND table_name='topic_voting_urgency_votes'
+              AND column_name='created_at'
+            LIMIT 1
         ");
+        $urgency_has_created_at = $urgency_created_at_check && $urgency_created_at_check->num_rows > 0;
+        if ($urgency_created_at_check instanceof mysqli_result) $urgency_created_at_check->free();
+
+        $urgency_upsert_sql = $urgency_has_created_at
+            ? "INSERT INTO topic_voting_urgency_votes (topic_id, user_id, urgency_days)
+               VALUES (?, ?, ?)
+               ON DUPLICATE KEY UPDATE urgency_days = VALUES(urgency_days), created_at = CURRENT_TIMESTAMP"
+            : "INSERT INTO topic_voting_urgency_votes (topic_id, user_id, urgency_days)
+               VALUES (?, ?, ?)
+               ON DUPLICATE KEY UPDATE urgency_days = VALUES(urgency_days)";
+        $save_vote = $conn->prepare($urgency_upsert_sql);
         $save_vote->bind_param("iii", $topic_id, $user_id, $urg);
         $save_vote->execute();
         $save_vote->close();
