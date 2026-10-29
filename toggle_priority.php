@@ -57,6 +57,32 @@ if (!$topic) {
     http_response_code(404);
     exit("موضوع مورد نظر پیدا نشد.");
 }
+
+// جامعهٔ ارسالی باید دقیقاً همان جامعهٔ متعلق به موضوع باشد.
+if ((int)$topic['community_id'] !== $community_id) {
+    http_response_code(403);
+    exit("جامعهٔ ارسالی با جامعهٔ این موضوع مطابقت ندارد.");
+}
+
+// فقط اعضای همان جامعه اجازهٔ ثبت یا لغو اولویت دارند.
+$member_check = $conn->prepare(
+    "SELECT 1 FROM community_members WHERE community_id=? AND user_id=? LIMIT 1"
+);
+if (!$member_check) {
+    error_log("toggle_priority membership prepare error: " . $conn->error);
+    http_response_code(500);
+    exit("خطای پایگاه‌داده. لطفاً بعداً دوباره تلاش کنید.");
+}
+$member_check->bind_param("ii", $community_id, $user_id);
+$member_check->execute();
+$is_member = (bool)$member_check->get_result()->fetch_row();
+$member_check->close();
+
+if (!$is_member) {
+    http_response_code(403);
+    exit("فقط اعضای این جامعه می‌توانند اولویت موضوع را ثبت یا لغو کنند.");
+}
+
 if ((int)$topic['closed'] === 1) {
     http_response_code(400);
     exit("این موضوع بسته شده و امکان اولویت‌دهی وجود ندارد.");
