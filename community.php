@@ -262,6 +262,12 @@ textarea{resize:vertical;}
 .community-idea-history>strong{display:block;margin-bottom:6px;}
 .community-idea-history details{margin-top:5px;padding:7px;background:#fff;border:1px solid #e0e8f0;border-radius:6px;}
 .community-idea-history summary{cursor:pointer;color:#475569;}
+.community-idea-feedback{margin-top:10px;padding:9px;background:#f0f9f7;border:1px solid #b9e2d6;border-radius:7px;font-size:13px;}
+.community-idea-feedback>summary{cursor:pointer;color:#176b56;font-weight:bold;}
+.community-idea-feedback-entry{margin-top:7px;padding:8px;background:#fff;border:1px solid #d7eee7;border-radius:6px;overflow-wrap:anywhere;}
+.community-idea-feedback-meta{font-size:12px;color:#687789;margin-bottom:4px;}
+.community-idea-feedback textarea{box-sizing:border-box;width:100%;min-height:72px;margin-top:8px;padding:8px;border:1px solid #b8d9ce;border-radius:6px;font:inherit;resize:vertical;}
+.community-idea-feedback button{margin-top:7px;padding:7px 11px;border:0;border-radius:6px;background:#187a61;color:#fff;cursor:pointer;font:inherit;}
 .topic-title-wrap{position:relative;flex:1 1 auto;min-width:0;}
 .topic-header h2{margin:0;font-size:16px;word-break:break-word;}
 .topic-description{display:none;position:absolute;top:calc(100% + 6px);right:0;width:360px;max-width:calc(100vw - 60px);margin:0;padding:10px 12px;background:#fff;color:#374151;font-size:14px;line-height:1.9;white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid #9ac7ff;border-radius:8px;box-shadow:0 5px 16px rgba(0,0,0,.16);z-index:1500;font-weight:normal;}
@@ -1244,6 +1250,12 @@ if ($idea_revisions_table_check instanceof mysqli_result) {
     $idea_revisions_ready = $idea_revisions_table_check->num_rows > 0;
     $idea_revisions_table_check->free();
 }
+$idea_feedback_ready = false;
+$idea_feedback_table_check = $conn->query("SHOW TABLES LIKE 'community_idea_feedback'");
+if ($idea_feedback_table_check instanceof mysqli_result) {
+    $idea_feedback_ready = $idea_feedback_table_check->num_rows > 0;
+    $idea_feedback_table_check->free();
+}
 
 $topic_sections = [
     'important' => ['title' => '⭐ موضوعات مهم', 'items' => []],
@@ -1385,6 +1397,39 @@ if ($remaining_seconds < 0) $remaining_seconds = 0;
                 <?php else: ?>
                   <p style="font-size:12px;color:#687789;">هنوز نسخهٔ قبلی ثبت نشده است.</p>
                 <?php endif; $revisions_q->close(); ?>
+              </details>
+            <?php endif; ?>
+            <?php if ($idea_feedback_ready): ?>
+              <details class="community-idea-feedback" id="community-idea-feedback-<?= (int)$i['id'] ?>">
+                <?php
+                $feedback_q = $conn->prepare("SELECT f.content, f.created_at, u.username FROM community_idea_feedback f JOIN users u ON u.id=f.user_id WHERE f.idea_id=? ORDER BY f.id ASC");
+                $feedback_q->bind_param("i", $i['id']);
+                $feedback_q->execute();
+                $feedback_res = $feedback_q->get_result();
+                $feedback_count = $feedback_res->num_rows;
+                ?>
+                <summary>💬 پیشنهادها و نظرها دربارهٔ این ایده (<?= (int)$feedback_count ?>)</summary>
+                <?php if ($feedback_count === 0): ?>
+                  <p style="margin:7px 0;color:#61758a;">هنوز پیشنهادی برای این ایده ثبت نشده است.</p>
+                <?php endif; ?>
+                <?php while ($feedback = $feedback_res->fetch_assoc()): ?>
+                  <div class="community-idea-feedback-entry">
+                    <div class="community-idea-feedback-meta">👤 <?= htmlspecialchars($feedback['username'], ENT_QUOTES, 'UTF-8') ?> · <?= htmlspecialchars(community_format_jalali_datetime($feedback['created_at']), ENT_QUOTES, 'UTF-8') ?></div>
+                    <div><?= nl2br(htmlspecialchars($feedback['content'], ENT_QUOTES, 'UTF-8')) ?></div>
+                  </div>
+                <?php endwhile; $feedback_q->close(); ?>
+                <?php if (!$is_closed): ?>
+                  <form action="add_idea_feedback.php" method="post">
+                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($community_duty_csrf, ENT_QUOTES, 'UTF-8') ?>">
+                    <input type="hidden" name="idea_id" value="<?= (int)$i['id'] ?>">
+                    <input type="hidden" name="topic_id" value="<?= (int)$tid ?>">
+                    <input type="hidden" name="community_id" value="<?= (int)$community['id'] ?>">
+                    <textarea name="feedback_text" maxlength="5000" placeholder="پیشنهاد اصلاحی یا نظر خود را دربارهٔ این ایده بنویسید (حداکثر ۵۰۰۰ نویسه)" required></textarea>
+                    <button type="submit">💬 ثبت پیشنهاد یا نظر</button>
+                  </form>
+                <?php else: ?>
+                  <p style="margin:7px 0 0;color:#687789;font-size:12px;">موضوع بسته شده است؛ امکان ثبت نظر تازه وجود ندارد.</p>
+                <?php endif; ?>
               </details>
             <?php endif; ?>
             <div class="tooltip-box" id="tooltip-<?= (int)$i['uid'] ?>"><p>در حال بارگذاری...</p></div>
