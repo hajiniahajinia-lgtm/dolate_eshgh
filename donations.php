@@ -61,9 +61,11 @@ function donation_finalize_expired(mysqli $conn, int $community_id): array {
             $lock->close();
             if (!$d) { $conn->commit(); continue; }
 
+            // شناسه‌ها فقط از پرس‌وجوی منقضی‌شده آمده‌اند؛ زمان را در SQL با NOW() سنجیده‌ایم
+            // تا اختلاف منطقهٔ زمانی PHP و MySQL باعث توقف یا تأخیر رأی‌گیری نشود.
             $stage = null;
-            if ($d['status'] === 'acceptance_voting' && !empty($d['acceptance_vote_deadline']) && strtotime($d['acceptance_vote_deadline']) <= time()) $stage = 'acceptance';
-            if ($d['status'] === 'receipt_voting' && !empty($d['receipt_vote_deadline']) && strtotime($d['receipt_vote_deadline']) <= time()) $stage = 'receipt';
+            if ($d['status'] === 'acceptance_voting') $stage = 'acceptance';
+            if ($d['status'] === 'receipt_voting') $stage = 'receipt';
             if ($stage === null) { $conn->commit(); continue; }
 
             $vq = $conn->prepare("SELECT SUM(vote_choice='approve') AS yes_count, SUM(vote_choice='reject') AS no_count FROM community_donation_votes WHERE donation_id=? AND community_id=? AND vote_stage=?");
