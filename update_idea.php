@@ -32,6 +32,20 @@ if (!$data) die("ایده یافت نشد.");
 
 $topic_id = (int)$data['topic_id'];
 $community_id = (int)$data['community_id'];
+
+$member_check = $conn->prepare("SELECT 1 FROM community_members WHERE community_id=? AND user_id=? LIMIT 1");
+if (!$member_check) {
+    http_response_code(500);
+    exit("بررسی عضویت انجام نشد.");
+}
+$member_check->bind_param("ii", $community_id, $user_id);
+$member_check->execute();
+$is_member = (bool)$member_check->get_result()->fetch_row();
+$member_check->close();
+if (!$is_member) {
+    http_response_code(403);
+    exit("فقط اعضای جامعه می‌توانند رأی معقولیت بدهند.");
+}
 if ((int)$data['closed'] === 1) {
     header("Location: community.php?id=".$community_id);
     exit;
