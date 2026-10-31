@@ -1,0 +1,80 @@
+<?php
+session_start();
+include __DIR__ . "/db.php";
+
+if (!isset($_SESSION['user_id'])) { http_response_code(401); exit("ابتدا وارد شوید."); }
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') { http_response_code(405); exit("درخواست نامعتبر است."); }
+$user_id = (int)$_SESSION['user_id'];
+$csrf = (string)($_POST['csrf_token'] ?? '');
+if (empty($_SESSION['community_duty_csrf']) || $csrf === '' || !hash_equals($_SESSION['community_duty_csrf'], $csrf)) {
+    http_response_code(403); exit("نشست معتبر نیست؛ صفحه را تازه‌سازی کنید.");
+}
+$action = (string)($_POST['action'] ?? '');
+$community_id = (int)($_POST['community_id'] ?? 0);
+$app_id = (int)($_POST['application_id'] ?? 0);
+function expertise_member(mysqli $conn, int $community_id, int $user_id): bool {
+    $s=$conn->prepare("SELECT 1 FROM community_members WHERE community_id=? AND user_id=? LIMIT 1");
+    if(!$s) return false; $s->bind_param("ii",$community_id,$user_id); $s->execute();
+    $ok=(bool)$s->get_result()->fetch_row(); $s->close(); return $ok;
+}
+function expertise_redirect(int $community_id): void {
+    header("Location: expertise.php".($community_id>0?"?community_id=".$community_id:"")); exit;
+}
+try {
+    if ($action === 'submit') {
+        $domain_id=(int)($_POST['domain_id']??0);
+        $level=(int)($_POST['requested_level']??0);
+        if($community_id<1 || $domain_id<1 || $level<1 || $level>4 || !expertise_member($conn,$community_id,$user_id))
+            throw new RuntimeException("اطلاعات درخواست یا عضویت جامعه معتبر نیست.");
+        $d=$conn->prepare("SELECT id FROM expertise_domains WHERE id=? AND status='approved' LIMIT 1");
+        $d->bind_param("i",$domain_id); $d->execute(); $valid=(bool)$d->get_result()->fetch_row(); $d->close();
+        if(!$valid) throw new RuntimeException("حوزه تخصصی انتخاب‌شده تأیید نشده است.");
+        $dup=$conn->prepare("SELECT id FROM expertise_applications WHERE target_user_id=? AND domain_id=? AND status='pending' AND decision_at IS NULL LIMIT 1");
+        $dup->bind_param("ii",$user_id,$domain_id); $dup->execute(); $exists=(bool)$dup->get_result()->fetch_row(); $dup->close();
+        if($exists) throw new RuntimeException("برای این حوزه یک درخواست در حال بررسی دارید.");
+        $old=$conn->prepare("SELECT level, valid_until FROM expertise_competencies WHERE user_id=? AND domain_id=? LIMIT 1");
+        $old->bind_param("ii",$user_id,$domain_id); $old->execute(); $prior=$old->get_result()->fetch_assoc(); $old->close();
+        $type=(!$prior || strtotime($prior['valid_until'])<=time())?'initial':($level>(int)$prior['level']?'upgrade':'renewal');
+        $code=bin2hex(random_bytes(16));
+        $s=$conn->prepare("INSERT INTO expertise_applications (application_code,community_id,domain_id,target_user_id,created_by,request_type,requested_level,status,expires_at) VALUES (?,?,?,?,?,?,?,'pending',DATE_ADD(NOW(), INTERVAL 7 DAY))");
+        $s->bind_param("siiiisi",$code,$community_id,$domain_id,$user_id,$user_id,$type,$level);
+        if(!$s->execute()) throw new RuntimeException("ثبت درخواست انجام نشد."); $new_id=(int)$s->insert_id; $s->close();
+        $rq=$conn->prepare("INSERT INTO expertise_application_requesters (application_id,requester_user_id) VALUES (?,?)");
+        $rq->bind_param("ii",$new_id,$user_id); $rq->execute(); $rq->close();
+        $h=$conn->prepare("INSERT INTO expertise_application_history (application_id,actor_user_id,event_type,details) VALUES (?,?,'submitted',?)");
+        $detail="درخواست سطح ".$level."؛ مهلت رأی‌گیری ۷ روز";
+        $h->bind_param("iis",$new_id,$user_id,$detail); $h->execute(); $h->close();
+        expertise_redirect($community_id);
+    }
+    if ($action === 'evidence') {
+        $title=trim((string)($_POST['title']??'')); $description=trim((string)($_POST['description']??''));
+        $url=trim((string)($_POST['reference_url']??''));
+        if($app_id<1 || $title==='' || $description==='') throw new RuntimeException("عنوان و شرح مدرک الزامی است.");
+        if($url!=='' && (!filter_var($url,FILTER_VALIDATE_URL) || !preg_match('~^https?://~i',$url))) throw new RuntimeException("نشانی مرجع معتبر نیست.");
+        $s=$conn->prepare("SELECT community_id FROM expertise_applications WHERE id=? AND target_user_id=? AND status='pending' AND decision_at IS NULL");
+        $s->bind_param("ii",$app_id,$user_id); $s->execute(); $a=$s->get_result()->fetch_assoc(); $s->close();
+        if(!$a || !expertise_member($conn,(int)$a['community_id'],$user_id)) throw new RuntimeException("درخواست در دسترس نیست.");
+        $ev=$conn->prepare("INSERT INTO expertise_application_evidence (application_id,submitted_by,title,description,reference_url) VALUES (?,?,?,?,NULLIF(?,''))");
+        $ev->bind_param("iisss",$app_id,$user_id,$title,$description,$url); $ev->execute(); $ev->close();
+        expertise_redirect((int)$a['community_id']);
+    }
+    if ($action === 'vote') {
+        $vote=(string)($_POST['vote']??'');
+        if($app_id<1 || !in_array($vote,['yes','no'],true)) throw new RuntimeException("رأی معتبر نیست.");
+        $conn->begin_transaction();
+        $s=$conn->prepare("SELECT community_id,target_user_id,status,expires_at,decision_at FROM expertise_applications WHERE id=? FOR UPDATE");
+        $s->bind_param("i",$app_id); $s->execute(); $a=$s->get_result()->fetch_assoc(); $s->close();
+        if(!$a || (int)$a['community_id']<1 || $a['status']!=='pending' || $a['decision_at']!==null || strtotime((string)$a['expires_at'])<=time())
+            throw new RuntimeException("مهلت رأی‌گیری پایان یافته یا درخواست بسته است.");
+        if((int)$a['target_user_id']===$user_id || !expertise_member($conn,(int)$a['community_id'],$user_id))
+            throw new RuntimeException("متقاضی نمی‌تواند به درخواست خودش رأی دهد و رأی‌دهنده باید عضو جامعه باشد.");
+        $v=$conn->prepare("INSERT INTO expertise_application_votes (application_id,voter_user_id,vote) VALUES (?,?,?) ON DUPLICATE KEY UPDATE vote=VALUES(vote),updated_at=CURRENT_TIMESTAMP");
+        $v->bind_param("iis",$app_id,$user_id,$vote); $v->execute(); $v->close();
+        $conn->commit(); expertise_redirect((int)$a['community_id']);
+    }
+    throw new RuntimeException("عملیات ناشناخته است.");
+} catch(Throwable $e) {
+    if($conn->errno===0) { /* no-op */ }
+    try { $conn->rollback(); } catch(Throwable $ignored) {}
+    http_response_code(400); exit(htmlspecialchars($e->getMessage(),ENT_QUOTES,'UTF-8'));
+}
