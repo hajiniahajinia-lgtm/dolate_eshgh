@@ -57,7 +57,7 @@ try {
     // حوزه فقط پس از تأیید جامعه مبنای وزن تخصصی است.
     $weight = 1.00;
     $competency = $conn->prepare("
-        SELECT ec.level
+        SELECT ec.weight
         FROM topic_expertise_proposals p
         JOIN expertise_competencies ec
           ON ec.domain_id=p.domain_id AND ec.user_id=?
@@ -70,15 +70,7 @@ try {
     $competency->execute();
     $competency_row = $competency->get_result()->fetch_assoc();
     $competency->close();
-    if ($competency_row) {
-        $weight = match ((int)$competency_row['level']) {
-            1 => 1.25,
-            2 => 1.50,
-            3 => 2.00,
-            4 => 2.50,
-            default => 1.00
-        };
-    }
+    if ($competency_row) { $weight = max(1.00, (float)$competency_row['weight']); }
 
     // رأی قبلی کاربر (در صورت وجود) با وزن ذخیره‌شدهٔ خودش حذف می‌شود.
     $chk = $conn->prepare("SELECT idea_id, vote_weight FROM idea_votes WHERE user_id=? AND topic_id=? FOR UPDATE");
