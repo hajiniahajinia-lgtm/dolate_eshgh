@@ -154,7 +154,7 @@ if($_SERVER['REQUEST_METHOD'] === 'POST'){
 
         $weight = 1.00;
         $competency = $conn->prepare("
-            SELECT ec.level
+            SELECT ec.weight
             FROM topic_expertise_proposals p
             JOIN expertise_competencies ec ON ec.domain_id=p.domain_id AND ec.user_id=?
             WHERE p.topic_id=? AND p.community_id=? AND p.status='approved'
@@ -166,11 +166,7 @@ if($_SERVER['REQUEST_METHOD'] === 'POST'){
             $competency->execute();
             $cr = $competency->get_result()->fetch_assoc();
             $competency->close();
-            if ($cr) {
-                $weight = match ((int)$cr['level']) {
-                    1 => 1.25, 2 => 1.50, 3 => 2.00, 4 => 2.50, default => 1.00
-                };
-            }
+            if ($cr) { $weight = max(1.00, (float)$cr['weight']); }
         }
 
         $stmt = $conn->prepare("
