@@ -116,7 +116,7 @@ $deadline = ($urgency > 0) ? $created + ($urgency * 24 * 60 * 60) : $created + (
             SELECT id
             FROM ideas
             WHERE topic_id=?
-            ORDER BY idea_rationality DESC, id ASC
+            ORDER BY idea_rationality_weighted DESC, idea_rationality DESC, id ASC
             LIMIT 1
         ");
         $best_idea_q->bind_param("i", $topic['id']);
@@ -1453,7 +1453,7 @@ if ($remaining_seconds < 0) $remaining_seconds = 0;
   </div>
   <div class="ideas-box">
     <?php
-    $ideas_q2 = $conn->prepare("SELECT ideas.id, ideas.content, ideas.idea_rationality, ideas.created_at, users.username, users.id AS uid FROM ideas JOIN users ON ideas.user_id = users.id WHERE topic_id=? ORDER BY ideas.idea_rationality DESC, ideas.id ASC");
+    $ideas_q2 = $conn->prepare("SELECT ideas.id, ideas.content, ideas.idea_rationality, ideas.idea_rationality_weighted, ideas.created_at, users.username, users.id AS uid FROM ideas JOIN users ON ideas.user_id = users.id WHERE topic_id=? ORDER BY ideas.idea_rationality_weighted DESC, ideas.idea_rationality DESC, ideas.id ASC");
     $ideas_q2->bind_param("i",$tid);
     $ideas_q2->execute();
     $ideas_res2 = $ideas_q2->get_result();
@@ -1583,7 +1583,7 @@ if ($remaining_seconds < 0) $remaining_seconds = 0;
                 <input type="hidden" name="idea_id" value="<?= (int)$i['id'] ?>">
                 <span class="idea-action-tooltip">
                     <button type="submit" style="background:#27ae60; color:#fff; padding:6px 8px; font-size:13px; border-radius:6px; border:none;">
-                        ✅  معقول‌ترین ایده  <strong><?= (int)$i['idea_rationality'] ?></strong>
+                        ✅  معقول‌ترین ایده  <strong><?= number_format((float)$i['idea_rationality_weighted'], 2) ?></strong> <small>(رأی خام: <?= (int)$i['idea_rationality'] ?>)</small>
                     </button>
                     <span class="idea-action-tooltip-text" role="tooltip">اگر این ایده را منطقی‌ترین راه‌حل این موضوع می‌دانید، آن را انتخاب کنید. هر کاربر برای هر موضوع یک رأی معقولیت دارد؛ با انتخاب ایده‌ای دیگر، رأی قبلی او جابه‌جا می‌شود.</span>
                 </span>
@@ -1591,7 +1591,7 @@ if ($remaining_seconds < 0) $remaining_seconds = 0;
             <?php else: ?>
             <span class="idea-action-tooltip">
                 <span style="background:#27ae60; color:#fff; padding:6px 8px; border-radius:6px;">
-                    ✅ معقول‌ترین <strong><?= (int)$i['idea_rationality'] ?></strong>
+                    ✅ معقول‌ترین <strong><?= number_format((float)$i['idea_rationality_weighted'], 2) ?></strong> <small>(رأی خام: <?= (int)$i['idea_rationality'] ?>)</small>
                 </span>
                 <span class="idea-action-tooltip-text" role="tooltip">این ایده در زمان بسته‌شدن موضوع، معقول‌ترین ایده بر اساس امتیاز ثبت‌شده بوده است.</span>
             </span>
