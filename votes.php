@@ -408,7 +408,7 @@ while($row = $finalize_res->fetch_assoc()){
             SELECT id, content, user_id
             FROM ideas
             WHERE topic_id=$tid
-            ORDER BY idea_rationality DESC, id ASC
+            ORDER BY idea_rationality_weighted DESC, idea_rationality DESC, id ASC
             LIMIT 1
         ");
 
@@ -1423,9 +1423,17 @@ body{
                 }
             }
 
-            // counts
-            $yes_count = (int)$conn->query("SELECT COUNT(*) AS c FROM topic_voting_ballots WHERE topic_id=$tid AND idea_id=$iid AND vote_type='yes'")->fetch_assoc()['c'];
-            $no_count  = (int)$conn->query("SELECT COUNT(*) AS c FROM topic_voting_ballots WHERE topic_id=$tid AND idea_id=$iid AND vote_type='no'")->fetch_assoc()['c'];
+            // شمارش خام و مجموع وزن‌دار رأی آری/نه
+            $ballot_counts = $conn->query("SELECT
+                SUM(vote_type='yes') AS yes_raw,
+                SUM(vote_type='no') AS no_raw,
+                SUM(CASE WHEN vote_type='yes' THEN vote_weight ELSE 0 END) AS yes_weighted,
+                SUM(CASE WHEN vote_type='no' THEN vote_weight ELSE 0 END) AS no_weighted
+                FROM topic_voting_ballots WHERE topic_id=$tid AND idea_id=$iid")->fetch_assoc();
+            $yes_count = (int)($ballot_counts['yes_raw'] ?? 0);
+            $no_count = (int)($ballot_counts['no_raw'] ?? 0);
+            $yes_weighted = (float)($ballot_counts['yes_weighted'] ?? 0);
+            $no_weighted = (float)($ballot_counts['no_weighted'] ?? 0);
 
             // counts for enforce votes (per-user table)
             $enf_yes = (int)$conn->query("SELECT COUNT(*) AS c FROM topic_enforce_votes WHERE topic_id=$tid AND idea_id=$iid AND enforceable=1")->fetch_assoc()['c'];
@@ -1473,7 +1481,9 @@ body{
   <div class="small" style="margin-top:6px">
     آری: <strong class="yes-count"><?= $yes_count ?></strong> —
     نه: <strong class="no-count"><?= $no_count ?></strong> —
-    درصد آری: <strong class="pct"><?= $pct ?>%</strong><br>
+    درصد آری خام: <strong class="pct"><?= $pct ?>%</strong><br>
+    امتیاز وزن‌دار آری: <strong class="yes-weighted"><?= number_format($yes_weighted, 2) ?></strong> —
+    امتیاز وزن‌دار نه: <strong class="no-weighted"><?= number_format($no_weighted, 2) ?></strong><br>
     لازم‌الاجرا: <strong class="enf-yes"><?= $enf_yes ?></strong> —
     غیر لازم‌الاجرا: <strong class="enf-no"><?= $enf_no ?></strong>
   </div>
@@ -1586,6 +1596,10 @@ document.addEventListener('DOMContentLoaded', function(){
                     const total = resp.counts.yes + resp.counts.no;
                     const pct = total > 0 ? Math.round((resp.counts.yes/total)*100) : 0;
                     container.querySelector('.pct').textContent = pct + '%';
+                }
+                if(resp.weighted){
+                    container.querySelector('.yes-weighted').textContent = Number(resp.weighted.yes).toFixed(2);
+                    container.querySelector('.no-weighted').textContent = Number(resp.weighted.no).toFixed(2);
                 }
                 if(resp.enforceable){
                     container.querySelector('.enf-yes').textContent = resp.enforceable.yes;
