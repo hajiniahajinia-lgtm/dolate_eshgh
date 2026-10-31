@@ -27,7 +27,7 @@ if($expired && $community_id){$expired->bind_param("i",$community_id);$expired->
     if($yes>$no){
       $level=(int)$a['requested_level'];$weight=[1=>1.25,2=>1.50,3=>2.00,4=>2.50][$level]??1.00;
       $up=$conn->prepare("INSERT INTO expertise_competencies (user_id,domain_id,level,weight,approved_in_community_id,source_application_id,valid_from,valid_until) VALUES (?,?,?,?,?,?,NOW(),DATE_ADD(NOW(),INTERVAL 1 YEAR)) ON DUPLICATE KEY UPDATE level=VALUES(level),weight=VALUES(weight),approved_in_community_id=VALUES(approved_in_community_id),source_application_id=VALUES(source_application_id),valid_from=NOW(),valid_until=DATE_ADD(NOW(),INTERVAL 1 YEAR)");
-      $up->bind_param("iidiii",$a['target_user_id'],$a['domain_id'],$level,$weight,$a['community_id'],$id);$up->execute();$up->close();
+      $up->bind_param("iiidii",$a['target_user_id'],$a['domain_id'],$level,$weight,$a['community_id'],$id);$up->execute();$up->close();
       $status='approved';
     } elseif($no>$yes){$status='rejected';} else {$status='pending';}
     $fin=$conn->prepare("UPDATE expertise_applications SET status=?,decision_at=NOW() WHERE id=? AND decision_at IS NULL");$fin->bind_param("si",$status,$id);$fin->execute();$fin->close();
