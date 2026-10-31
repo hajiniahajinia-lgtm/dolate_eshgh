@@ -124,25 +124,82 @@ if($_SERVER['REQUEST_METHOD'] === 'POST'){
         echo json_encode(['success'=>true,'is_candidate'=>$is_candidate,'candidate_count'=>$cc,'candidate_names'=>$candidate_names]);exit;
     }
 
-    // ---------- رأی آری/نه ----------
+    // ---------- رأی آری/نه با وزن تخصصی حوزهٔ تأییدشده ----------
     if(isset($_POST['vote_yesno'])){
-        $topic_id = (int)$_POST['topic_id'];
-        $idea_id  = (int)$_POST['idea_id'];
+        $topic_id = (int)($_POST['topic_id'] ?? 0);
+        $idea_id  = (int)($_POST['idea_id'] ?? 0);
         $vote_type = (isset($_POST['vote_type']) && $_POST['vote_type'] === 'no') ? 'no' : 'yes';
 
-        $stmt = $conn->prepare("
-            INSERT INTO topic_voting_ballots (topic_id, idea_id, user_id, vote_type)
-            VALUES (?,?,?,?)
-            ON DUPLICATE KEY UPDATE vote_type=VALUES(vote_type), created_at=CURRENT_TIMESTAMP
+        $valid = $conn->prepare("SELECT 1 FROM ideas i JOIN topics t ON t.id=i.topic_id WHERE i.id=? AND t.id=? AND t.community_id=? LIMIT 1");
+        $valid->bind_param("iii", $idea_id, $topic_id, $community_id);
+        $valid->execute();
+        $valid_idea = (bool)$valid->get_result()->fetch_row();
+        $valid->close();
+        if (!$valid_idea) {
+            http_response_code(400);
+            echo json_encode(['success'=>false,'message'=>'موضوع یا ایده معتبر نیست.']);
+            exit;
+        }
+
+        $member = $conn->prepare("SELECT 1 FROM community_members WHERE community_id=? AND user_id=? LIMIT 1");
+        $member->bind_param("ii", $community_id, $user_id);
+        $member->execute();
+        $is_member = (bool)$member->get_result()->fetch_row();
+        $member->close();
+        if (!$is_member) {
+            http_response_code(403);
+            echo json_encode(['success'=>false,'message'=>'فقط اعضای جامعه می‌توانند رأی بدهند.']);
+            exit;
+        }
+
+        $weight = 1.00;
+        $competency = $conn->prepare("
+            SELECT ec.level
+            FROM topic_expertise_proposals p
+            JOIN expertise_competencies ec ON ec.domain_id=p.domain_id AND ec.user_id=?
+            WHERE p.topic_id=? AND p.community_id=? AND p.status='approved'
+              AND ec.valid_from<=NOW() AND ec.valid_until>NOW()
+            LIMIT 1
         ");
-        $stmt->bind_param("iiis", $topic_id, $idea_id, $user_id, $vote_type);
+        if ($competency) {
+            $competency->bind_param("iii", $user_id, $topic_id, $community_id);
+            $competency->execute();
+            $cr = $competency->get_result()->fetch_assoc();
+            $competency->close();
+            if ($cr) {
+                $weight = match ((int)$cr['level']) {
+                    1 => 1.25, 2 => 1.50, 3 => 2.00, 4 => 2.50, default => 1.00
+                };
+            }
+        }
+
+        $stmt = $conn->prepare("
+            INSERT INTO topic_voting_ballots (topic_id, idea_id, user_id, vote_type, vote_weight)
+            VALUES (?,?,?,?,?)
+            ON DUPLICATE KEY UPDATE vote_type=VALUES(vote_type), vote_weight=VALUES(vote_weight), created_at=CURRENT_TIMESTAMP
+        ");
+        $stmt->bind_param("iiisd", $topic_id, $idea_id, $user_id, $vote_type, $weight);
         $stmt->execute();
         $stmt->close();
 
-        $yes = (int)$conn->query("SELECT COUNT(*) AS c FROM topic_voting_ballots WHERE topic_id=$topic_id AND idea_id=$idea_id AND vote_type='yes'")->fetch_assoc()['c'];
-        $no  = (int)$conn->query("SELECT COUNT(*) AS c FROM topic_voting_ballots WHERE topic_id=$topic_id AND idea_id=$idea_id AND vote_type='no'")->fetch_assoc()['c'];
+        $counts = $conn->prepare("
+            SELECT
+              SUM(vote_type='yes') AS yes_raw,
+              SUM(vote_type='no') AS no_raw,
+              SUM(CASE WHEN vote_type='yes' THEN vote_weight ELSE 0 END) AS yes_weighted,
+              SUM(CASE WHEN vote_type='no' THEN vote_weight ELSE 0 END) AS no_weighted
+            FROM topic_voting_ballots WHERE topic_id=? AND idea_id=?
+        ");
+        $counts->bind_param("ii", $topic_id, $idea_id);
+        $counts->execute();
+        $result = $counts->get_result()->fetch_assoc();
+        $counts->close();
 
-        echo json_encode(['success'=>true,'counts'=>['yes'=>$yes,'no'=>$no]]);
+        echo json_encode([
+            'success'=>true,
+            'counts'=>['yes'=>(int)$result['yes_raw'],'no'=>(int)$result['no_raw']],
+            'weighted'=>['yes'=>(float)$result['yes_weighted'],'no'=>(float)$result['no_weighted']]
+        ]);
         exit;
     }
 
