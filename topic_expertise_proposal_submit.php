@@ -56,6 +56,15 @@ try {
         throw new RuntimeException("حوزهٔ تخصصی انتخاب‌شده تأیید نشده است.");
     }
 
+    $duplicate = $conn->prepare("SELECT id FROM topic_expertise_proposals WHERE topic_id=? LIMIT 1");
+    $duplicate->bind_param("i", $topic_id);
+    $duplicate->execute();
+    $already_exists = (bool)$duplicate->get_result()->fetch_row();
+    $duplicate->close();
+    if ($already_exists) {
+        throw new RuntimeException("برای این موضوع قبلاً پیشنهاد حوزهٔ تخصصی ثبت شده است.");
+    }
+
     $insert = $conn->prepare("INSERT INTO topic_expertise_proposals (topic_id,community_id,domain_id,proposed_by,status,proposed_at,expires_at) VALUES (?,?,?,?,'pending',NOW(),DATE_ADD(NOW(), INTERVAL 7 DAY))");
     $insert->bind_param("iiii", $topic_id, $community_id, $domain_id, $user_id);
     if (!$insert->execute()) {
