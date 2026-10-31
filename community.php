@@ -1194,6 +1194,26 @@ $removal_msg_key = (string)($_GET['removal_msg'] ?? '');
     <form action="add_topic.php" method="post">
       <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($community_duty_csrf, ENT_QUOTES, 'UTF-8') ?>">
       <input type="hidden" name="community_id" value="<?= (int)$community['id'] ?>">
+      <label for="topic-expertise-domain" style="display:block;margin-top:8px;font-size:13px;">حوزهٔ تخصصی مرتبط (پیشنهادی)</label>
+      <select id="topic-expertise-domain" name="expertise_domain_id">
+        <option value="0">بدون تعیین حوزهٔ تخصصی</option>
+        <?php
+        try {
+            $expertise_domains_result = $conn->query("SELECT id, name FROM expertise_domains WHERE status='approved' ORDER BY name ASC");
+            if ($expertise_domains_result) {
+                while ($expertise_domain = $expertise_domains_result->fetch_assoc()) {
+                    echo '<option value="' . (int)$expertise_domain['id'] . '">' .
+                        htmlspecialchars($expertise_domain['name'], ENT_QUOTES, 'UTF-8') .
+                        '</option>';
+                }
+                $expertise_domains_result->free();
+            }
+        } catch (Throwable $e) {
+            error_log("Expertise domains list unavailable: " . $e->getMessage());
+        }
+        ?>
+      </select>
+      <div class="topic-field-hint"><span>این انتخاب فقط پیشنهاد است؛ تا زمانی که جامعه آن را تأیید نکند، هیچ وزن تخصصی به رأی‌ها اضافه نمی‌شود.</span></div>
       <textarea id="topic-title-input" name="topic_title" rows="2" maxlength="100" placeholder="عنوان موضوع*" aria-label="عنوان موضوع" required></textarea>
       <div class="topic-field-hint"><span>عنوانی کوتاه و روشن برای مسئله یا چالش بنویسید.</span><span class="topic-char-count" data-for="topic-title-input">۰ از ۱۰۰ نویسه</span></div>
       <textarea id="topic-description" name="topic_description" rows="3" maxlength="500" placeholder="شرح موضوع (اختیاری)" aria-label="شرح موضوع (اختیاری)"></textarea>
