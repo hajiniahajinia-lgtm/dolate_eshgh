@@ -84,8 +84,8 @@ try {
         if ($existing) {
             if (!hash_equals((string)$existing['checksum'], $checksum)) {
                 // Applied migration files are immutable. Make a new dated file for any correction.
-                error_log('[Dolate Eshgh migrations] Applied migration was edited: ' . $migration_name);
-                break;
+                $current_stage = 'checksum_mismatch';
+                throw new RuntimeException('Applied migration file checksum changed: ' . $migration_name);
             }
             continue;
         }
