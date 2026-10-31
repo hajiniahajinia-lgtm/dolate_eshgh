@@ -1233,6 +1233,51 @@ try {
     error_log("Topic expertise proposal voting unavailable: " . $e->getMessage());
 }
 ?>
+<?php
+// فرم ثبت پیشنهاد حوزهٔ تخصصی برای موضوعات همین جامعه
+$expertise_proposal_topics = [];
+$expertise_proposal_domains = [];
+if ($is_community_member) {
+    $topic_options = $conn->prepare("SELECT id,title FROM topics WHERE community_id=? ORDER BY id DESC LIMIT 200");
+    $topic_options->bind_param("i", $community_id);
+    $topic_options->execute();
+    $expertise_proposal_topics = $topic_options->get_result()->fetch_all(MYSQLI_ASSOC);
+    $topic_options->close();
+
+    $domain_options = $conn->query("SELECT id,name FROM expertise_domains WHERE status='approved' ORDER BY name");
+    if ($domain_options) $expertise_proposal_domains = $domain_options->fetch_all(MYSQLI_ASSOC);
+}
+?>
+<?php if ($is_community_member): ?>
+<div style="margin:12px 0;padding:12px;background:#f8fbff;border:1px solid #c8d9f2;border-radius:10px;">
+  <strong>پیشنهاد حوزهٔ تخصصی برای یک موضوع</strong>
+  <p style="font-size:12px;color:#475467;line-height:1.8;">با ثبت پیشنهاد، اعضای جامعه ۷ روز فرصت دارند موافق یا مخالف رأی دهند. برای هر موضوع فقط یک پیشنهاد ثبت می‌شود.</p>
+  <?php if (!$expertise_proposal_topics || !$expertise_proposal_domains): ?>
+    <p style="font-size:13px;color:#667085;">برای ثبت پیشنهاد، باید دست‌کم یک موضوع در این جامعه و یک حوزهٔ تخصصی تأییدشده وجود داشته باشد.</p>
+  <?php else: ?>
+    <form method="post" action="topic_expertise_proposal_submit.php">
+      <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($community_duty_csrf, ENT_QUOTES, 'UTF-8') ?>">
+      <input type="hidden" name="community_id" value="<?= (int)$community_id ?>">
+      <label for="expertise-proposal-topic">موضوع</label>
+      <select id="expertise-proposal-topic" name="topic_id" required style="display:block;width:100%;max-width:100%;margin:6px 0 12px;padding:9px;border:1px solid #cbd5e1;border-radius:8px;">
+        <option value="">انتخاب موضوع</option>
+        <?php foreach ($expertise_proposal_topics as $topic_option): ?>
+          <option value="<?= (int)$topic_option['id'] ?>"><?= htmlspecialchars($topic_option['title'], ENT_QUOTES, 'UTF-8') ?></option>
+        <?php endforeach; ?>
+      </select>
+      <label for="expertise-proposal-domain">حوزهٔ تخصصی پیشنهادی</label>
+      <select id="expertise-proposal-domain" name="domain_id" required style="display:block;width:100%;max-width:100%;margin:6px 0 12px;padding:9px;border:1px solid #cbd5e1;border-radius:8px;">
+        <option value="">انتخاب حوزه</option>
+        <?php foreach ($expertise_proposal_domains as $domain_option): ?>
+          <option value="<?= (int)$domain_option['id'] ?>"><?= htmlspecialchars($domain_option['name'], ENT_QUOTES, 'UTF-8') ?></option>
+        <?php endforeach; ?>
+      </select>
+      <button type="submit">ثبت پیشنهاد برای رأی‌گیری</button>
+    </form>
+  <?php endif; ?>
+</div>
+<?php endif; ?>
+
 <details id="topic-expertise-proposals" style="margin:12px 0;padding:12px;background:#f2f7ff;border:1px solid #c8d9f2;border-radius:10px;">
   <summary style="cursor:pointer;font-weight:bold;">⚖️ رأی‌گیری حوزه‌های تخصصی موضوعات (<?= count($topic_expertise_proposals) ?>)</summary>
   <div style="margin-top:10px;">
