@@ -100,7 +100,7 @@ $stmt->bind_param(
 if ($stmt->execute()) {
     $new_topic_id = (int)$conn->insert_id;
     if ($expertise_domain_id > 0) {
-        $proposal_stmt = $conn->prepare("INSERT INTO topic_expertise_proposals (topic_id, community_id, domain_id, proposed_by, status) VALUES (?, ?, ?, ?, 'pending')");
+        $proposal_stmt = $conn->prepare("INSERT INTO topic_expertise_proposals (topic_id, community_id, domain_id, proposed_by, status, expires_at) VALUES (?, ?, ?, ?, 'pending', DATE_ADD(NOW(), INTERVAL 7 DAY))");
         if ($proposal_stmt) {
             $proposal_stmt->bind_param("iiii", $new_topic_id, $community_id, $expertise_domain_id, $user_id);
             if (!$proposal_stmt->execute()) {
