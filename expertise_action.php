@@ -36,8 +36,9 @@ try {
         $old->bind_param("ii",$user_id,$domain_id); $old->execute(); $prior=$old->get_result()->fetch_assoc(); $old->close();
         $type=(!$prior || strtotime($prior['valid_until'])<=time())?'initial':($level>(int)$prior['level']?'upgrade':'renewal');
         $code=bin2hex(random_bytes(16));
-        $s=$conn->prepare("INSERT INTO expertise_applications (application_code,community_id,domain_id,target_user_id,created_by,request_type,requested_level,status,expires_at) VALUES (?,?,?,?,?,?,?,'pending',DATE_ADD(NOW(), INTERVAL 7 DAY))");
-        $s->bind_param("siiiisi",$code,$community_id,$domain_id,$user_id,$user_id,$type,$level);
+        // نگهداری سازگاری با ستون‌های قدیمی user_id و level در کنار ساختار جدید
+        $s=$conn->prepare("INSERT INTO expertise_applications (application_code,user_id,community_id,domain_id,level,target_user_id,created_by,request_type,requested_level,status,expires_at) VALUES (?,?,?,?,?,?,?,?,?,'pending',DATE_ADD(NOW(), INTERVAL 7 DAY))");
+        $s->bind_param("siiiiiisi",$code,$user_id,$community_id,$domain_id,$level,$user_id,$user_id,$type,$level);
         if(!$s->execute()) throw new RuntimeException("ثبت درخواست انجام نشد."); $new_id=(int)$s->insert_id; $s->close();
         $rq=$conn->prepare("INSERT INTO expertise_application_requesters (application_id,requester_user_id) VALUES (?,?)");
         $rq->bind_param("ii",$new_id,$user_id); $rq->execute(); $rq->close();
