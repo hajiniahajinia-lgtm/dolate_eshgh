@@ -1187,6 +1187,91 @@ $removal_msg_key = (string)($_GET['removal_msg'] ?? '');
 
 
 
+<?php
+// نتیجهٔ پیشنهاد حوزه فقط پس از پایان مهلت هفت‌روزه قطعی می‌شود.
+// در تساوی، وضعیت pending باقی می‌ماند و رأی‌گیری بسته می‌شود.
+$topic_expertise_proposals = [];
+try {
+    $finalize_expertise = $conn->prepare("
+        UPDATE topic_expertise_proposals p
+        SET p.status = CASE
+            WHEN (SELECT COUNT(*) FROM topic_expertise_proposal_votes v WHERE v.proposal_id=p.id AND v.vote='yes')
+               > (SELECT COUNT(*) FROM topic_expertise_proposal_votes v WHERE v.proposal_id=p.id AND v.vote='no') THEN 'approved'
+            WHEN (SELECT COUNT(*) FROM topic_expertise_proposal_votes v WHERE v.proposal_id=p.id AND v.vote='no')
+               > (SELECT COUNT(*) FROM topic_expertise_proposal_votes v WHERE v.proposal_id=p.id AND v.vote='yes') THEN 'rejected'
+            ELSE 'pending'
+        END,
+        p.decided_at = CASE
+            WHEN (SELECT COUNT(*) FROM topic_expertise_proposal_votes v WHERE v.proposal_id=p.id AND v.vote='yes')
+               <> (SELECT COUNT(*) FROM topic_expertise_proposal_votes v WHERE v.proposal_id=p.id AND v.vote='no') THEN NOW()
+            ELSE NULL
+        END
+        WHERE p.community_id=? AND p.status='pending' AND p.expires_at IS NOT NULL AND p.expires_at<=NOW()
+    ");
+    $finalize_expertise->bind_param("i", $community_id);
+    $finalize_expertise->execute();
+    $finalize_expertise->close();
+
+    $expertise_list = $conn->prepare("
+        SELECT p.id,p.status,p.expires_at,t.title AS topic_title,d.name AS domain_name,
+               (SELECT COUNT(*) FROM topic_expertise_proposal_votes v WHERE v.proposal_id=p.id AND v.vote='yes') AS yes_count,
+               (SELECT COUNT(*) FROM topic_expertise_proposal_votes v WHERE v.proposal_id=p.id AND v.vote='no') AS no_count,
+               (SELECT v.vote FROM topic_expertise_proposal_votes v WHERE v.proposal_id=p.id AND v.user_id=? LIMIT 1) AS my_vote
+        FROM topic_expertise_proposals p
+        JOIN topics t ON t.id=p.topic_id
+        JOIN expertise_domains d ON d.id=p.domain_id
+        WHERE p.community_id=?
+        ORDER BY CASE WHEN p.status='pending' AND p.expires_at>NOW() THEN 0 ELSE 1 END, p.proposed_at DESC
+        LIMIT 20
+    ");
+    $expertise_list->bind_param("ii", $user_id, $community_id);
+    $expertise_list->execute();
+    $expertise_result = $expertise_list->get_result();
+    while ($expertise_row = $expertise_result->fetch_assoc()) $topic_expertise_proposals[] = $expertise_row;
+    $expertise_list->close();
+} catch (Throwable $e) {
+    error_log("Topic expertise proposal voting unavailable: " . $e->getMessage());
+}
+?>
+<details id="topic-expertise-proposals" style="margin:12px 0;padding:12px;background:#f2f7ff;border:1px solid #c8d9f2;border-radius:10px;">
+  <summary style="cursor:pointer;font-weight:bold;">⚖️ رأی‌گیری حوزه‌های تخصصی موضوعات (<?= count($topic_expertise_proposals) ?>)</summary>
+  <div style="margin-top:10px;">
+    <p style="font-size:12px;color:#475467;line-height:1.8;">هر پیشنهاد ۷ روز فرصت رأی‌گیری دارد. فقط اعضای این جامعه می‌توانند رأی بدهند و تا پایان مهلت امکان تغییر رأی وجود دارد. پس از پایان مهلت، اکثریت موافق یا مخالف نتیجه را تعیین می‌کند؛ تساوی در انتظار باقی می‌ماند.</p>
+    <?php if (!$topic_expertise_proposals): ?>
+      <p style="color:#667085;font-size:13px;">هنوز پیشنهادی برای تعیین حوزهٔ تخصصی ثبت نشده است.</p>
+    <?php else: ?>
+      <?php foreach ($topic_expertise_proposals as $ep): ?>
+        <?php $expertise_open = ($ep['status'] === 'pending' && !empty($ep['expires_at']) && strtotime($ep['expires_at']) > time()); ?>
+        <div style="background:#fff;border:1px solid #dbe4f0;border-radius:8px;padding:10px;margin:9px 0;">
+          <div style="font-weight:bold;line-height:1.8;"><?= htmlspecialchars($ep['topic_title'], ENT_QUOTES, 'UTF-8') ?></div>
+          <div style="font-size:13px;margin:3px 0 7px;">حوزهٔ پیشنهادی: <strong><?= htmlspecialchars($ep['domain_name'], ENT_QUOTES, 'UTF-8') ?></strong></div>
+          <div style="font-size:12px;color:#475467;">موافق: <?= (int)$ep['yes_count'] ?>　 |　 مخالف: <?= (int)$ep['no_count'] ?></div>
+          <?php if ($expertise_open): ?>
+            <div style="font-size:12px;color:#667085;margin:5px 0;">پایان مهلت: <?= htmlspecialchars(community_format_jalali_datetime($ep['expires_at']), ENT_QUOTES, 'UTF-8') ?></div>
+            <?php if ($is_community_member): ?>
+              <form method="post" action="topic_expertise_proposal_vote.php" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($community_duty_csrf, ENT_QUOTES, 'UTF-8') ?>">
+                <input type="hidden" name="community_id" value="<?= (int)$community_id ?>">
+                <input type="hidden" name="proposal_id" value="<?= (int)$ep['id'] ?>">
+                <button type="submit" name="vote" value="yes" style="background:<?= $ep['my_vote']==='yes' ? '#176b37' : '#2e8b57' ?>;color:#fff;padding:7px 12px;border:0;border-radius:6px;"><?= $ep['my_vote']==='yes' ? '✓ رأی موافق شما' : 'موافق' ?></button>
+                <button type="submit" name="vote" value="no" style="background:<?= $ep['my_vote']==='no' ? '#9f2525' : '#c0392b' ?>;color:#fff;padding:7px 12px;border:0;border-radius:6px;"><?= $ep['my_vote']==='no' ? '✓ رأی مخالف شما' : 'مخالف' ?></button>
+              </form>
+            <?php else: ?>
+              <small style="color:#667085;">برای رأی‌دادن باید عضو جامعه باشید.</small>
+            <?php endif; ?>
+          <?php elseif ($ep['status'] === 'approved'): ?>
+            <div style="margin-top:7px;color:#176b37;font-weight:bold;font-size:13px;">✓ حوزه تأیید شد؛ پس از این مرحله می‌تواند مبنای وزن تخصصی این موضوع باشد.</div>
+          <?php elseif ($ep['status'] === 'rejected'): ?>
+            <div style="margin-top:7px;color:#a12626;font-weight:bold;font-size:13px;">✕ حوزهٔ پیشنهادی رد شد.</div>
+          <?php else: ?>
+            <div style="margin-top:7px;color:#946200;font-weight:bold;font-size:13px;">مهلت پایان یافته و رأی‌ها مساوی‌اند؛ پیشنهاد در انتظار تصمیم جامعه باقی مانده است.</div>
+          <?php endif; ?>
+        </div>
+      <?php endforeach; ?>
+    <?php endif; ?>
+  </div>
+</details>
+
 <!-- ثبت موضوع و طرح ایده؛ فرم به‌صورت پیش‌فرض جمع‌شده است -->
 <details class="topic-form-toggle">
   <summary>✍️ ثبت موضوع و طرح ایده</summary>
