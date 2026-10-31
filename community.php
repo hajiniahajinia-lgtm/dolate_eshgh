@@ -1213,13 +1213,15 @@ try {
     $finalize_expertise->close();
 
     $expertise_list = $conn->prepare("
-        SELECT p.id,p.status,p.expires_at,t.title AS topic_title,d.name AS domain_name,
+        SELECT p.id,p.status,p.expires_at,p.proposed_at,p.decided_at,
+               t.title AS topic_title,d.name AS domain_name,u.username AS proposer_name,
                (SELECT COUNT(*) FROM topic_expertise_proposal_votes v WHERE v.proposal_id=p.id AND v.vote='yes') AS yes_count,
                (SELECT COUNT(*) FROM topic_expertise_proposal_votes v WHERE v.proposal_id=p.id AND v.vote='no') AS no_count,
                (SELECT v.vote FROM topic_expertise_proposal_votes v WHERE v.proposal_id=p.id AND v.user_id=? LIMIT 1) AS my_vote
         FROM topic_expertise_proposals p
         JOIN topics t ON t.id=p.topic_id
         JOIN expertise_domains d ON d.id=p.domain_id
+        LEFT JOIN users u ON u.id=p.proposed_by
         WHERE p.community_id=?
         ORDER BY CASE WHEN p.status='pending' AND p.expires_at>NOW() THEN 0 ELSE 1 END, p.proposed_at DESC
         LIMIT 20
@@ -1238,7 +1240,15 @@ try {
 $expertise_proposal_topics = [];
 $expertise_proposal_domains = [];
 if ($is_community_member) {
-    $topic_options = $conn->prepare("SELECT id,title FROM topics WHERE community_id=? ORDER BY id DESC LIMIT 200");
+    $topic_options = $conn->prepare("
+        SELECT t.id,t.title
+        FROM topics t
+        WHERE t.community_id=?
+          AND NOT EXISTS (
+              SELECT 1 FROM topic_expertise_proposals p WHERE p.topic_id=t.id
+          )
+        ORDER BY t.id DESC
+    ");
     $topic_options->bind_param("i", $community_id);
     $topic_options->execute();
     $expertise_proposal_topics = $topic_options->get_result()->fetch_all(MYSQLI_ASSOC);
@@ -1290,6 +1300,10 @@ if ($is_community_member) {
         <div style="background:#fff;border:1px solid #dbe4f0;border-radius:8px;padding:10px;margin:9px 0;">
           <div style="font-weight:bold;line-height:1.8;"><?= htmlspecialchars($ep['topic_title'], ENT_QUOTES, 'UTF-8') ?></div>
           <div style="font-size:13px;margin:3px 0 7px;">حوزهٔ پیشنهادی: <strong><?= htmlspecialchars($ep['domain_name'], ENT_QUOTES, 'UTF-8') ?></strong></div>
+          <div style="font-size:12px;color:#667085;margin:3px 0 7px;">
+            پیشنهاددهنده: <?= htmlspecialchars($ep['proposer_name'] ?: 'کاربر نامشخص', ENT_QUOTES, 'UTF-8') ?>
+            | ثبت: <?= htmlspecialchars(community_format_jalali_datetime($ep['proposed_at']), ENT_QUOTES, 'UTF-8') ?>
+          </div>
           <div style="font-size:12px;color:#475467;">موافق: <?= (int)$ep['yes_count'] ?>　 |　 مخالف: <?= (int)$ep['no_count'] ?></div>
           <?php if ($expertise_open): ?>
             <div style="font-size:12px;color:#667085;margin:5px 0;">پایان مهلت: <?= htmlspecialchars(community_format_jalali_datetime($ep['expires_at']), ENT_QUOTES, 'UTF-8') ?></div>
