@@ -46,6 +46,20 @@ if ($title === "") {
 
 $community_id = (int)$_POST['community_id'];
 
+$member_check = $conn->prepare("SELECT 1 FROM community_members WHERE community_id=? AND user_id=? LIMIT 1");
+if (!$member_check) {
+    http_response_code(500);
+    exit("بررسی عضویت انجام نشد.");
+}
+$member_check->bind_param("ii", $community_id, $user_id);
+$member_check->execute();
+$is_member = (bool)$member_check->get_result()->fetch_row();
+$member_check->close();
+if (!$is_member) {
+    http_response_code(403);
+    exit("فقط اعضای جامعه می‌توانند موضوع ثبت کنند.");
+}
+
 // حوزهٔ تخصصی فقط به‌عنوان پیشنهاد ثبت می‌شود؛ تا تأیید جامعه وزنی اعمال نمی‌کند.
 $expertise_domain_id = (int)($_POST['expertise_domain_id'] ?? 0);
 if ($expertise_domain_id > 0) {
