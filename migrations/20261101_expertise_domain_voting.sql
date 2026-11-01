@@ -1,14 +1,15 @@
--- پیشنهاد و رأی‌گیری جمعی برای ایجاد حوزه‌های تخصصی
--- پیش از اجرا بررسی کنید ستون decided_at از قبل وجود نداشته باشد:
--- SHOW COLUMNS FROM expertise_domains LIKE 'decided_at';
--- این migration داده‌های قبلی را حذف یا بازنویسی نمی‌کند.
-ALTER TABLE expertise_domains ADD COLUMN decided_at DATETIME NULL AFTER approved_at;
+-- سازگار با ساختار واقعی جدول expertise_domains در پایگاه دادهٔ اصلی
+-- پیش‌تر تأیید شد که decided_at وجود ندارد.
+-- ستون proposed_in_community_id برای نسبت‌دادن حوزه به جامعهٔ پیشنهاددهنده افزوده می‌شود.
+ALTER TABLE expertise_domains
+    ADD COLUMN proposed_in_community_id INT NOT NULL DEFAULT 0,
+    ADD COLUMN decided_at DATETIME NULL;
 
 CREATE TABLE IF NOT EXISTS expertise_domain_votes (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-    domain_id INT UNSIGNED NOT NULL,
+    domain_id BIGINT UNSIGNED NOT NULL,
     community_id INT NOT NULL,
-    user_id INT NOT NULL,
+    user_id BIGINT UNSIGNED NOT NULL,
     vote ENUM('yes','no') NOT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
