@@ -88,6 +88,9 @@ try {
         $s->bind_param("i",$app_id);$s->execute();$a=$s->get_result()->fetch_assoc();$s->close();
         if(!$a || $a['status']!=='pending' || $a['decision_at']!==null) throw new RuntimeException("این درخواست برای ارزیابی فعال نیست.");
         if((int)$a['target_user_id']===$user_id || !expertise_member($conn,(int)$a['community_id'],$user_id) || expertise_is_requester($conn,$app_id,$user_id)) throw new RuntimeException("متقاضی یا درخواست‌دهنده نمی‌تواند ارزیاب باشد؛ ارزیاب باید عضو مستقل جامعه باشد.");
+        $count=$conn->prepare("SELECT COUNT(*) total FROM expertise_application_reviews WHERE application_id=? AND status='submitted' AND conflict_of_interest='none'");
+        $count->bind_param("i",$app_id);$count->execute();$completed=(int)$count->get_result()->fetch_assoc()['total'];$count->close();
+        if($completed>=3) throw new RuntimeException("سه ارزیابی مستقل تکمیل شده و مرحله ارزیابی بسته است.");
         $s=$conn->prepare("INSERT IGNORE INTO expertise_application_reviews (application_id,reviewer_user_id,status) VALUES (?,?,'pending')");
         $s->bind_param("ii",$app_id,$user_id);$s->execute();$s->close();
         expertise_redirect((int)$a['community_id']);
