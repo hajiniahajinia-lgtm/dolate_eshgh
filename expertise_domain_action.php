@@ -22,11 +22,11 @@ try{
  if($community_id<1 || !ed_member($conn,$community_id,$user_id))throw new RuntimeException("برای این کار باید عضو همان جامعه باشید.");
  if($action==='propose'){
   $name=trim((string)($_POST['name']??''));$description=trim((string)($_POST['description']??''));
-  if($name==='' || mb_strlen($name)>150 || $description==='' || mb_strlen($description)>5000)throw new RuntimeException("نام حوزه و توضیح معتبر الزامی است.");
+  if($name==='' || mb_strlen($name)>190 || $description==='' || mb_strlen($description)>5000)throw new RuntimeException("نام حوزه و توضیح معتبر الزامی است.");
   $dupe=$conn->prepare("SELECT id FROM expertise_domains WHERE proposed_in_community_id=? AND LOWER(name)=LOWER(?) AND status IN ('pending','approved') LIMIT 1");
   $dupe->bind_param("is",$community_id,$name);$dupe->execute();$exists=(bool)$dupe->get_result()->fetch_row();$dupe->close();
   if($exists)throw new RuntimeException("حوزه‌ای با این نام در این جامعه در حال بررسی است یا قبلاً تأیید شده است.");
-  $s=$conn->prepare("INSERT INTO expertise_domains (name,description,status,proposed_by,proposed_in_community_id) VALUES (?,?, 'pending',?,?)");
+  $s=$conn->prepare("INSERT INTO expertise_domains (name,description,status,created_by,proposed_in_community_id) VALUES (?,?, 'pending',?,?)");
   $s->bind_param("ssii",$name,$description,$user_id,$community_id);$s->execute();$domain_id=(int)$s->insert_id;$s->close();
   // پیشنهاددهنده نیز می‌تواند در رأی‌گیری شرکت کند.
   ed_redirect($community_id);
