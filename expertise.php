@@ -49,7 +49,7 @@ if($community_id){
    if($domainRow && $domainRow['status']==='pending' && $domainRow['decided_at']===null){
     $cnt=$conn->prepare("SELECT SUM(vote='yes') yes_count,SUM(vote='no') no_count FROM expertise_domain_votes WHERE domain_id=?");$cnt->bind_param("i",$did);$cnt->execute();$vr=$cnt->get_result()->fetch_assoc();$cnt->close();
     $yes=(int)($vr['yes_count']??0);$no=(int)($vr['no_count']??0);
-    if($yes>$no){$up=$conn->prepare("UPDATE expertise_domains SET status='approved',approved_at=NOW(),decided_at=NOW() WHERE id=? AND status='pending' AND decided_at IS NULL");}
+    if($yes>$no){$up=$conn->prepare("UPDATE expertise_domains SET status='approved',decided_at=NOW() WHERE id=? AND status='pending' AND decided_at IS NULL");}
     elseif($no>$yes){$up=$conn->prepare("UPDATE expertise_domains SET status='rejected',decided_at=NOW() WHERE id=? AND status='pending' AND decided_at IS NULL");}
     else{$up=$conn->prepare("UPDATE expertise_domains SET decided_at=NOW() WHERE id=? AND status='pending' AND decided_at IS NULL");}
     $up->bind_param("i",$did);$up->execute();$up->close();
