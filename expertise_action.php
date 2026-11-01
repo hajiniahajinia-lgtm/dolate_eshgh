@@ -65,8 +65,8 @@ try {
         $conn->begin_transaction();
         $s=$conn->prepare("SELECT community_id,target_user_id,status,expires_at,decision_at FROM expertise_applications WHERE id=? FOR UPDATE");
         $s->bind_param("i",$app_id); $s->execute(); $a=$s->get_result()->fetch_assoc(); $s->close();
-        if(!$a || (int)$a['community_id']<1 || $a['status']!=='pending' || $a['decision_at']!==null || strtotime((string)$a['expires_at'])<=time())
-            throw new RuntimeException("مهلت رأی‌گیری پایان یافته یا درخواست بسته است.");
+        if(!$a || (int)$a['community_id']<1 || $a['status']!=='pending' || $a['decision_at']!==null
+            throw new RuntimeException("درخواست بسته است.");
         if((int)$a['target_user_id']===$user_id || !expertise_member($conn,(int)$a['community_id'],$user_id))
             throw new RuntimeException("متقاضی نمی‌تواند به درخواست خودش رأی دهد و رأی‌دهنده باید عضو جامعه باشد.");
         $rc=$conn->prepare("SELECT COUNT(*) total FROM expertise_application_reviews WHERE application_id=? AND status='submitted' AND conflict_of_interest='none'");
@@ -80,7 +80,7 @@ try {
         if($app_id<1) throw new RuntimeException("درخواست معتبر نیست.");
         $s=$conn->prepare("SELECT community_id,target_user_id,status,decision_at,expires_at FROM expertise_applications WHERE id=?");
         $s->bind_param("i",$app_id);$s->execute();$a=$s->get_result()->fetch_assoc();$s->close();
-        if(!$a || $a['status']!=='pending' || $a['decision_at']!==null || strtotime((string)$a['expires_at'])<=time()) throw new RuntimeException("این درخواست برای ارزیابی فعال نیست.");
+        if(!$a || $a['status']!=='pending' || $a['decision_at']!==null) throw new RuntimeException("این درخواست برای ارزیابی فعال نیست.");
         if((int)$a['target_user_id']===$user_id || !expertise_member($conn,(int)$a['community_id'],$user_id)) throw new RuntimeException("متقاضی نمی‌تواند ارزیاب درخواست خودش باشد و ارزیاب باید عضو جامعه باشد.");
         $s=$conn->prepare("INSERT IGNORE INTO expertise_application_reviews (application_id,reviewer_user_id,status) VALUES (?,?,'pending')");
         $s->bind_param("ii",$app_id,$user_id);$s->execute();$s->close();
@@ -99,7 +99,7 @@ try {
         if(mb_strlen($notes)>12000) throw new RuntimeException("توضیحات ارزیابی بیش از حد طولانی است.");
         $s=$conn->prepare("SELECT a.community_id,a.target_user_id,a.status,a.decision_at,a.expires_at,r.status review_status FROM expertise_applications a JOIN expertise_application_reviews r ON r.application_id=a.id AND r.reviewer_user_id=? WHERE a.id=?");
         $s->bind_param("ii",$user_id,$app_id);$s->execute();$a=$s->get_result()->fetch_assoc();$s->close();
-        if(!$a || $a['status']!=='pending' || $a['decision_at']!==null || strtotime((string)$a['expires_at'])<=time() || (int)$a['target_user_id']===$user_id || !expertise_member($conn,(int)$a['community_id'],$user_id)) throw new RuntimeException("شما ارزیاب مجاز این درخواست نیستید.");
+        if(!$a || $a['status']!=='pending' || $a['decision_at']!==null || (int)$a['target_user_id']===$user_id || !expertise_member($conn,(int)$a['community_id'],$user_id)) throw new RuntimeException("شما ارزیاب مجاز این درخواست نیستید.");
         if($a['review_status']==='submitted' || $a['review_status']==='recused') throw new RuntimeException("ارزیابی قبلاً ثبت شده یا ارزیاب کنار رفته است.");
         if($conflict==='declared'){
             $u=$conn->prepare("UPDATE expertise_application_reviews SET conflict_of_interest='declared',status='recused',review_notes=?,submitted_at=NOW() WHERE application_id=? AND reviewer_user_id=? AND status='pending'");
