@@ -1234,6 +1234,29 @@ try {
 } catch (Throwable $e) {
     error_log("Topic expertise proposal voting unavailable: " . $e->getMessage());
 }
+
+// حوزه‌های تخصصی پیشنهادی برای خود جامعه (مستقل از پیشنهاد حوزه برای هر موضوع)
+$community_domain_proposals = [];
+try {
+    $domain_list = $conn->prepare("
+        SELECT d.id,d.name,d.description,d.status,d.created_at,d.decided_at,
+               u.username AS proposer_name,
+               (SELECT COUNT(*) FROM expertise_domain_votes v WHERE v.domain_id=d.id AND v.vote='yes') AS yes_count,
+               (SELECT COUNT(*) FROM expertise_domain_votes v WHERE v.domain_id=d.id AND v.vote='no') AS no_count,
+               (SELECT v.vote FROM expertise_domain_votes v WHERE v.domain_id=d.id AND v.user_id=? LIMIT 1) AS my_vote
+        FROM expertise_domains d
+        LEFT JOIN users u ON u.id=d.created_by
+        WHERE d.proposed_in_community_id=?
+        ORDER BY CASE WHEN d.status='pending' AND d.decided_at IS NULL THEN 0 ELSE 1 END,d.created_at DESC
+        LIMIT 50
+    ");
+    $domain_list->bind_param("ii", $user_id, $community_id);
+    $domain_list->execute();
+    $community_domain_proposals = $domain_list->get_result()->fetch_all(MYSQLI_ASSOC);
+    $domain_list->close();
+} catch (Throwable $e) {
+    error_log("Community expertise domains unavailable: " . $e->getMessage());
+}
 ?>
 <?php
 // فرم ثبت پیشنهاد حوزهٔ تخصصی برای موضوعات همین جامعه
@@ -1287,6 +1310,44 @@ if ($is_community_member) {
   <?php endif; ?>
 </div>
 <?php endif; ?>
+
+<details id="community-expertise-domains" style="margin:12px 0;padding:12px;background:#f5f9ff;border:1px solid #c8d9f2;border-radius:10px;">
+  <summary style="cursor:pointer;font-weight:bold;">حوزه‌های تخصصی پیشنهادی این جامعه (<?= count($community_domain_proposals) ?>)</summary>
+  <div style="margin-top:10px;">
+    <p style="font-size:12px;color:#475467;line-height:1.8;">پیشنهادهای حوزهٔ تخصصی این جامعه در این بخش نمایش داده می‌شوند. اعضا تا پایان مهلت هفت‌روزه می‌توانند رأی موافق یا مخالف بدهند و رأی خود را تغییر دهند.</p>
+    <p style="margin:8px 0;"><a href="expertise.php?community_id=<?= (int)$community_id ?>">ثبت پیشنهاد حوزهٔ تخصصی جدید و مشاهدهٔ جزئیات شایستگی‌ها</a></p>
+    <?php if (!$community_domain_proposals): ?>
+      <p style="color:#667085;font-size:13px;">هنوز حوزهٔ تخصصی‌ای برای این جامعه پیشنهاد نشده است.</p>
+    <?php else: ?>
+      <?php foreach ($community_domain_proposals as $domain_proposal): ?>
+        <?php $domain_vote_open = ($domain_proposal['status']==='pending' && empty($domain_proposal['decided_at']) && strtotime($domain_proposal['created_at'].' +7 days')>time()); ?>
+        <div style="background:#fff;border:1px solid #dbe4f0;border-radius:8px;padding:10px;margin:9px 0;">
+          <div style="font-weight:bold;"><?= htmlspecialchars($domain_proposal['name'],ENT_QUOTES,'UTF-8') ?></div>
+          <?php if (!empty($domain_proposal['description'])): ?><p style="font-size:13px;line-height:1.8;"><?= nl2br(htmlspecialchars($domain_proposal['description'],ENT_QUOTES,'UTF-8')) ?></p><?php endif; ?>
+          <div style="font-size:12px;color:#667085;">پیشنهاددهنده: <?= htmlspecialchars((string)($domain_proposal['proposer_name'] ?? 'عضو جامعه'),ENT_QUOTES,'UTF-8') ?> | وضعیت: <?= htmlspecialchars($domain_proposal['status'],ENT_QUOTES,'UTF-8') ?></div>
+          <div style="font-size:12px;color:#475467;margin-top:5px;">موافق: <?= (int)$domain_proposal['yes_count'] ?> | مخالف: <?= (int)$domain_proposal['no_count'] ?></div>
+          <?php if ($domain_vote_open): ?>
+            <div style="font-size:12px;color:#667085;margin-top:5px;">پایان رأی‌گیری: <?= htmlspecialchars(community_format_jalali_datetime(date('Y-m-d H:i:s',strtotime($domain_proposal['created_at'].' +7 days'))),ENT_QUOTES,'UTF-8') ?></div>
+            <form method="post" action="expertise_domain_action.php" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+              <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($community_duty_csrf,ENT_QUOTES,'UTF-8') ?>">
+              <input type="hidden" name="community_id" value="<?= (int)$community_id ?>">
+              <input type="hidden" name="domain_id" value="<?= (int)$domain_proposal['id'] ?>">
+              <input type="hidden" name="action" value="vote">
+              <button type="submit" name="vote" value="yes" style="background:<?= $domain_proposal['my_vote']==='yes'?'#176b37':'#2e8b57' ?>;color:#fff;padding:7px 12px;border:0;border-radius:6px;"><?= $domain_proposal['my_vote']==='yes'?'✓ رأی موافق شما':'موافق' ?></button>
+              <button type="submit" name="vote" value="no" style="background:<?= $domain_proposal['my_vote']==='no'?'#9b6500':'#a33b3b' ?>;color:#fff;padding:7px 12px;border:0;border-radius:6px;"><?= $domain_proposal['my_vote']==='no'?'✓ رأی مخالف شما':'مخالف' ?></button>
+            </form>
+          <?php elseif ($domain_proposal['status']==='approved'): ?>
+            <div style="color:#176b37;font-weight:bold;font-size:13px;margin-top:6px;">این حوزه با رأی اعضا تأیید شده است.</div>
+          <?php elseif ($domain_proposal['status']==='rejected'): ?>
+            <div style="color:#a12626;font-weight:bold;font-size:13px;margin-top:6px;">این حوزه با رأی اعضا رد شده است.</div>
+          <?php else: ?>
+            <div style="color:#946200;font-size:13px;margin-top:6px;">مهلت رأی‌گیری پایان یافته یا رأی‌گیری بسته شده است؛ وضعیت تأییدنشده باقی مانده است.</div>
+          <?php endif; ?>
+        </div>
+      <?php endforeach; ?>
+    <?php endif; ?>
+  </div>
+</details>
 
 <details id="topic-expertise-proposals" style="margin:12px 0;padding:12px;background:#f2f7ff;border:1px solid #c8d9f2;border-radius:10px;">
   <summary style="cursor:pointer;font-weight:bold;">⚖️ رأی‌گیری حوزه‌های تخصصی موضوعات (<?= count($topic_expertise_proposals) ?>)</summary>
