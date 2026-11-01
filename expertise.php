@@ -35,10 +35,9 @@ if($expired && $community_id){$expired->bind_param("i",$community_id);$expired->
     else {$status='pending';}
     if($status!=='pending'){
       $fin=$conn->prepare("UPDATE expertise_applications SET status=?,decision_at=NOW() WHERE id=? AND decision_at IS NULL");$fin->bind_param("si",$status,$id);$fin->execute();$fin->close();
+      $detail="بررسی مستقل: ".$reviewCount."؛ رأی موافق ".$yes."، مخالف ".$no."؛ شرط تصویب دوسوم";
+      $hist=$conn->prepare("INSERT INTO expertise_application_history (application_id,actor_user_id,event_type,details) VALUES (?,NULL,'voting_closed',?)");$hist->bind_param("is",$id,$detail);$hist->execute();$hist->close();
     }
-    $detail="بررسی مستقل: ".$reviewCount."؛ رأی موافق ".$yes."، مخالف ".$no."؛ شرط تصویب دوسوم";
-
-    $hist=$conn->prepare("INSERT INTO expertise_application_history (application_id,actor_user_id,event_type,details) VALUES (?,NULL,'voting_closed',?)");$hist->bind_param("is",$id,$detail);$hist->execute();$hist->close();
    }
    $conn->commit();
   }catch(Throwable $e){$conn->rollback();error_log("Expertise finalization: ".$e->getMessage());}
@@ -80,7 +79,7 @@ function eh($v){return htmlspecialchars((string)$v,ENT_QUOTES,'UTF-8');}
 body{font-family:Tahoma,Arial,sans-serif;background:#f4f7fb;color:#243447;margin:0;padding:18px;line-height:1.8}.wrap{max-width:900px;margin:auto}.panel{background:white;border:1px solid #dce5ef;border-radius:12px;padding:16px;margin:14px 0}.row{display:flex;gap:10px;flex-wrap:wrap}input,select,textarea,button{font:inherit;padding:9px;border:1px solid #cbd5e1;border-radius:8px;max-width:100%}input,select,textarea{box-sizing:border-box;width:100%;margin:5px 0 12px}button{background:#e5f0ff;cursor:pointer}.muted{color:#64748b;font-size:.9em}.item{border-top:1px solid #e2e8f0;padding:12px 0}.tag{display:inline-block;background:#edf2f7;border-radius:6px;padding:2px 8px}
 </style></head><body><main class="wrap"><h2>درخواست و ارزیابی شایستگی تخصصی</h2><p><a href="profile.php">بازگشت به پروفایل</a></p>
 <form method="get" class="panel"><label>جامعه</label><select name="community_id" onchange="this.form.submit()"><?php foreach($communities as $c):?><option value="<?= (int)$c['id']?>" <?=$community_id===(int)$c['id']?'selected':''?>><?=eh($c['name'])?></option><?php endforeach;?></select><noscript><button>نمایش</button></noscript></form>
-<?php if($community_id):?><section class="panel"><h3>ثبت درخواست تخصص</h3><p class="muted">درخواست برای خودتان ثبت می‌شود. اعضای جامعه ۷ روز فرصت رأی دارند. در صورت تأیید، اعتبار شایستگی سه سال است.</p>
+<?php if($community_id):?><section class="panel"><h3>ثبت درخواست تخصص</h3><p class="muted">درخواست برای خودتان ثبت می‌شود. ابتدا سه ارزیابی مستقل تکمیل می‌شود؛ سپس رأی‌گیری عمومی انجام می‌گیرد. تصویب نیازمند دوسوم آرای معتبر موافق است. اعتبار شایستگی سه سال است.</p>
 <section class="panel"><h3>پیشنهاد و تأیید جمعی حوزهٔ تخصصی جدید</h3><p class="muted">هر عضو می‌تواند حوزه‌ای پیشنهاد کند. رأی‌گیری ۷ روز ادامه دارد؛ هر عضو یک رأی موافق یا مخالف دارد و می‌تواند رأی خود را تغییر دهد. تساوی به معنی تأیید نیست.</p>
 <form method="post" action="expertise_domain_action.php"><input type="hidden" name="csrf_token" value="<?=eh($csrf)?>"><input type="hidden" name="action" value="propose"><input type="hidden" name="community_id" value="<?=$community_id?>">
 <label>نام حوزه</label><input name="name" maxlength="150" required><label>توضیح و محدودهٔ حوزه</label><textarea name="description" rows="3" maxlength="5000" required></textarea><button>ثبت حوزه برای رأی‌گیری</button></form>
