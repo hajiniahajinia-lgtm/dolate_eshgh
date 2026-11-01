@@ -14,7 +14,7 @@ $is_member=false;
 foreach($communities as $c) if((int)$c['id']===$community_id) $is_member=true;
 if(!$is_member) $community_id=0;
 
-/* نهایی‌سازی فقط پس از پایان مهلت؛ در تساوی درخواست pending می‌ماند اما decision_at رأی‌گیری را می‌بندد. */
+/* نهایی‌سازی قطعی پس از پایان مهلت؛ نبود حداقل ارزیابی یا نرسیدن هیچ طرف به دوسوم، عدم تصویب است. */
 $expired=$conn->prepare("SELECT id FROM expertise_applications WHERE community_id=? AND status='pending' AND decision_at IS NULL AND expires_at<=NOW()");
 if($expired && $community_id){$expired->bind_param("i",$community_id);$expired->execute();$ids=$expired->get_result()->fetch_all(MYSQLI_ASSOC);$expired->close();
  foreach($ids as $item){
@@ -26,11 +26,13 @@ if($expired && $community_id){$expired->bind_param("i",$community_id);$expired->
     $yes=(int)($votes['yes_count']??0);$no=(int)($votes['no_count']??0);$total=$yes+$no;
     $reviews=$conn->prepare("SELECT COUNT(*) total FROM expertise_application_reviews WHERE application_id=? AND status='submitted' AND conflict_of_interest='none'");
     $reviews->bind_param("i",$id);$reviews->execute();$reviewCount=(int)$reviews->get_result()->fetch_assoc()['total'];$reviews->close();
+    $status='not_approved';
+    $reason='عدم تصویب: حداقل سه ارزیابی مستقل تکمیل نشده است.';
     if($reviewCount>=3 && $total>0 && $yes*3 >= $total*2){
       $scoreQuery=$conn->prepare("SELECT AVG(theoretical_score*0.20+practical_score*0.30+achievements_score*0.30+professional_score*0.20) weighted_score FROM expertise_application_reviews WHERE application_id=? AND status='submitted' AND conflict_of_interest='none'");
       $scoreQuery->bind_param("i",$id);$scoreQuery->execute();$scoreRow=$scoreQuery->get_result()->fetch_assoc();$scoreQuery->close();
       $score=(float)($scoreRow['weighted_score']??0);
-      if($score<60){$status='rejected';}
+      if($score<60){$status='rejected';$reason='رد درخواست: امتیاز ارزیابی مستقل کمتر از ۶۰ است.';}
       else{
         if($score<70){$level=1;$weight=1.25;}
         elseif($score<80){$level=2;$weight=1.50;}
@@ -38,15 +40,17 @@ if($expired && $community_id){$expired->bind_param("i",$community_id);$expired->
         else{$level=4;$weight=3.00;}
         $up=$conn->prepare("INSERT INTO expertise_competencies (user_id,domain_id,level,weight,approved_in_community_id,source_application_id,valid_from,valid_until) VALUES (?,?,?,?,?,?,NOW(),DATE_ADD(NOW(),INTERVAL 3 YEAR)) ON DUPLICATE KEY UPDATE level=VALUES(level),weight=VALUES(weight),approved_in_community_id=VALUES(approved_in_community_id),source_application_id=VALUES(source_application_id),valid_from=NOW(),valid_until=DATE_ADD(NOW(),INTERVAL 3 YEAR)");
         $up->bind_param("iiidii",$a['target_user_id'],$a['domain_id'],$level,$weight,$a['community_id'],$id);$up->execute();$up->close();
-        $status='approved';
+        $status='approved';$reason='تصویب: رأی موافق به حداقل دوسوم رسیده و امتیاز شایستگی کافی است.';
       }
-    } elseif($reviewCount>=3 && $total>0 && $no*3 >= $total*2){$status='rejected';}
-    else {$status='pending';}
-    if($status!=='pending'){
-      $fin=$conn->prepare("UPDATE expertise_applications SET status=?,decision_at=NOW() WHERE id=? AND decision_at IS NULL");$fin->bind_param("si",$status,$id);$fin->execute();$fin->close();
-      $detail="بررسی مستقل: ".$reviewCount."؛ رأی موافق ".$yes."، مخالف ".$no."؛ شرط تصویب دوسوم";
-      $hist=$conn->prepare("INSERT INTO expertise_application_history (application_id,actor_user_id,event_type,details) VALUES (?,NULL,'voting_closed',?)");$hist->bind_param("is",$id,$detail);$hist->execute();$hist->close();
+    } elseif($reviewCount>=3 && $total>0 && $no*3 >= $total*2){
+      $status='rejected';$reason='رد درخواست: رأی مخالف به حداقل دوسوم رسیده است.';
+    } elseif($reviewCount>=3){
+      $status='not_approved';$reason='عدم تصویب: هیچ‌یک از دو گزینهٔ موافق یا مخالف به دوسوم آرا نرسید.';
     }
+    $fin=$conn->prepare("UPDATE expertise_applications SET status=?,decision_at=NOW() WHERE id=? AND decision_at IS NULL");
+    $fin->bind_param("si",$status,$id);$fin->execute();$fin->close();
+    $detail=$reason." ارزیابی مستقل: ".$reviewCount."؛ موافق: ".$yes."؛ مخالف: ".$no."؛ شرط تصمیم: دوسوم.";
+    $hist=$conn->prepare("INSERT INTO expertise_application_history (application_id,actor_user_id,event_type,details) VALUES (?,NULL,'voting_closed',?)");$hist->bind_param("is",$id,$detail);$hist->execute();$hist->close();
    }
    $conn->commit();
   }catch(Throwable $e){$conn->rollback();error_log("Expertise finalization: ".$e->getMessage());}
@@ -102,7 +106,7 @@ body{font-family:Tahoma,Arial,sans-serif;background:#f4f7fb;color:#243447;margin
 <form method="post" action="expertise_action.php"><input type="hidden" name="csrf_token" value="<?=eh($csrf)?>"><input type="hidden" name="action" value="submit"><input type="hidden" name="community_id" value="<?=$community_id?>">
 <label>حوزه تخصصی</label><select name="domain_id" required><option value="">انتخاب حوزه</option><?php foreach($domains as $d):?><option value="<?=(int)$d['id']?>"><?=eh($d['name'])?></option><?php endforeach;?></select>
 <label>سطح درخواستی</label><select name="requested_level" required><option value="1">سطح ۱ — وزن ۱٫۲۵</option><option value="2">سطح ۲ — وزن ۱٫۵</option><option value="3">سطح ۳ — وزن ۲</option><option value="4">سطح ۴ — وزن ۳</option></select><button>ثبت درخواست</button></form></section><?php endif;?>
-<section class="panel"><h3>درخواست‌های من</h3><?php if(!$mine):?><p>هنوز درخواستی ثبت نکرده‌اید.</p><?php endif;?><?php foreach($mine as $a):?><div class="item"><b><?=eh($a['domain_name'])?></b> — سطح <?= (int)$a['requested_level']?> <span class="tag"><?=eh($a['status'])?></span><p class="muted">مهلت رأی: <?=eh($a['expires_at'])?> | <?=$a['decision_at']?'رأی‌گیری بسته شده':'در انتظار رأی'?></p>
+<section class="panel"><h3>درخواست‌های من</h3><?php if(!$mine):?><p>هنوز درخواستی ثبت نکرده‌اید.</p><?php endif;?><?php foreach($mine as $a):?><div class="item"><b><?=eh($a['domain_name'])?></b> — سطح <?= (int)$a['requested_level']?> <span class="tag"><?=eh(['pending'=>'در انتظار رأی','approved'=>'تأییدشده','rejected'=>'ردشده','not_approved'=>'عدم تصویب؛ نرسیدن به حد نصاب','needs_renewal'=>'نیازمند تمدید','under_review'=>'در حال بررسی'][$a['status']]??$a['status'])?></span><p class="muted">مهلت رأی: <?=eh($a['expires_at'])?> | <?=$a['decision_at']?'رأی‌گیری بسته شده':'در انتظار رأی'?></p>
 <?php if($a['status']==='pending' && !$a['decision_at']):?><form method="post" action="expertise_action.php"><input type="hidden" name="csrf_token" value="<?=eh($csrf)?>"><input type="hidden" name="action" value="evidence"><input type="hidden" name="application_id" value="<?=(int)$a['id']?>"><label>عنوان مدرک</label><input name="title" required maxlength="200"><label>شرح و توضیح</label><textarea name="description" required rows="3"></textarea><label>پیوند مرجع (اختیاری)</label><input name="reference_url" type="url"><button>افزودن مدرک</button></form><?php endif;?>
 <?php $ev=$conn->prepare("SELECT title,description,reference_url FROM expertise_application_evidence WHERE application_id=? ORDER BY id");$aid=(int)$a['id'];$ev->bind_param("i",$aid);$ev->execute();$evidence=$ev->get_result()->fetch_all(MYSQLI_ASSOC);$ev->close();foreach($evidence as $e):?><p><b><?=eh($e['title'])?></b><br><?=nl2br(eh($e['description']))?> <?php if($e['reference_url']):?><a href="<?=eh($e['reference_url'])?>" rel="noopener" target="_blank">مرجع</a><?php endif;?></p><?php endforeach;?></div><?php endforeach;?></section>
 <?php if($community_id):?><section class="panel"><h3>درخواست‌های در انتظار رأی جامعه</h3><?php if(!$open):?><p>درخواستی برای رأی‌گیری وجود ندارد.</p><?php endif;?><?php foreach($open as $a):?><div class="item"><b><?=eh($a['username'])?></b> — <?=eh($a['domain_name'])?>، سطح <?=(int)$a['requested_level']?><p class="muted">پایان مهلت: <?=eh($a['expires_at'])?></p>
