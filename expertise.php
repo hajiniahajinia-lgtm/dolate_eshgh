@@ -60,7 +60,7 @@ if($community_id){
 }
 $domainProposals=[];$domainVoteCounts=[];
 if($community_id){
- $dp=$conn->prepare("SELECT d.id,d.name,d.description,d.status,d.proposed_by,d.created_at,d.decided_at,u.username proposer_name FROM expertise_domains d JOIN users u ON u.id=d.proposed_by WHERE d.proposed_in_community_id=? ORDER BY d.created_at DESC LIMIT 100");
+ $dp=$conn->prepare("SELECT d.id,d.name,d.description,d.status,d.created_by,d.created_at,d.decided_at,u.username proposer_name FROM expertise_domains d JOIN users u ON u.id=d.created_by WHERE d.proposed_in_community_id=? ORDER BY d.created_at DESC LIMIT 100");
  $dp->bind_param("i",$community_id);$dp->execute();$domainProposals=$dp->get_result()->fetch_all(MYSQLI_ASSOC);$dp->close();
  $dv=$conn->prepare("SELECT v.domain_id,SUM(v.vote='yes') yes_count,SUM(v.vote='no') no_count,MAX(v.user_id=?) my_vote FROM expertise_domain_votes v JOIN expertise_domains d ON d.id=v.domain_id WHERE d.proposed_in_community_id=? AND d.status='pending' AND d.decided_at IS NULL GROUP BY v.domain_id");
  $dv->bind_param("ii",$user_id,$community_id);$dv->execute();foreach($dv->get_result()->fetch_all(MYSQLI_ASSOC) as $vrow)$domainVoteCounts[(int)$vrow['domain_id']]=$vrow;$dv->close();
