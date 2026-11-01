@@ -27,10 +27,19 @@ if($expired && $community_id){$expired->bind_param("i",$community_id);$expired->
     $reviews=$conn->prepare("SELECT COUNT(*) total FROM expertise_application_reviews WHERE application_id=? AND status='submitted' AND conflict_of_interest='none'");
     $reviews->bind_param("i",$id);$reviews->execute();$reviewCount=(int)$reviews->get_result()->fetch_assoc()['total'];$reviews->close();
     if($reviewCount>=3 && $total>0 && $yes*3 >= $total*2){
-      $level=(int)$a['requested_level'];$weight=[1=>1.25,2=>1.50,3=>2.00,4=>3.00][$level]??1.00;
-      $up=$conn->prepare("INSERT INTO expertise_competencies (user_id,domain_id,level,weight,approved_in_community_id,source_application_id,valid_from,valid_until) VALUES (?,?,?,?,?,?,NOW(),DATE_ADD(NOW(),INTERVAL 3 YEAR)) ON DUPLICATE KEY UPDATE level=VALUES(level),weight=VALUES(weight),approved_in_community_id=VALUES(approved_in_community_id),source_application_id=VALUES(source_application_id),valid_from=NOW(),valid_until=DATE_ADD(NOW(),INTERVAL 3 YEAR)");
-      $up->bind_param("iiidii",$a['target_user_id'],$a['domain_id'],$level,$weight,$a['community_id'],$id);$up->execute();$up->close();
-      $status='approved';
+      $scoreQuery=$conn->prepare("SELECT AVG(theoretical_score*0.20+practical_score*0.30+achievements_score*0.30+professional_score*0.20) weighted_score FROM expertise_application_reviews WHERE application_id=? AND status='submitted' AND conflict_of_interest='none'");
+      $scoreQuery->bind_param("i",$id);$scoreQuery->execute();$scoreRow=$scoreQuery->get_result()->fetch_assoc();$scoreQuery->close();
+      $score=(float)($scoreRow['weighted_score']??0);
+      if($score<60){$status='rejected';}
+      else{
+        if($score<70){$level=1;$weight=1.25;}
+        elseif($score<80){$level=2;$weight=1.50;}
+        elseif($score<90){$level=3;$weight=2.00;}
+        else{$level=4;$weight=3.00;}
+        $up=$conn->prepare("INSERT INTO expertise_competencies (user_id,domain_id,level,weight,approved_in_community_id,source_application_id,valid_from,valid_until) VALUES (?,?,?,?,?,?,NOW(),DATE_ADD(NOW(),INTERVAL 3 YEAR)) ON DUPLICATE KEY UPDATE level=VALUES(level),weight=VALUES(weight),approved_in_community_id=VALUES(approved_in_community_id),source_application_id=VALUES(source_application_id),valid_from=NOW(),valid_until=DATE_ADD(NOW(),INTERVAL 3 YEAR)");
+        $up->bind_param("iiidii",$a['target_user_id'],$a['domain_id'],$level,$weight,$a['community_id'],$id);$up->execute();$up->close();
+        $status='approved';
+      }
     } elseif($reviewCount>=3 && $total>0 && $no*3 >= $total*2){$status='rejected';}
     else {$status='pending';}
     if($status!=='pending'){
