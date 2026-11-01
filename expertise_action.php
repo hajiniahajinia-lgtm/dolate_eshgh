@@ -73,8 +73,8 @@ try {
         $s->bind_param("i",$app_id); $s->execute(); $a=$s->get_result()->fetch_assoc(); $s->close();
         if(!$a || (int)$a['community_id']<1 || $a['status']!=='pending' || $a['decision_at']!==null)
             throw new RuntimeException("درخواست بسته است.");
-        if((int)$a['target_user_id']===$user_id || !expertise_member($conn,(int)$a['community_id'],$user_id))
-            throw new RuntimeException("متقاضی نمی‌تواند به درخواست خودش رأی دهد و رأی‌دهنده باید عضو جامعه باشد.");
+        if((int)$a['target_user_id']===$user_id || !expertise_member($conn,(int)$a['community_id'],$user_id) || expertise_is_requester($conn,$app_id,$user_id))
+            throw new RuntimeException("متقاضی و درخواست‌دهندگان نمی‌توانند به این درخواست رأی دهند؛ رأی‌دهنده باید عضو مستقل جامعه باشد.");
         $rc=$conn->prepare("SELECT COUNT(*) total FROM expertise_application_reviews WHERE application_id=? AND status='submitted' AND conflict_of_interest='none'");
         $rc->bind_param("i",$app_id);$rc->execute();$reviewCount=(int)$rc->get_result()->fetch_assoc()['total'];$rc->close();
         if($reviewCount<3) throw new RuntimeException("رأی‌گیری نهایی پس از تکمیل دست‌کم سه ارزیابی مستقل آغاز می‌شود.");
