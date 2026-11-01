@@ -112,9 +112,11 @@ $rv=$conn->prepare("SELECT COUNT(*) total,AVG(theoretical_score*0.20+practical_s
 $rv->bind_param("i",$aid);$rv->execute();$reviewStats=$rv->get_result()->fetch_assoc();$reviewCount=(int)$reviewStats['total'];$reviewScore=$reviewStats['weighted_score'];$rv->close();
 $mineReview=$conn->prepare("SELECT status FROM expertise_application_reviews WHERE application_id=? AND reviewer_user_id=? LIMIT 1");
 $mineReview->bind_param("ii",$aid,$user_id);$mineReview->execute();$myReview=$mineReview->get_result()->fetch_assoc();$mineReview->close();
+$requesterCheck=$conn->prepare("SELECT 1 FROM expertise_application_requesters WHERE application_id=? AND requester_user_id=? LIMIT 1");
+$requesterCheck->bind_param("ii",$aid,$user_id);$requesterCheck->execute();$isRequester=(bool)$requesterCheck->get_result()->fetch_row();$requesterCheck->close();
 ?>
 <p class="muted">ارزیابی مستقل تکمیل‌شده: <?=$reviewCount?> از حداقل ۳<?php if($reviewScore!==null):?> | میانگین امتیاز وزنی: <?=number_format((float)$reviewScore,2)?> از ۱۰۰<?php endif;?></p>
-<?php if((int)$a['target_user_id']!==$user_id && !$myReview):?>
+<?php if((int)$a['target_user_id']!==$user_id && !$isRequester && !$myReview):?>
 <form method="post" action="expertise_action.php" class="row"><input type="hidden" name="csrf_token" value="<?=eh($csrf)?>"><input type="hidden" name="action" value="review_join"><input type="hidden" name="application_id" value="<?=$aid?>"><button>پذیرش مسئولیت ارزیابی</button></form>
 <?php elseif($myReview && $myReview['status']==='pending'):?>
 <form method="post" action="expertise_action.php"><input type="hidden" name="csrf_token" value="<?=eh($csrf)?>"><input type="hidden" name="action" value="review_submit"><input type="hidden" name="application_id" value="<?=$aid?>">
@@ -125,6 +127,6 @@ $mineReview->bind_param("ii",$aid,$user_id);$mineReview->execute();$myReview=$mi
 <label>تعارض منافع</label><select name="conflict_of_interest"><option value="none">تعارض منافع ندارم</option><option value="declared">تعارض منافع دارم و کنار می‌روم</option></select>
 <label>توضیحات</label><textarea name="review_notes" rows="3"></textarea><button>ثبت ارزیابی مستقل</button></form>
 <?php endif;?>
-<?php if((int)$a['target_user_id']!==$user_id && $reviewCount>=3):?><form method="post" action="expertise_action.php" class="row"><input type="hidden" name="csrf_token" value="<?=eh($csrf)?>"><input type="hidden" name="action" value="vote"><input type="hidden" name="application_id" value="<?=$aid?>"><button name="vote" value="yes">موافق</button><button name="vote" value="no">مخالف</button></form>
-<?php elseif((int)$a['target_user_id']!==$user_id):?><p class="muted">رأی نهایی پس از تکمیل سه ارزیابی مستقل فعال می‌شود.</p><?php else:?><p class="muted">شما متقاضی این درخواست هستید و نمی‌توانید در ارزیابی یا رأی‌گیری آن شرکت کنید.</p><?php endif;?></div><?php endforeach;?></section><?php endif;?>
+<?php if((int)$a['target_user_id']!==$user_id && !$isRequester && $reviewCount>=3):?><form method="post" action="expertise_action.php" class="row"><input type="hidden" name="csrf_token" value="<?=eh($csrf)?>"><input type="hidden" name="action" value="vote"><input type="hidden" name="application_id" value="<?=$aid?>"><button name="vote" value="yes">موافق</button><button name="vote" value="no">مخالف</button></form>
+<?php elseif((int)$a['target_user_id']!==$user_id && !$isRequester):?><p class="muted">رأی نهایی پس از تکمیل سه ارزیابی مستقل فعال می‌شود.</p><?php elseif($isRequester):?><p class="muted">شما درخواست‌دهندهٔ این پرونده هستید و نمی‌توانید ارزیاب یا رأی‌دهنده باشید.</p><?php else:?><p class="muted">شما متقاضی این درخواست هستید و نمی‌توانید در ارزیابی یا رأی‌گیری آن شرکت کنید.</p><?php endif;?></div><?php endforeach;?></section><?php endif;?>
 </main></body></html>
