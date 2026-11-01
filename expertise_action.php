@@ -65,7 +65,7 @@ try {
         $conn->begin_transaction();
         $s=$conn->prepare("SELECT community_id,target_user_id,status,expires_at,decision_at FROM expertise_applications WHERE id=? FOR UPDATE");
         $s->bind_param("i",$app_id); $s->execute(); $a=$s->get_result()->fetch_assoc(); $s->close();
-        if(!$a || (int)$a['community_id']<1 || $a['status']!=='pending' || $a['decision_at']!==null
+        if(!$a || (int)$a['community_id']<1 || $a['status']!=='pending' || $a['decision_at']!==null)
             throw new RuntimeException("درخواست بسته است.");
         if((int)$a['target_user_id']===$user_id || !expertise_member($conn,(int)$a['community_id'],$user_id))
             throw new RuntimeException("متقاضی نمی‌تواند به درخواست خودش رأی دهد و رأی‌دهنده باید عضو جامعه باشد.");
