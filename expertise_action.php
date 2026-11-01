@@ -43,13 +43,13 @@ try {
         $type=(!$prior || strtotime($prior['valid_until'])<=time())?'initial':($level>(int)$prior['level']?'upgrade':'renewal');
         $code=bin2hex(random_bytes(16));
         // استفاده از ستون‌های مرجع در migration اصلی؛ بدون وابستگی به ستون‌های قدیمی user_id و level
-        $s=$conn->prepare("INSERT INTO expertise_applications (application_code,community_id,domain_id,target_user_id,created_by,request_type,requested_level,status,expires_at) VALUES (?,?,?,?,?,?,?,'pending',DATE_ADD(NOW(), INTERVAL 7 DAY))");
+        $s=$conn->prepare("INSERT INTO expertise_applications (application_code,community_id,domain_id,target_user_id,created_by,request_type,requested_level,status,expires_at) VALUES (?,?,?,?,?,?,?,'pending',NULL)");
         $s->bind_param("siiiisi",$code,$community_id,$domain_id,$user_id,$user_id,$type,$level);
         if(!$s->execute()) throw new RuntimeException("ثبت درخواست انجام نشد."); $new_id=(int)$s->insert_id; $s->close();
         $rq=$conn->prepare("INSERT INTO expertise_application_requesters (application_id,requester_user_id) VALUES (?,?)");
         $rq->bind_param("ii",$new_id,$user_id); $rq->execute(); $rq->close();
         $h=$conn->prepare("INSERT INTO expertise_application_history (application_id,actor_user_id,event_type,details) VALUES (?,?,'submitted',?)");
-        $detail="درخواست سطح ".$level."؛ مهلت رأی‌گیری ۷ روز";
+        $detail="درخواست سطح ".$level."؛ ابتدا سه ارزیابی مستقل انجام می‌شود و سپس مهلت رأی‌گیری ۷ روزه آغاز خواهد شد.";
         $h->bind_param("iis",$new_id,$user_id,$detail); $h->execute(); $h->close();
         expertise_redirect($community_id);
     }
@@ -78,6 +78,7 @@ try {
         $rc=$conn->prepare("SELECT COUNT(*) total FROM expertise_application_reviews WHERE application_id=? AND status='submitted' AND conflict_of_interest='none'");
         $rc->bind_param("i",$app_id);$rc->execute();$reviewCount=(int)$rc->get_result()->fetch_assoc()['total'];$rc->close();
         if($reviewCount<3) throw new RuntimeException("رأی‌گیری نهایی پس از تکمیل دست‌کم سه ارزیابی مستقل آغاز می‌شود.");
+        if(empty($a['expires_at']) || strtotime($a['expires_at'])<=time()) throw new RuntimeException("مهلت رأی‌گیری هنوز آغاز نشده یا پایان یافته است.");
         $v=$conn->prepare("INSERT INTO expertise_application_votes (application_id,voter_user_id,vote) VALUES (?,?,?) ON DUPLICATE KEY UPDATE vote=VALUES(vote),updated_at=CURRENT_TIMESTAMP");
         $v->bind_param("iis",$app_id,$user_id,$vote); $v->execute(); $v->close();
         $conn->commit(); expertise_redirect((int)$a['community_id']);
@@ -106,10 +107,14 @@ try {
         if(!in_array($conflict,['none','declared'],true)) throw new RuntimeException("وضعیت تعارض منافع معتبر نیست.");
         $notes=trim((string)($_POST['review_notes']??''));
         if(mb_strlen($notes)>12000) throw new RuntimeException("توضیحات ارزیابی بیش از حد طولانی است.");
-        $s=$conn->prepare("SELECT a.community_id,a.target_user_id,a.status,a.decision_at,a.expires_at,r.status review_status FROM expertise_applications a JOIN expertise_application_reviews r ON r.application_id=a.id AND r.reviewer_user_id=? WHERE a.id=?");
+        $conn->begin_transaction();
+        $s=$conn->prepare("SELECT a.community_id,a.target_user_id,a.status,a.decision_at,a.expires_at,r.status review_status FROM expertise_applications a JOIN expertise_application_reviews r ON r.application_id=a.id AND r.reviewer_user_id=? WHERE a.id=? FOR UPDATE");
         $s->bind_param("ii",$user_id,$app_id);$s->execute();$a=$s->get_result()->fetch_assoc();$s->close();
         if(!$a || $a['status']!=='pending' || $a['decision_at']!==null || (int)$a['target_user_id']===$user_id || !expertise_member($conn,(int)$a['community_id'],$user_id) || expertise_is_requester($conn,$app_id,$user_id)) throw new RuntimeException("شما ارزیاب مجاز این درخواست نیستید.");
         if($a['review_status']==='submitted' || $a['review_status']==='recused') throw new RuntimeException("ارزیابی قبلاً ثبت شده یا ارزیاب کنار رفته است.");
+        $done=$conn->prepare("SELECT COUNT(*) total FROM expertise_application_reviews WHERE application_id=? AND status='submitted' AND conflict_of_interest='none'");
+        $done->bind_param("i",$app_id);$done->execute();$doneCount=(int)$done->get_result()->fetch_assoc()['total'];$done->close();
+        if($doneCount>=3) throw new RuntimeException("سه ارزیابی مستقل تکمیل شده و مرحله ارزیابی بسته است.");
         if($conflict==='declared'){
             $u=$conn->prepare("UPDATE expertise_application_reviews SET conflict_of_interest='declared',status='recused',review_notes=?,submitted_at=NOW() WHERE application_id=? AND reviewer_user_id=? AND status='pending'");
             $u->bind_param("sii",$notes,$app_id,$user_id);$u->execute();$u->close();
@@ -117,6 +122,18 @@ try {
             $u=$conn->prepare("UPDATE expertise_application_reviews SET theoretical_score=?,practical_score=?,achievements_score=?,professional_score=?,conflict_of_interest='none',review_notes=?,status='submitted',submitted_at=NOW() WHERE application_id=? AND reviewer_user_id=? AND status='pending'");
             $u->bind_param("iiiisii",$scores[0],$scores[1],$scores[2],$scores[3],$notes,$app_id,$user_id);$u->execute();$u->close();
         }
+        if($conflict==='none'){
+            $done=$conn->prepare("SELECT COUNT(*) total FROM expertise_application_reviews WHERE application_id=? AND status='submitted' AND conflict_of_interest='none'");
+            $done->bind_param("i",$app_id);$done->execute();$completed=(int)$done->get_result()->fetch_assoc()['total'];$done->close();
+            if($completed===3){
+                $deadline=$conn->prepare("UPDATE expertise_applications SET expires_at=DATE_ADD(NOW(), INTERVAL 7 DAY) WHERE id=? AND status='pending' AND decision_at IS NULL");
+                $deadline->bind_param("i",$app_id);$deadline->execute();$deadline->close();
+                $detail="سه ارزیابی مستقل تکمیل شد؛ مهلت رأی‌گیری عمومی هفت روزه آغاز شد.";
+                $hist=$conn->prepare("INSERT INTO expertise_application_history (application_id,actor_user_id,event_type,details) VALUES (?,? ,'reviews_completed',?)");
+                $hist->bind_param("iis",$app_id,$user_id,$detail);$hist->execute();$hist->close();
+            }
+        }
+        $conn->commit();
         expertise_redirect((int)$a['community_id']);
     }
     throw new RuntimeException("عملیات ناشناخته است.");
