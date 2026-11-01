@@ -69,9 +69,46 @@ try {
             throw new RuntimeException("مهلت رأی‌گیری پایان یافته یا درخواست بسته است.");
         if((int)$a['target_user_id']===$user_id || !expertise_member($conn,(int)$a['community_id'],$user_id))
             throw new RuntimeException("متقاضی نمی‌تواند به درخواست خودش رأی دهد و رأی‌دهنده باید عضو جامعه باشد.");
+        $rc=$conn->prepare("SELECT COUNT(*) total FROM expertise_application_reviews WHERE application_id=? AND status='submitted' AND conflict_of_interest='none'");
+        $rc->bind_param("i",$app_id);$rc->execute();$reviewCount=(int)$rc->get_result()->fetch_assoc()['total'];$rc->close();
+        if($reviewCount<3) throw new RuntimeException("رأی‌گیری نهایی پس از تکمیل دست‌کم سه ارزیابی مستقل آغاز می‌شود.");
         $v=$conn->prepare("INSERT INTO expertise_application_votes (application_id,voter_user_id,vote) VALUES (?,?,?) ON DUPLICATE KEY UPDATE vote=VALUES(vote),updated_at=CURRENT_TIMESTAMP");
         $v->bind_param("iis",$app_id,$user_id,$vote); $v->execute(); $v->close();
         $conn->commit(); expertise_redirect((int)$a['community_id']);
+    }
+    if ($action === 'review_join') {
+        if($app_id<1) throw new RuntimeException("درخواست معتبر نیست.");
+        $s=$conn->prepare("SELECT community_id,target_user_id,status,decision_at,expires_at FROM expertise_applications WHERE id=?");
+        $s->bind_param("i",$app_id);$s->execute();$a=$s->get_result()->fetch_assoc();$s->close();
+        if(!$a || $a['status']!=='pending' || $a['decision_at']!==null || strtotime((string)$a['expires_at'])<=time()) throw new RuntimeException("این درخواست برای ارزیابی فعال نیست.");
+        if((int)$a['target_user_id']===$user_id || !expertise_member($conn,(int)$a['community_id'],$user_id)) throw new RuntimeException("متقاضی نمی‌تواند ارزیاب درخواست خودش باشد و ارزیاب باید عضو جامعه باشد.");
+        $s=$conn->prepare("INSERT IGNORE INTO expertise_application_reviews (application_id,reviewer_user_id,status) VALUES (?,?,'pending')");
+        $s->bind_param("ii",$app_id,$user_id);$s->execute();$s->close();
+        expertise_redirect((int)$a['community_id']);
+    }
+    if ($action === 'review_submit') {
+        $scores=[];
+        foreach(['theoretical_score','practical_score','achievements_score','professional_score'] as $field){
+            $value=filter_var($_POST[$field]??null,FILTER_VALIDATE_INT);
+            if($value===false || $value===null || $value<0 || $value>100) throw new RuntimeException("هر چهار امتیاز باید عددی بین صفر تا صد باشد.");
+            $scores[]=$value;
+        }
+        $conflict=(string)($_POST['conflict_of_interest']??'none');
+        if(!in_array($conflict,['none','declared'],true)) throw new RuntimeException("وضعیت تعارض منافع معتبر نیست.");
+        $notes=trim((string)($_POST['review_notes']??''));
+        if(mb_strlen($notes)>12000) throw new RuntimeException("توضیحات ارزیابی بیش از حد طولانی است.");
+        $s=$conn->prepare("SELECT a.community_id,a.target_user_id,a.status,a.decision_at,a.expires_at,r.status review_status FROM expertise_applications a JOIN expertise_application_reviews r ON r.application_id=a.id AND r.reviewer_user_id=? WHERE a.id=?");
+        $s->bind_param("ii",$user_id,$app_id);$s->execute();$a=$s->get_result()->fetch_assoc();$s->close();
+        if(!$a || $a['status']!=='pending' || $a['decision_at']!==null || strtotime((string)$a['expires_at'])<=time() || (int)$a['target_user_id']===$user_id || !expertise_member($conn,(int)$a['community_id'],$user_id)) throw new RuntimeException("شما ارزیاب مجاز این درخواست نیستید.");
+        if($a['review_status']==='submitted' || $a['review_status']==='recused') throw new RuntimeException("ارزیابی قبلاً ثبت شده یا ارزیاب کنار رفته است.");
+        if($conflict==='declared'){
+            $u=$conn->prepare("UPDATE expertise_application_reviews SET conflict_of_interest='declared',status='recused',review_notes=?,submitted_at=NOW() WHERE application_id=? AND reviewer_user_id=? AND status='pending'");
+            $u->bind_param("sii",$notes,$app_id,$user_id);$u->execute();$u->close();
+        } else {
+            $u=$conn->prepare("UPDATE expertise_application_reviews SET theoretical_score=?,practical_score=?,achievements_score=?,professional_score=?,conflict_of_interest='none',review_notes=?,status='submitted',submitted_at=NOW() WHERE application_id=? AND reviewer_user_id=? AND status='pending'");
+            $u->bind_param("iiiisii",$scores[0],$scores[1],$scores[2],$scores[3],$notes,$app_id,$user_id);$u->execute();$u->close();
+        }
+        expertise_redirect((int)$a['community_id']);
     }
     throw new RuntimeException("عملیات ناشناخته است.");
 } catch(Throwable $e) {
