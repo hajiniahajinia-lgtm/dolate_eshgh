@@ -23,15 +23,21 @@ if($expired && $community_id){$expired->bind_param("i",$community_id);$expired->
    $id=(int)$item['id']; $lock=$conn->prepare("SELECT * FROM expertise_applications WHERE id=? FOR UPDATE");$lock->bind_param("i",$id);$lock->execute();$a=$lock->get_result()->fetch_assoc();$lock->close();
    if($a && $a['status']==='pending' && $a['decision_at']===null && strtotime($a['expires_at'])<=time()){
     $cnt=$conn->prepare("SELECT SUM(vote='yes') yes_count,SUM(vote='no') no_count FROM expertise_application_votes WHERE application_id=?");$cnt->bind_param("i",$id);$cnt->execute();$votes=$cnt->get_result()->fetch_assoc();$cnt->close();
-    $yes=(int)($votes['yes_count']??0);$no=(int)($votes['no_count']??0);
-    if($yes>$no){
-      $level=(int)$a['requested_level'];$weight=[1=>1.25,2=>1.50,3=>2.00,4=>2.50][$level]??1.00;
-      $up=$conn->prepare("INSERT INTO expertise_competencies (user_id,domain_id,level,weight,approved_in_community_id,source_application_id,valid_from,valid_until) VALUES (?,?,?,?,?,?,NOW(),DATE_ADD(NOW(),INTERVAL 1 YEAR)) ON DUPLICATE KEY UPDATE level=VALUES(level),weight=VALUES(weight),approved_in_community_id=VALUES(approved_in_community_id),source_application_id=VALUES(source_application_id),valid_from=NOW(),valid_until=DATE_ADD(NOW(),INTERVAL 1 YEAR)");
+    $yes=(int)($votes['yes_count']??0);$no=(int)($votes['no_count']??0);$total=$yes+$no;
+    $reviews=$conn->prepare("SELECT COUNT(*) total FROM expertise_application_reviews WHERE application_id=? AND status='submitted' AND conflict_of_interest='none'");
+    $reviews->bind_param("i",$id);$reviews->execute();$reviewCount=(int)$reviews->get_result()->fetch_assoc()['total'];$reviews->close();
+    if($reviewCount>=3 && $total>0 && $yes*3 >= $total*2){
+      $level=(int)$a['requested_level'];$weight=[1=>1.25,2=>1.50,3=>2.00,4=>3.00][$level]??1.00;
+      $up=$conn->prepare("INSERT INTO expertise_competencies (user_id,domain_id,level,weight,approved_in_community_id,source_application_id,valid_from,valid_until) VALUES (?,?,?,?,?,?,NOW(),DATE_ADD(NOW(),INTERVAL 3 YEAR)) ON DUPLICATE KEY UPDATE level=VALUES(level),weight=VALUES(weight),approved_in_community_id=VALUES(approved_in_community_id),source_application_id=VALUES(source_application_id),valid_from=NOW(),valid_until=DATE_ADD(NOW(),INTERVAL 3 YEAR)");
       $up->bind_param("iiidii",$a['target_user_id'],$a['domain_id'],$level,$weight,$a['community_id'],$id);$up->execute();$up->close();
       $status='approved';
-    } elseif($no>$yes){$status='rejected';} else {$status='pending';}
-    $fin=$conn->prepare("UPDATE expertise_applications SET status=?,decision_at=NOW() WHERE id=? AND decision_at IS NULL");$fin->bind_param("si",$status,$id);$fin->execute();$fin->close();
-    $detail="نتیجه رأی‌گیری ۷روزه: موافق ".$yes."، مخالف ".$no.($yes===$no?"؛ تساوی و بسته‌شدن رأی‌گیری":"");
+    } elseif($reviewCount>=3 && $total>0 && $no*3 >= $total*2){$status='rejected';}
+    else {$status='pending';}
+    if($status!=='pending'){
+      $fin=$conn->prepare("UPDATE expertise_applications SET status=?,decision_at=NOW() WHERE id=? AND decision_at IS NULL");$fin->bind_param("si",$status,$id);$fin->execute();$fin->close();
+    }
+    $detail="بررسی مستقل: ".$reviewCount."؛ رأی موافق ".$yes."، مخالف ".$no."؛ شرط تصویب دوسوم";
+
     $hist=$conn->prepare("INSERT INTO expertise_application_history (application_id,actor_user_id,event_type,details) VALUES (?,NULL,'voting_closed',?)");$hist->bind_param("is",$id,$detail);$hist->execute();$hist->close();
    }
    $conn->commit();
@@ -93,5 +99,24 @@ body{font-family:Tahoma,Arial,sans-serif;background:#f4f7fb;color:#243447;margin
 <?php $ev=$conn->prepare("SELECT title,description,reference_url FROM expertise_application_evidence WHERE application_id=? ORDER BY id");$aid=(int)$a['id'];$ev->bind_param("i",$aid);$ev->execute();$evidence=$ev->get_result()->fetch_all(MYSQLI_ASSOC);$ev->close();foreach($evidence as $e):?><p><b><?=eh($e['title'])?></b><br><?=nl2br(eh($e['description']))?> <?php if($e['reference_url']):?><a href="<?=eh($e['reference_url'])?>" rel="noopener" target="_blank">مرجع</a><?php endif;?></p><?php endforeach;?></div><?php endforeach;?></section>
 <?php if($community_id):?><section class="panel"><h3>درخواست‌های در انتظار رأی جامعه</h3><?php if(!$open):?><p>درخواستی برای رأی‌گیری وجود ندارد.</p><?php endif;?><?php foreach($open as $a):?><div class="item"><b><?=eh($a['username'])?></b> — <?=eh($a['domain_name'])?>، سطح <?=(int)$a['requested_level']?><p class="muted">پایان مهلت: <?=eh($a['expires_at'])?></p>
 <?php $aid=(int)$a['id'];$ev=$conn->prepare("SELECT title,description,reference_url FROM expertise_application_evidence WHERE application_id=? ORDER BY id");$ev->bind_param("i",$aid);$ev->execute();$evidence=$ev->get_result()->fetch_all(MYSQLI_ASSOC);$ev->close();foreach($evidence as $e):?><p><b><?=eh($e['title'])?></b><br><?=nl2br(eh($e['description']))?> <?php if($e['reference_url']):?><a href="<?=eh($e['reference_url'])?>" target="_blank" rel="noopener">مرجع</a><?php endif;?></p><?php endforeach;?>
-<?php if((int)$a['target_user_id']!==$user_id):?><form method="post" action="expertise_action.php" class="row"><input type="hidden" name="csrf_token" value="<?=eh($csrf)?>"><input type="hidden" name="action" value="vote"><input type="hidden" name="application_id" value="<?=$aid?>"><button name="vote" value="yes">موافق</button><button name="vote" value="no">مخالف</button></form><?php else:?><p class="muted">شما متقاضی این درخواست هستید و نمی‌توانید به آن رأی دهید.</p><?php endif;?></div><?php endforeach;?></section><?php endif;?>
+<?php
+$rv=$conn->prepare("SELECT COUNT(*) total FROM expertise_application_reviews WHERE application_id=? AND status='submitted' AND conflict_of_interest='none'");
+$rv->bind_param("i",$aid);$rv->execute();$reviewCount=(int)$rv->get_result()->fetch_assoc()['total'];$rv->close();
+$mineReview=$conn->prepare("SELECT status FROM expertise_application_reviews WHERE application_id=? AND reviewer_user_id=? LIMIT 1");
+$mineReview->bind_param("ii",$aid,$user_id);$mineReview->execute();$myReview=$mineReview->get_result()->fetch_assoc();$mineReview->close();
+?>
+<p class="muted">ارزیابی مستقل تکمیل‌شده: <?=$reviewCount?> از حداقل ۳</p>
+<?php if((int)$a['target_user_id']!==$user_id && !$myReview):?>
+<form method="post" action="expertise_action.php" class="row"><input type="hidden" name="csrf_token" value="<?=eh($csrf)?>"><input type="hidden" name="action" value="review_join"><input type="hidden" name="application_id" value="<?=$aid?>"><button>پذیرش مسئولیت ارزیابی</button></form>
+<?php elseif($myReview && $myReview['status']==='pending'):?>
+<form method="post" action="expertise_action.php"><input type="hidden" name="csrf_token" value="<?=eh($csrf)?>"><input type="hidden" name="action" value="review_submit"><input type="hidden" name="application_id" value="<?=$aid?>">
+<label>دانش نظری و علمی (۲۰٪)</label><input type="number" name="theoretical_score" min="0" max="100" required>
+<label>تجربه عملی (۳۰٪)</label><input type="number" name="practical_score" min="0" max="100" required>
+<label>دستاوردهای قابل اثبات (۳۰٪)</label><input type="number" name="achievements_score" min="0" max="100" required>
+<label>ارزیابی حرفه‌ای مستقل (۲۰٪)</label><input type="number" name="professional_score" min="0" max="100" required>
+<label>تعارض منافع</label><select name="conflict_of_interest"><option value="none">تعارض منافع ندارم</option><option value="declared">تعارض منافع دارم و کنار می‌روم</option></select>
+<label>توضیحات</label><textarea name="review_notes" rows="3"></textarea><button>ثبت ارزیابی مستقل</button></form>
+<?php endif;?>
+<?php if((int)$a['target_user_id']!==$user_id && $reviewCount>=3):?><form method="post" action="expertise_action.php" class="row"><input type="hidden" name="csrf_token" value="<?=eh($csrf)?>"><input type="hidden" name="action" value="vote"><input type="hidden" name="application_id" value="<?=$aid?>"><button name="vote" value="yes">موافق</button><button name="vote" value="no">مخالف</button></form>
+<?php elseif((int)$a['target_user_id']!==$user_id):?><p class="muted">رأی نهایی پس از تکمیل سه ارزیابی مستقل فعال می‌شود.</p><?php else:?><input type="hidden" name="csrf_token" value="<?=eh($csrf)?>"><input type="hidden" name="action" value="vote"><input type="hidden" name="application_id" value="<?=$aid?>"><button name="vote" value="yes">موافق</button><button name="vote" value="no">مخالف</button></form><?php endif;?></div><?php endforeach;?></section><?php endif;?>
 </main></body></html>
