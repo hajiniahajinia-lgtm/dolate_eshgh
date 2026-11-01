@@ -120,9 +120,9 @@ $requesterCheck=$conn->prepare("SELECT 1 FROM expertise_application_requesters W
 $requesterCheck->bind_param("ii",$aid,$user_id);$requesterCheck->execute();$isRequester=(bool)$requesterCheck->get_result()->fetch_row();$requesterCheck->close();
 ?>
 <p class="muted">ارزیابی مستقل تکمیل‌شده: <?=$reviewCount?> از حداقل ۳<?php if($reviewScore!==null):?> | میانگین امتیاز وزنی: <?=number_format((float)$reviewScore,2)?> از ۱۰۰<?php endif;?></p>
-<?php if((int)$a['target_user_id']!==$user_id && !$isRequester && !$myReview):?>
+<?php if((int)$a['target_user_id']!==$user_id && !$isRequester && !$myReview && $reviewCount<3):?>
 <form method="post" action="expertise_action.php" class="row"><input type="hidden" name="csrf_token" value="<?=eh($csrf)?>"><input type="hidden" name="action" value="review_join"><input type="hidden" name="application_id" value="<?=$aid?>"><button>پذیرش مسئولیت ارزیابی</button></form>
-<?php elseif($myReview && $myReview['status']==='pending'):?>
+<?php elseif($myReview && $myReview['status']==='pending' && $reviewCount<3):?>
 <form method="post" action="expertise_action.php"><input type="hidden" name="csrf_token" value="<?=eh($csrf)?>"><input type="hidden" name="action" value="review_submit"><input type="hidden" name="application_id" value="<?=$aid?>">
 <label>دانش نظری و علمی (۲۰٪)</label><input type="number" name="theoretical_score" min="0" max="100" required>
 <label>تجربه عملی (۳۰٪)</label><input type="number" name="practical_score" min="0" max="100" required>
