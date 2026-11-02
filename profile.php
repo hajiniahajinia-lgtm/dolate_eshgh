@@ -532,21 +532,7 @@ if ($similarity_result) {
     $similarity_result->free();
 }
 ?>
-<?php
-$similarity_communities = [];
-$similarity_result = $conn->query("SELECT id, name, approach, community_type FROM communities ORDER BY name");
-if ($similarity_result) {
-    while ($similarity_row = $similarity_result->fetch_assoc()) {
-        $similarity_communities[] = [
-            'id' => (int)$similarity_row['id'],
-            'name' => (string)$similarity_row['name'],
-            'approach' => (string)$similarity_row['approach'],
-            'type' => (string)$similarity_row['community_type']
-        ];
-    }
-    $similarity_result->free();
-}
-?>
+
 <!-- ایجاد جامعه جدید -->
 <div class="box">
 <h3>ایجاد جامعه جدید</h3>
