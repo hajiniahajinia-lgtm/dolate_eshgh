@@ -1208,8 +1208,9 @@ if ($is_community_member) {
     if ($domain_options) $expertise_proposal_domains = $domain_options->fetch_all(MYSQLI_ASSOC);
 }
 ?>
- <div id="topic-expertise-proposal-form" style="margin:12px 0;padding:14px;background:#f8fbff;border:1px solid #c8d9f2;border-radius:10px;">
-  <strong style="display:block;margin-bottom:6px;">پیشنهاد حوزهٔ تخصصی برای یک موضوع</strong>
+ <details id="topic-expertise-proposal-form" style="margin:12px 0;padding:0;background:#f8fbff;border:1px solid #c8d9f2;border-radius:10px;overflow:hidden;">
+  <summary style="padding:13px 14px;cursor:pointer;font-weight:bold;color:#245783;">پیشنهاد حوزهٔ تخصصی برای یک موضوع</summary>
+  <div style="padding:0 14px 14px;">
   <p style="font-size:12px;color:#475467;line-height:1.8;margin:4px 0 12px;">حوزهٔ مرتبط با موضوع را از میان حوزه‌های تخصصی تأییدشده انتخاب کنید. پس از ثبت، اعضای جامعه ۷ روز فرصت دارند موافق یا مخالف رأی دهند. برای هر موضوع فقط یک پیشنهاد ثبت می‌شود.</p>
   <?php if (!$is_community_member): ?>
     <p style="font-size:13px;color:#667085;">برای ثبت پیشنهاد، ابتدا باید عضو این جامعه شوید.</p>
@@ -1236,7 +1237,8 @@ if ($is_community_member) {
       <button type="submit" <?= (empty($expertise_proposal_topics) || empty($expertise_proposal_domains)) ? 'disabled' : '' ?> style="display:block;width:100%;padding:11px 14px;border:0;border-radius:8px;background:#2869a6;color:#fff;font-weight:bold;font-size:14px;cursor:pointer;">ثبت پیشنهاد حوزهٔ تخصصی</button>
     </form>
   <?php endif; ?>
-</div>
+  </div>
+</details>
 
 
 
