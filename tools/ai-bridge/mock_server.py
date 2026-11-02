@@ -1,7 +1,8 @@
-"""Local-only prototype for the Dolate Eshgh AI bridge.
+"""Mock prototype for the Dolate Eshgh AI bridge.
 
-This is a mock service: it has NO database connection and cannot execute SQL.
-It binds to 127.0.0.1 by default and requires AI_BRIDGE_TOKEN.
+This service has NO database connection and cannot execute SQL.
+For Render, it binds to 0.0.0.0 and uses the platform-provided PORT.
+It always requires AI_BRIDGE_TOKEN.
 """
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import hmac
@@ -9,8 +10,9 @@ import json
 import os
 from urllib.parse import urlparse
 
-HOST = os.environ.get("AI_BRIDGE_HOST", "127.0.0.1")
-PORT = int(os.environ.get("AI_BRIDGE_PORT", "8787"))
+ON_RENDER = bool(os.environ.get("RENDER") or os.environ.get("PORT"))
+HOST = os.environ.get("AI_BRIDGE_HOST", "0.0.0.0" if ON_RENDER else "127.0.0.1")
+PORT = int(os.environ.get("PORT", os.environ.get("AI_BRIDGE_PORT", "8787")))
 TOKEN = os.environ.get("AI_BRIDGE_TOKEN", "")
 
 TOOLS = [
@@ -80,5 +82,5 @@ class Handler(BaseHTTPRequestHandler):
 if __name__ == "__main__":
     if not TOKEN:
         raise SystemExit("Set AI_BRIDGE_TOKEN to a long random secret before starting.")
-    print(f"Starting mock bridge at http://{HOST}:{PORT} (database access disabled)")
+    print(f"Starting mock bridge on {HOST}:{PORT} (database access disabled)")
     HTTPServer((HOST, PORT), Handler).serve_forever()
