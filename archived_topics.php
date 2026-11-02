@@ -319,6 +319,7 @@ while($row=$result->fetch_assoc()){
         'participation'=>$participation,
         'enforce'=>$enforce,
         'idea'=>$winner_idea,
+        'winner_enforceable'=>$winner_idea_is_enforceable,
         'execution_candidates'=>$execution_candidates,
         'election'=>$election,
         'status'=>$status
@@ -327,6 +328,11 @@ while($row=$result->fetch_assoc()){
     if($status==='winner') $winners[]=$data;
     else $losers[]=$data;
 }
+
+$winner_groups = [
+    ['title'=>'موضوعات لازم‌الاجرا', 'items'=>array_values(array_filter($winners, static function($item){ return !empty($item['winner_enforceable']); }))],
+    ['title'=>'موضوعات غیرلازم‌الاجرا', 'items'=>array_values(array_filter($winners, static function($item){ return empty($item['winner_enforceable']); }))]
+];
 ?>
 
 <!doctype html>
@@ -352,6 +358,12 @@ h1{margin:0 0 18px;font-size:22px;text-align:center}
 .winners .archive-group>summary{background:#c9efc9;color:#20572a;}
 .losers .archive-group>summary{background:#ffd0d0;color:#8a2020;}
 .archive-group-body{padding-top:12px;}
+ .archive-subgroup{margin:0 0 12px;border:1px solid #b8d8bd;border-radius:9px;overflow:hidden;background:rgba(255,255,255,.55);}
+ .archive-subgroup>summary{cursor:pointer;list-style:none;padding:10px 12px;background:#e1f3e3;color:#20572a;font-weight:700;text-align:center;}
+ .archive-subgroup>summary::-webkit-details-marker{display:none;}
+ .archive-subgroup>summary:after{content:'＋';float:left;}
+ .archive-subgroup[open]>summary:after{content:'−';}
+ .archive-subgroup-body{padding:10px 8px 2px;}
 .card{background:#fff;border-radius:12px;padding:14px;box-shadow:0 2px 8px rgba(0,0,0,0.06);display:flex;gap:14px;align-items:flex-start;margin-bottom:12px;flex-direction:column; word-break:break-word; overflow-wrap:break-word; min-width:0;}
 .title{font-weight:700;color:#222;font-size:17px;margin-bottom:6px; word-break:break-word;}
 .title-wrap{position:relative;display:inline-block;max-width:100%;}
@@ -889,7 +901,11 @@ document.addEventListener('DOMContentLoaded',function(){
       <details class="archive-group">
         <summary>📌 موضوعات منتخب (<?= count($winners) ?>)</summary>
         <div class="archive-group-body">
-        <?php if(!empty($winners)): foreach($winners as $row): ?>
+        <?php foreach($winner_groups as $winner_group): ?>
+          <details class="archive-subgroup" open>
+            <summary><?= htmlspecialchars($winner_group['title'],ENT_QUOTES,'UTF-8') ?> (<?= count($winner_group['items']) ?>)</summary>
+            <div class="archive-subgroup-body">
+            <?php if(!empty($winner_group['items'])): foreach($winner_group['items'] as $row): ?>
         <div class="card" id="topic-card-<?= (int)$row['id'] ?>">
             <div class="title-wrap">
               <div class="title" tabindex="0"><?= htmlspecialchars($row['title'], ENT_QUOTES, 'UTF-8') ?></div>
@@ -957,9 +973,12 @@ document.addEventListener('DOMContentLoaded',function(){
                 <div class="meta">نهایی‌شده در: <strong><?= htmlspecialchars(archived_jalali_datetime($row['finalized_at']), ENT_QUOTES, 'UTF-8') ?></strong></div>
             </div>
         </div>
-        <?php endforeach; else: ?>
-        <p>هنوز موضوع منتخبی در آرشیو وجود ندارد.</p>
-        <?php endif; ?>
+            <?php endforeach; else: ?>
+            <p>در این دسته هنوز موضوعی ثبت نشده است.</p>
+            <?php endif; ?>
+            </div>
+          </details>
+        <?php endforeach; ?>
         </div>
       </details>
     </div>
