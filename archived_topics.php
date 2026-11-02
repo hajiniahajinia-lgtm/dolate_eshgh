@@ -359,7 +359,11 @@ h1{margin:0 0 18px;font-size:22px;text-align:center}
 .losers .archive-group>summary{background:#ffd0d0;color:#8a2020;}
 .archive-group-body{padding-top:12px;}
  .archive-subgroup{margin:0 0 12px;border:1px solid #b8d8bd;border-radius:9px;overflow:hidden;background:rgba(255,255,255,.55);}
- .archive-subgroup>summary{cursor:pointer;list-style:none;padding:10px 12px;background:#e1f3e3;color:#20572a;font-weight:700;text-align:center;}
+ .archive-subgroup:nth-of-type(1){border-color:#79b9e8;background:#eef7ff;}
+ .archive-subgroup:nth-of-type(1)>summary{background:#d8edff;color:#174b75;}
+ .archive-subgroup:nth-of-type(2){border-color:#e6b66c;background:#fff8eb;}
+ .archive-subgroup:nth-of-type(2)>summary{background:#ffebc7;color:#795018;}
+ .archive-subgroup>summary{cursor:pointer;list-style:none;padding:10px 12px;font-weight:700;text-align:center;}
  .archive-subgroup>summary::-webkit-details-marker{display:none;}
  .archive-subgroup>summary:after{content:'＋';float:left;}
  .archive-subgroup[open]>summary:after{content:'−';}
