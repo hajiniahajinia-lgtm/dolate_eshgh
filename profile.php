@@ -516,13 +516,35 @@ $is_child = !empty($nc['parent_community_id']);
 </form>
 </div>
 
+<?php
+// داده‌های عمومی جامعه‌ها فقط برای پیشنهاد موارد مشابه در فرم ایجاد جامعه استفاده می‌شود.
+$similarity_communities = [];
+$similarity_result = $conn->query("SELECT id, name, approach, community_type FROM communities ORDER BY name");
+if ($similarity_result) {
+    while ($similarity_row = $similarity_result->fetch_assoc()) {
+        $similarity_communities[] = [
+            'id' => (int)$similarity_row['id'],
+            'name' => (string)$similarity_row['name'],
+            'approach' => (string)$similarity_row['approach'],
+            'type' => (string)$similarity_row['community_type']
+        ];
+    }
+    $similarity_result->free();
+}
+?>
+
 <!-- ایجاد جامعه جدید -->
 <div class="box">
 <h3>ایجاد جامعه جدید</h3>
 <form action="create_community.php" method="post">
 <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($community_hierarchy_csrf, ENT_QUOTES, 'UTF-8') ?>">
 <label>نام جامعه*</label>
-<input type="text" name="community_name" required>
+<input type="text" name="community_name" id="newCommunityName" required>
+<div id="similarCommunitySuggestions" style="display:none;margin:8px 0;padding:10px;border:1px solid #c9d9eb;border-radius:8px;background:#f5f9ff;">
+<strong style="display:block;margin-bottom:6px;">جامعه‌های نزدیک به موضوع شما</strong>
+<p style="font-size:12px;color:#596579;margin:0 0 7px;">این موارد فقط برای آگاهی و انتخاب آگاهانه نمایش داده می‌شوند؛ مانع ایجاد جامعه جدید نیستند.</p>
+<div id="similarCommunityList"></div>
+</div>
 
 <label>نوع جامعه*</label>
 <select name="community_type" id="communityType" required>
@@ -538,7 +560,16 @@ $is_child = !empty($nc['parent_community_id']);
 <input type="text" name="community_type_custom" id="communityTypeCustom" maxlength="100" placeholder="نوع جامعه را بنویسید" style="display:none;margin-top:8px;">
 
 <label>وظایف و رویکردها*</label>
-<textarea name="community_approach" required></textarea>
+<textarea name="community_approach" id="newCommunityApproach" required></textarea>
+
+<label>جایگاه جامعه</label>
+<select name="parent_community_id" id="newCommunityParent">
+<option value="0">جامعه مستقل (بدون جامعه مادر)</option>
+<?php foreach ($similarity_communities as $candidate_community): ?>
+<option value="<?= (int)$candidate_community['id'] ?>"><?= htmlspecialchars($candidate_community['name'], ENT_QUOTES, 'UTF-8') ?> — زیرجامعه</option>
+<?php endforeach; ?>
+</select>
+<p style="font-size:12px;color:#596579;margin:4px 0 0;">اگر این گروه بخشی تخصصی از یک جامعه موجود است، می‌توانید آن جامعه را به‌عنوان جامعه مادر انتخاب کنید. این انتخاب اختیاری است.</p>
 
 <label>
 <input type="checkbox" name="join_now" value="1"> همین الان عضو شوم
@@ -548,6 +579,62 @@ $is_child = !empty($nc['parent_community_id']);
 </form>
 <script>
 (function () {
+    const communities = <?= json_encode($similarity_communities, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+    const nameInput = document.getElementById('newCommunityName');
+    const approachInput = document.getElementById('newCommunityApproach');
+    const suggestionBox = document.getElementById('similarCommunitySuggestions');
+    const suggestionList = document.getElementById('similarCommunityList');
+    function normalizeText(value) {
+        return String(value || '').toLowerCase().replace(/[يى]/g, 'ی').replace(/ك/g, 'ک')
+            .replace(/[\u200c\u200d]/g, ' ').replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim();
+    }
+    function tokens(value) { return normalizeText(value).split(' ').filter(word => word.length > 2); }
+    function similarityScore(inputTokens, candidateTokens) {
+        if (!inputTokens.length || !candidateTokens.length) return 0;
+        const candidateSet = new Set(candidateTokens);
+        let matches = 0;
+        inputTokens.forEach(word => { if (candidateSet.has(word)) matches++; });
+        return matches / new Set(inputTokens).size;
+    }
+    function updateSimilarCommunities() {
+        if (!nameInput || !approachInput || !suggestionBox || !suggestionList) return;
+        const nameTokens = tokens(nameInput.value);
+        const approachTokens = tokens(approachInput.value);
+        // حتی یک واژه یا نام دقیقِ واردشده برای نمایش پیشنهاد کافی است.
+        if ([...new Set([...nameTokens, ...approachTokens])].length < 1) {
+            suggestionBox.style.display = 'none'; return;
+        }
+        const normalizedName = normalizeText(nameInput.value);
+        const ranked = communities.map(item => {
+            const candidateName = normalizeText(item.name);
+            const nameScore = similarityScore(nameTokens, tokens(item.name));
+            const approachScore = similarityScore(approachTokens, tokens(item.approach));
+            const exactName = normalizedName !== '' && normalizedName === candidateName;
+            // تطابق دقیق نام همیشه بالاتر از شباهت‌های تقریبی قرار می‌گیرد.
+            const score = exactName ? 1 : (nameScore * 0.65) + (approachScore * 0.35);
+            return {item, score, exactName};
+        }).filter(row => row.score >= 0.12)
+          .sort((a,b) => Number(b.exactName) - Number(a.exactName) || b.score - a.score)
+          .slice(0,5);
+        if (!ranked.length) { suggestionBox.style.display = 'none'; return; }
+        suggestionList.innerHTML = '';
+        ranked.forEach(row => {
+            const wrapper = document.createElement('div');
+            const link = document.createElement('a');
+            link.href = 'search.php?q=' + encodeURIComponent(row.item.name);
+            link.textContent = row.item.name;
+            link.style.cssText = 'display:block;padding:6px 0;border-top:1px solid #e2eaf3;';
+            const detail = document.createElement('div');
+            detail.textContent = row.item.type || 'جامعه موجود';
+            detail.style.cssText = 'font-size:11px;color:#667085;font-weight:normal;';
+            wrapper.appendChild(link); wrapper.appendChild(detail); suggestionList.appendChild(wrapper);
+        });
+        suggestionBox.style.display = 'block';
+    }
+    if (nameInput && approachInput) {
+        nameInput.addEventListener('input', updateSimilarCommunities);
+        approachInput.addEventListener('input', updateSimilarCommunities);
+    }
     const typeSelect = document.getElementById('communityType');
     const customType = document.getElementById('communityTypeCustom');
     if (!typeSelect || !customType) return;

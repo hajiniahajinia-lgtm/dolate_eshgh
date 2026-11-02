@@ -27,6 +27,7 @@ $approach = trim($_POST['community_approach'] ?? '');
 $community_type = trim($_POST['community_type'] ?? '');
 $community_type_custom = trim($_POST['community_type_custom'] ?? '');
 $join_now = isset($_POST['join_now']) && $_POST['join_now']==1 ? true : false;
+$parent_community_id = max(0, (int)($_POST['parent_community_id'] ?? 0));
 
 $allowed_community_types = [
     'کشور',
@@ -89,11 +90,36 @@ if ($name_exists) {
 <body><div class='message'><strong>جامعه‌ای با این نام از قبل وجود دارد.</strong><br>لطفاً نام دیگری انتخاب کنید.<br><a href='profile.php'>بازگشت به پروفایل</a></div></body></html>");
 }
 
-// درج جامعه در جدول communities با creator_id
-$stmt = $conn->prepare("INSERT INTO communities (name, approach, members_count, creator_id, community_type) VALUES (?, ?, 0, ?, ?)");
-if (!$stmt) die("خطا در آماده‌سازی کوئری: " . $conn->error);
+// انتخاب جامعه مادر اختیاری است؛ ساختار پایگاه داده تغییر داده نمی‌شود.
+$parent_column_check = $conn->query("SHOW COLUMNS FROM communities LIKE 'parent_community_id'");
+$parent_column_ready = $parent_column_check && $parent_column_check->num_rows > 0;
+if ($parent_column_check) $parent_column_check->close();
 
-$stmt->bind_param("ssis", $name, $approach, $user_id, $community_type);
+if ($parent_community_id > 0) {
+    if (!$parent_column_ready) {
+        http_response_code(409);
+        exit("امکان تعیین جامعه مادر هنوز در پایگاه داده فعال نیست. لطفاً جامعه را مستقل ایجاد کنید. <a href='profile.php'>بازگشت</a>");
+    }
+    $parent_check = $conn->prepare("SELECT id FROM communities WHERE id=?");
+    $parent_check->bind_param("i", $parent_community_id);
+    $parent_check->execute();
+    $parent_exists = $parent_check->get_result()->num_rows > 0;
+    $parent_check->close();
+    if (!$parent_exists) {
+        http_response_code(400);
+        exit("جامعه مادر انتخاب‌شده معتبر نیست. <a href='profile.php'>بازگشت</a>");
+    }
+}
+
+if ($parent_column_ready) {
+    $stmt = $conn->prepare("INSERT INTO communities (name, approach, members_count, creator_id, community_type, parent_community_id) VALUES (?, ?, 0, ?, ?, NULLIF(?, 0))");
+    if (!$stmt) die("خطا در آماده‌سازی کوئری: " . $conn->error);
+    $stmt->bind_param("ssisi", $name, $approach, $user_id, $community_type, $parent_community_id);
+} else {
+    $stmt = $conn->prepare("INSERT INTO communities (name, approach, members_count, creator_id, community_type) VALUES (?, ?, 0, ?, ?)");
+    if (!$stmt) die("خطا در آماده‌سازی کوئری: " . $conn->error);
+    $stmt->bind_param("ssis", $name, $approach, $user_id, $community_type);
+}
 
 if ($stmt->execute()) {
     $community_id = $stmt->insert_id;
