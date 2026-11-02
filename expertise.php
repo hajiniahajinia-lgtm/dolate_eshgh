@@ -20,8 +20,8 @@ if($expired && $community_id){$expired->bind_param("i",$community_id);$expired->
  foreach($ids as $item){
   $conn->begin_transaction();
   try{
-   $id=(int)$item['id']; $lock=$conn->prepare("SELECT * FROM expertise_applications WHERE id=? FOR UPDATE");$lock->bind_param("i",$id);$lock->execute();$a=$lock->get_result()->fetch_assoc();$lock->close();
-   if($a && $a['status']==='pending' && $a['decision_at']===null && !empty($a['expires_at']) && strtotime($a['expires_at'])<=time()){
+   $id=(int)$item['id']; $lock=$conn->prepare("SELECT a.*,(SELECT COUNT(*) FROM expertise_application_reviews r WHERE r.application_id=a.id AND r.status='submitted' AND r.conflict_of_interest='none') AS independent_review_count FROM expertise_applications a WHERE a.id=? FOR UPDATE");$lock->bind_param("i",$id);$lock->execute();$a=$lock->get_result()->fetch_assoc();$lock->close();
+   if($a && $a['status']==='pending' && $a['decision_at']===null && !empty($a['expires_at']) && strtotime($a['expires_at'])<=time() && (int)$a['independent_review_count']>=3){
     $cnt=$conn->prepare("SELECT SUM(vote='yes') yes_count,SUM(vote='no') no_count FROM expertise_application_votes WHERE application_id=?");$cnt->bind_param("i",$id);$cnt->execute();$votes=$cnt->get_result()->fetch_assoc();$cnt->close();
     $yes=(int)($votes['yes_count']??0);$no=(int)($votes['no_count']??0);$total=$yes+$no;
     $reviews=$conn->prepare("SELECT COUNT(*) total FROM expertise_application_reviews WHERE application_id=? AND status='submitted' AND conflict_of_interest='none'");
