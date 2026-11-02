@@ -368,6 +368,8 @@ h1{margin:0 0 18px;font-size:22px;text-align:center}
  .archive-subgroup>summary:after{content:'＋';float:left;}
  .archive-subgroup[open]>summary:after{content:'−';}
  .archive-subgroup-body{padding:10px 8px 2px;}
+ .archive-subgroup:nth-of-type(1) .card{background:#f8fcff;border:1px solid #c9e4f8;}
+ .archive-subgroup:nth-of-type(2) .card{background:#fffdf7;border:1px solid #f1dfbf;}
 .card{background:#fff;border-radius:12px;padding:14px;box-shadow:0 2px 8px rgba(0,0,0,0.06);display:flex;gap:14px;align-items:flex-start;margin-bottom:12px;flex-direction:column; word-break:break-word; overflow-wrap:break-word; min-width:0;}
 .title{font-weight:700;color:#222;font-size:17px;margin-bottom:6px; word-break:break-word;}
 .title-wrap{position:relative;display:inline-block;max-width:100%;}
