@@ -15,8 +15,8 @@ foreach($communities as $c) if((int)$c['id']===$community_id) $is_member=true;
 if(!$is_member) $community_id=0;
 
 /* مهلت رأی‌گیری فقط پس از تکمیل سه ارزیابی مستقل آغاز می‌شود. */
-$expired=$conn->prepare("SELECT a.id FROM expertise_applications a WHERE a.community_id=? AND a.status='pending' AND a.decision_at IS NULL AND a.expires_at IS NOT NULL AND a.expires_at<=NOW() AND (SELECT COUNT(*) FROM expertise_application_reviews r WHERE r.application_id=a.id AND r.status='submitted' AND r.conflict_of_interest='none')>=3");
-if($expired && $community_id){$expired->bind_param("i",$community_id);$expired->execute();$ids=$expired->get_result()->fetch_all(MYSQLI_ASSOC);$expired->close();
+$expired=$conn->prepare("SELECT a.id FROM expertise_applications a WHERE a.community_id IN (SELECT cm.community_id FROM community_members cm WHERE cm.user_id=?) AND a.status='pending' AND a.decision_at IS NULL AND a.expires_at IS NOT NULL AND a.expires_at<=NOW() AND (SELECT COUNT(*) FROM expertise_application_reviews r WHERE r.application_id=a.id AND r.status='submitted' AND r.conflict_of_interest='none')>=3");
+if($expired){$expired->bind_param("i",$user_id);$expired->execute();$ids=$expired->get_result()->fetch_all(MYSQLI_ASSOC);$expired->close();
  foreach($ids as $item){
   $conn->begin_transaction();
   try{
