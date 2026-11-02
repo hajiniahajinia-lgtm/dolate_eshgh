@@ -600,14 +600,22 @@ if ($similarity_result) {
         if (!nameInput || !approachInput || !suggestionBox || !suggestionList) return;
         const nameTokens = tokens(nameInput.value);
         const approachTokens = tokens(approachInput.value);
-        if ([...new Set([...nameTokens, ...approachTokens])].length < 2) {
+        // حتی یک واژه یا نام دقیقِ واردشده برای نمایش پیشنهاد کافی است.
+        if ([...new Set([...nameTokens, ...approachTokens])].length < 1) {
             suggestionBox.style.display = 'none'; return;
         }
+        const normalizedName = normalizeText(nameInput.value);
         const ranked = communities.map(item => {
+            const candidateName = normalizeText(item.name);
             const nameScore = similarityScore(nameTokens, tokens(item.name));
             const approachScore = similarityScore(approachTokens, tokens(item.approach));
-            return {item, score:(nameScore * 0.65) + (approachScore * 0.35)};
-        }).filter(row => row.score >= 0.12).sort((a,b) => b.score - a.score).slice(0,5);
+            const exactName = normalizedName !== '' && normalizedName === candidateName;
+            // تطابق دقیق نام همیشه بالاتر از شباهت‌های تقریبی قرار می‌گیرد.
+            const score = exactName ? 1 : (nameScore * 0.65) + (approachScore * 0.35);
+            return {item, score, exactName};
+        }).filter(row => row.score >= 0.12)
+          .sort((a,b) => Number(b.exactName) - Number(a.exactName) || b.score - a.score)
+          .slice(0,5);
         if (!ranked.length) { suggestionBox.style.display = 'none'; return; }
         suggestionList.innerHTML = '';
         ranked.forEach(row => {
