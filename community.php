@@ -1185,6 +1185,61 @@ $removal_msg_key = (string)($_GET['removal_msg'] ?? '');
   </div>
 </details>
 
+<?php
+// فرم ثبت پیشنهاد حوزهٔ تخصصی برای موضوعات همین جامعه
+$expertise_proposal_topics = [];
+$expertise_proposal_domains = [];
+if ($is_community_member) {
+    $topic_options = $conn->prepare("
+        SELECT t.id,t.title
+        FROM topics t
+        WHERE t.community_id=?
+          AND NOT EXISTS (
+              SELECT 1 FROM topic_expertise_proposals p WHERE p.topic_id=t.id
+          )
+        ORDER BY t.id DESC
+    ");
+    $topic_options->bind_param("i", $community_id);
+    $topic_options->execute();
+    $expertise_proposal_topics = $topic_options->get_result()->fetch_all(MYSQLI_ASSOC);
+    $topic_options->close();
+
+    $domain_options = $conn->query("SELECT id,name FROM expertise_domains WHERE status='approved' ORDER BY name");
+    if ($domain_options) $expertise_proposal_domains = $domain_options->fetch_all(MYSQLI_ASSOC);
+}
+?>
+ <div id="topic-expertise-proposal-form" style="margin:12px 0;padding:14px;background:#f8fbff;border:1px solid #c8d9f2;border-radius:10px;">
+  <strong style="display:block;margin-bottom:6px;">پیشنهاد حوزهٔ تخصصی برای یک موضوع</strong>
+  <p style="font-size:12px;color:#475467;line-height:1.8;margin:4px 0 12px;">حوزهٔ مرتبط با موضوع را از میان حوزه‌های تخصصی تأییدشده انتخاب کنید. پس از ثبت، اعضای جامعه ۷ روز فرصت دارند موافق یا مخالف رأی دهند. برای هر موضوع فقط یک پیشنهاد ثبت می‌شود.</p>
+  <?php if (!$is_community_member): ?>
+    <p style="font-size:13px;color:#667085;">برای ثبت پیشنهاد، ابتدا باید عضو این جامعه شوید.</p>
+  <?php elseif (!$expertise_proposal_topics): ?>
+    <p style="font-size:13px;color:#667085;">در حال حاضر موضوعی که هنوز برای آن پیشنهاد حوزه ثبت نشده باشد، وجود ندارد.</p>
+  <?php elseif (!$expertise_proposal_domains): ?>
+    <p style="font-size:13px;color:#667085;">هنوز هیچ حوزهٔ تخصصی تأییدشده‌ای برای انتخاب وجود ندارد.</p>
+  <?php else: ?>
+    <form method="post" action="topic_expertise_proposal_submit.php">
+      <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($community_duty_csrf, ENT_QUOTES, 'UTF-8') ?>">
+      <input type="hidden" name="community_id" value="<?= (int)$community_id ?>">
+      <label for="expertise-proposal-topic" style="display:block;font-size:13px;font-weight:bold;margin:8px 0 4px;">۱. انتخاب موضوع</label>
+      <select id="expertise-proposal-topic" name="topic_id" required style="display:block;box-sizing:border-box;width:100%;max-width:100%;margin:0 0 12px;padding:11px;border:1px solid #9fb6d1;border-radius:8px;background:#fff;color:#243447;font-size:14px;">
+        <option value="">یک موضوع را انتخاب کنید</option>
+        <?php foreach ($expertise_proposal_topics as $topic_option): ?>
+          <option value="<?= (int)$topic_option['id'] ?>"><?= htmlspecialchars($topic_option['title'], ENT_QUOTES, 'UTF-8') ?></option>
+        <?php endforeach; ?>
+      </select>
+      <label for="expertise-proposal-domain" style="display:block;font-size:13px;font-weight:bold;margin:8px 0 4px;">۲. انتخاب حوزهٔ تخصصی تأییدشده</label>
+      <select id="expertise-proposal-domain" name="domain_id" required style="display:block;box-sizing:border-box;width:100%;max-width:100%;margin:0 0 14px;padding:11px;border:1px solid #9fb6d1;border-radius:8px;background:#fff;color:#243447;font-size:14px;">
+        <option value="">یک حوزهٔ تخصصی را انتخاب کنید</option>
+        <?php foreach ($expertise_proposal_domains as $domain_option): ?>
+          <option value="<?= (int)$domain_option['id'] ?>"><?= htmlspecialchars($domain_option['name'], ENT_QUOTES, 'UTF-8') ?></option>
+        <?php endforeach; ?>
+      </select>
+      <button type="submit" style="display:block;width:100%;padding:11px 14px;border:0;border-radius:8px;background:#2869a6;color:#fff;font-weight:bold;font-size:14px;cursor:pointer;">ثبت پیشنهاد حوزهٔ تخصصی</button>
+    </form>
+  <?php endif; ?>
+</div>
+
 
 
 <?php
@@ -1258,60 +1313,7 @@ try {
     error_log("Community expertise domains unavailable: " . $e->getMessage());
 }
 ?>
-<?php
-// فرم ثبت پیشنهاد حوزهٔ تخصصی برای موضوعات همین جامعه
-$expertise_proposal_topics = [];
-$expertise_proposal_domains = [];
-if ($is_community_member) {
-    $topic_options = $conn->prepare("
-        SELECT t.id,t.title
-        FROM topics t
-        WHERE t.community_id=?
-          AND NOT EXISTS (
-              SELECT 1 FROM topic_expertise_proposals p WHERE p.topic_id=t.id
-          )
-        ORDER BY t.id DESC
-    ");
-    $topic_options->bind_param("i", $community_id);
-    $topic_options->execute();
-    $expertise_proposal_topics = $topic_options->get_result()->fetch_all(MYSQLI_ASSOC);
-    $topic_options->close();
 
-    $domain_options = $conn->query("SELECT id,name FROM expertise_domains WHERE status='approved' ORDER BY name");
-    if ($domain_options) $expertise_proposal_domains = $domain_options->fetch_all(MYSQLI_ASSOC);
-}
-?>
- <div id="topic-expertise-proposal-form" style="margin:12px 0;padding:14px;background:#f8fbff;border:1px solid #c8d9f2;border-radius:10px;">
-  <strong style="display:block;margin-bottom:6px;">پیشنهاد حوزهٔ تخصصی برای یک موضوع</strong>
-  <p style="font-size:12px;color:#475467;line-height:1.8;margin:4px 0 12px;">حوزهٔ مرتبط با موضوع را از میان حوزه‌های تخصصی تأییدشده انتخاب کنید. پس از ثبت، اعضای جامعه ۷ روز فرصت دارند موافق یا مخالف رأی دهند. برای هر موضوع فقط یک پیشنهاد ثبت می‌شود.</p>
-  <?php if (!$is_community_member): ?>
-    <p style="font-size:13px;color:#667085;">برای ثبت پیشنهاد، ابتدا باید عضو این جامعه شوید.</p>
-  <?php elseif (!$expertise_proposal_topics): ?>
-    <p style="font-size:13px;color:#667085;">در حال حاضر موضوعی که هنوز برای آن پیشنهاد حوزه ثبت نشده باشد، وجود ندارد.</p>
-  <?php elseif (!$expertise_proposal_domains): ?>
-    <p style="font-size:13px;color:#667085;">هنوز هیچ حوزهٔ تخصصی تأییدشده‌ای برای انتخاب وجود ندارد.</p>
-  <?php else: ?>
-    <form method="post" action="topic_expertise_proposal_submit.php">
-      <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($community_duty_csrf, ENT_QUOTES, 'UTF-8') ?>">
-      <input type="hidden" name="community_id" value="<?= (int)$community_id ?>">
-      <label for="expertise-proposal-topic" style="display:block;font-size:13px;font-weight:bold;margin:8px 0 4px;">۱. انتخاب موضوع</label>
-      <select id="expertise-proposal-topic" name="topic_id" required style="display:block;box-sizing:border-box;width:100%;max-width:100%;margin:0 0 12px;padding:11px;border:1px solid #9fb6d1;border-radius:8px;background:#fff;color:#243447;font-size:14px;">
-        <option value="">یک موضوع را انتخاب کنید</option>
-        <?php foreach ($expertise_proposal_topics as $topic_option): ?>
-          <option value="<?= (int)$topic_option['id'] ?>"><?= htmlspecialchars($topic_option['title'], ENT_QUOTES, 'UTF-8') ?></option>
-        <?php endforeach; ?>
-      </select>
-      <label for="expertise-proposal-domain" style="display:block;font-size:13px;font-weight:bold;margin:8px 0 4px;">۲. انتخاب حوزهٔ تخصصی تأییدشده</label>
-      <select id="expertise-proposal-domain" name="domain_id" required style="display:block;box-sizing:border-box;width:100%;max-width:100%;margin:0 0 14px;padding:11px;border:1px solid #9fb6d1;border-radius:8px;background:#fff;color:#243447;font-size:14px;">
-        <option value="">یک حوزهٔ تخصصی را انتخاب کنید</option>
-        <?php foreach ($expertise_proposal_domains as $domain_option): ?>
-          <option value="<?= (int)$domain_option['id'] ?>"><?= htmlspecialchars($domain_option['name'], ENT_QUOTES, 'UTF-8') ?></option>
-        <?php endforeach; ?>
-      </select>
-      <button type="submit" style="display:block;width:100%;padding:11px 14px;border:0;border-radius:8px;background:#2869a6;color:#fff;font-weight:bold;font-size:14px;cursor:pointer;">ثبت پیشنهاد حوزهٔ تخصصی</button>
-    </form>
-  <?php endif; ?>
-</div>
 
 <details id="community-expertise-domains" style="margin:12px 0;padding:12px;background:#f5f9ff;border:1px solid #c8d9f2;border-radius:10px;">
   <summary style="cursor:pointer;font-weight:bold;">حوزه‌های تخصصی پیشنهادی این جامعه (<?= count($community_domain_proposals) ?>)</summary>
