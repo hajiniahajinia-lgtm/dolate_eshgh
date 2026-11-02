@@ -27,7 +27,13 @@ if($expired){$expired->bind_param("i",$user_id);$expired->execute();$ids=$expire
     $reviews=$conn->prepare("SELECT COUNT(*) total FROM expertise_application_reviews WHERE application_id=? AND status='submitted' AND conflict_of_interest='none'");
     $reviews->bind_param("i",$id);$reviews->execute();$reviewCount=(int)$reviews->get_result()->fetch_assoc()['total'];$reviews->close();
     $status='not_approved';
-    $reason='عدم تصویب: حداقل سه ارزیابی مستقل تکمیل نشده است.';
+    if($reviewCount<3){
+      $reason='عدم تصویب: حداقل سه ارزیابی مستقل معتبر در زمان نهایی‌سازی موجود نبود.';
+    } elseif($total===0){
+      $reason='عدم تصویب: تا پایان مهلت، هیچ رأی معتبری ثبت نشده بود.';
+    } else {
+      $reason='عدم تصویب: هیچ‌یک از گزینه‌های موافق یا مخالف به حدنصاب دوسوم نرسید.';
+    }
     if($reviewCount>=3 && $total>0 && $yes*3 >= $total*2){
       $scoreQuery=$conn->prepare("SELECT AVG(theoretical_score*0.20+practical_score*0.30+achievements_score*0.30+professional_score*0.20) weighted_score FROM expertise_application_reviews WHERE application_id=? AND status='submitted' AND conflict_of_interest='none'");
       $scoreQuery->bind_param("i",$id);$scoreQuery->execute();$scoreRow=$scoreQuery->get_result()->fetch_assoc();$scoreQuery->close();
