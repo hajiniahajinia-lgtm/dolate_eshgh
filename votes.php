@@ -183,7 +183,9 @@ if($_SERVER['REQUEST_METHOD'] === 'POST'){
               SUM(vote_type='yes') AS yes_raw,
               SUM(vote_type='no') AS no_raw,
               SUM(CASE WHEN vote_type='yes' THEN vote_weight ELSE 0 END) AS yes_weighted,
-              SUM(CASE WHEN vote_type='no' THEN vote_weight ELSE 0 END) AS no_weighted
+              SUM(CASE WHEN vote_type='no' THEN vote_weight ELSE 0 END) AS no_weighted,
+              SUM(CASE WHEN vote_type='yes' THEN GREATEST(vote_weight - 1, 0) ELSE 0 END) AS yes_expertise_effect,
+              SUM(CASE WHEN vote_type='no' THEN GREATEST(vote_weight - 1, 0) ELSE 0 END) AS no_expertise_effect
             FROM topic_voting_ballots WHERE topic_id=? AND idea_id=?
         ");
         $counts->bind_param("ii", $topic_id, $idea_id);
@@ -194,7 +196,8 @@ if($_SERVER['REQUEST_METHOD'] === 'POST'){
         echo json_encode([
             'success'=>true,
             'counts'=>['yes'=>(int)$result['yes_raw'],'no'=>(int)$result['no_raw']],
-            'weighted'=>['yes'=>(float)$result['yes_weighted'],'no'=>(float)$result['no_weighted']]
+            'weighted'=>['yes'=>(float)$result['yes_weighted'],'no'=>(float)$result['no_weighted']],
+            'expertise_effect'=>['yes'=>(float)$result['yes_expertise_effect'],'no'=>(float)$result['no_expertise_effect']]
         ]);
         exit;
     }
@@ -1424,12 +1427,16 @@ body{
                 SUM(vote_type='yes') AS yes_raw,
                 SUM(vote_type='no') AS no_raw,
                 SUM(CASE WHEN vote_type='yes' THEN vote_weight ELSE 0 END) AS yes_weighted,
-                SUM(CASE WHEN vote_type='no' THEN vote_weight ELSE 0 END) AS no_weighted
+                SUM(CASE WHEN vote_type='no' THEN vote_weight ELSE 0 END) AS no_weighted,
+                SUM(CASE WHEN vote_type='yes' THEN GREATEST(vote_weight - 1, 0) ELSE 0 END) AS yes_expertise_effect,
+                SUM(CASE WHEN vote_type='no' THEN GREATEST(vote_weight - 1, 0) ELSE 0 END) AS no_expertise_effect
                 FROM topic_voting_ballots WHERE topic_id=$tid AND idea_id=$iid")->fetch_assoc();
             $yes_count = (int)($ballot_counts['yes_raw'] ?? 0);
             $no_count = (int)($ballot_counts['no_raw'] ?? 0);
             $yes_weighted = (float)($ballot_counts['yes_weighted'] ?? 0);
             $no_weighted = (float)($ballot_counts['no_weighted'] ?? 0);
+            $yes_expertise_effect = (float)($ballot_counts['yes_expertise_effect'] ?? 0);
+            $no_expertise_effect = (float)($ballot_counts['no_expertise_effect'] ?? 0);
 
             // counts for enforce votes (per-user table)
             $enf_yes = (int)$conn->query("SELECT COUNT(*) AS c FROM topic_enforce_votes WHERE topic_id=$tid AND idea_id=$iid AND enforceable=1")->fetch_assoc()['c'];
@@ -1478,8 +1485,10 @@ body{
     آری: <strong class="yes-count"><?= $yes_count ?></strong> —
     نه: <strong class="no-count"><?= $no_count ?></strong> —
     درصد آری خام: <strong class="pct"><?= $pct ?>%</strong><br>
-    امتیاز وزن‌دار آری: <strong class="yes-weighted"><?= number_format($yes_weighted, 2) ?></strong> —
-    امتیاز وزن‌دار نه: <strong class="no-weighted"><?= number_format($no_weighted, 2) ?></strong><br>
+    مجموع وزن آری: <strong class="yes-weighted"><?= number_format($yes_weighted, 2) ?></strong> —
+    مجموع وزن نه: <strong class="no-weighted"><?= number_format($no_weighted, 2) ?></strong><br>
+    اثر افزودهٔ تخصصی آری: <strong class="yes-expertise-effect"><?= number_format($yes_expertise_effect, 2) ?></strong> —
+    اثر افزودهٔ تخصصی نه: <strong class="no-expertise-effect"><?= number_format($no_expertise_effect, 2) ?></strong><br>
     لازم‌الاجرا: <strong class="enf-yes"><?= $enf_yes ?></strong> —
     غیر لازم‌الاجرا: <strong class="enf-no"><?= $enf_no ?></strong>
   </div>
@@ -1596,6 +1605,10 @@ document.addEventListener('DOMContentLoaded', function(){
                 if(resp.weighted){
                     container.querySelector('.yes-weighted').textContent = Number(resp.weighted.yes).toFixed(2);
                     container.querySelector('.no-weighted').textContent = Number(resp.weighted.no).toFixed(2);
+                }
+                if(resp.expertise_effect){
+                    container.querySelector('.yes-expertise-effect').textContent = Number(resp.expertise_effect.yes).toFixed(2);
+                    container.querySelector('.no-expertise-effect').textContent = Number(resp.expertise_effect.no).toFixed(2);
                 }
                 if(resp.enforceable){
                     container.querySelector('.enf-yes').textContent = resp.enforceable.yes;
