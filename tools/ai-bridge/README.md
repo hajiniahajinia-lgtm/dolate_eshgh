@@ -39,3 +39,22 @@ Expected health response explicitly states that database connectivity and SQL ex
 ## Before any real connection
 
 Do not expose this mock to the public internet. A production service needs HTTPS, stronger identity/authentication and secret rotation, rate limiting, audit logging, a dedicated least-privilege database account, an allowlist of parameterized operations, and an independently hosted runtime. Never add database passwords or API keys to GitHub. Do not add an arbitrary SQL execution tool.
+
+
+## Local MCP scaffold
+
+A separate `mcp_server.py` provides a minimal MCP server over standard input/output.
+It currently exposes only `health_check` and `available_capabilities`. It does not
+connect to the website, database, browser, filesystem, or shell, and it cannot write
+or execute SQL.
+
+Install and run locally:
+
+```powershell
+python -m pip install -r requirements.txt
+python .\\mcp_server.py
+```
+
+This process is a development scaffold, not yet a remote ChatGPT connector.
+Do not publish it as a network service. Real read-only database access and browser
+automation require separate security reviews and explicit implementation.
