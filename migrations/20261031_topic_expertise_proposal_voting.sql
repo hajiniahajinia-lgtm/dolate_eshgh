@@ -1,6 +1,20 @@
 -- Seven-day voting window for topic expertise proposals.
-ALTER TABLE topic_expertise_proposals
-  ADD COLUMN expires_at DATETIME NULL AFTER proposed_at;
+-- Resume safely when expires_at already exists on the host.
+
+SET @migration_sql = IF(
+  EXISTS(
+    SELECT 1
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'topic_expertise_proposals'
+      AND COLUMN_NAME = 'expires_at'
+  ),
+  'SELECT 1',
+  'ALTER TABLE topic_expertise_proposals ADD COLUMN expires_at DATETIME NULL AFTER proposed_at'
+);
+PREPARE migration_stmt FROM @migration_sql;
+EXECUTE migration_stmt;
+DEALLOCATE PREPARE migration_stmt;
 
 UPDATE topic_expertise_proposals
 SET expires_at = DATE_ADD(proposed_at, INTERVAL 7 DAY)
