@@ -8,7 +8,8 @@ $message = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $phone = trim($_POST['phone']);
     $national_id = trim($_POST['national_id']);
-    $password = trim($_POST['password']);
+    // Preserve the exact password entered at registration; spaces may be intentional.
+    $password = (string)($_POST['password'] ?? '');
 
     if (empty($phone) || empty($national_id) || empty($password)) {
         $message = "لطفاً همه فیلدها را پر کنید.";
