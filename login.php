@@ -12,44 +12,168 @@ if (empty($_SESSION['login_csrf_token']) || !is_string($_SESSION['login_csrf_tok
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $submitted_token = $_POST['csrf_token'] ?? '';
-    if (!is_string($submitted_token) || !hash_equals($_SESSION['login_csrf_token'], $submitted_token)) {
+
+    if (!is_string($submitted_token) ||
+        !hash_equals($_SESSION['login_csrf_token'], $submitted_token)) {
         http_response_code(400);
         $message = "درخواست معتبر نیست. صفحه را تازه‌سازی کنید و دوباره تلاش کنید.";
     } else {
-    $phone_input = $_POST['phone'] ?? '';
-    $national_id_input = $_POST['national_id'] ?? '';
-    if (!is_string($phone_input) || !is_string($national_id_input)) {
-        http_response_code(400);
-        $message = "اطلاعات ارسالی معتبر نیست.";
-    } else {
-    $phone = trim($phone_input);
-    $national_id = trim($national_id_input);
-    // Preserve the exact password entered at registration; spaces may be intentional.
-    $password = (string)($_POST['password'] ?? '');
+        $phone_input = $_POST['phone'] ?? '';
+        $national_id_input = $_POST['national_id'] ?? '';
+        $password = $_POST['password'] ?? '';
 
-    if ($phone === '' || $national_id === '' || $password === '') {
-        $message = "لطفاً همه فیلدها را پر کنید.";
-    } else {
-        $stmt = $conn->prepare("SELECT * FROM users WHERE phone=? AND national_id=? LIMIT 1");
-        $stmt->bind_param("ss", $phone, $national_id);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        if ($result && $user = $result->fetch_assoc()) {
-            if (password_verify($password, $user['password'])) {
-                // Prevent session fixation by issuing a new session ID after successful authentication.
-                session_regenerate_id(true);
-                $_SESSION['user_id'] = $user['id'];
-                $_SESSION['username'] = $user['username'];
-                header("Location: profile.php");
-                exit;
-            } else {
-                $message = "رمز عبور اشتباه است.";
-            }
+        if (!is_string($phone_input) || !is_string($national_id_input) || !is_string($password)) {
+            http_response_code(400);
+            $message = "اطلاعات ارسالی معتبر نیست.";
         } else {
-            $message = "کاربر یافت نشد. لطفاً ثبت‌نام کنید.";
+            $phone = trim($phone_input);
+            $national_id = trim($national_id_input);
+
+            if ($phone === '' || $national_id === '' || $password === '') {
+                $message = "لطفاً همه فیلدها را پر کنید.";
+            } else {
+                // Use REMOTE_ADDR only; client-supplied forwarding headers are not trusted.
+                $ip_binary = @inet_pton($_SERVER['REMOTE_ADDR'] ?? '');
+                $rate_limit_ready = false;
+                $login_blocked = false;
+
+                if ($ip_binary !== false) {
+                    $rate_insert = $conn->prepare(
+                        "INSERT IGNORE INTO login_rate_limits (ip_address, failed_attempts, window_started_at) VALUES (?, 0, NOW())"
+                    );
+
+                    if ($rate_insert) {
+                        $rate_insert->bind_param("s", $ip_binary);
+                        try {
+                            $rate_limit_ready = $rate_insert->execute();
+                        } catch (Throwable $e) {
+                            error_log("login.php: rate-limit initialization failed: " . $e->getMessage());
+                        }
+                        $rate_insert->close();
+                    } else {
+                        error_log("login.php: rate-limit table unavailable: " . $conn->error);
+                    }
+
+                    if ($rate_limit_ready) {
+                        $rate_check = $conn->prepare(
+                            "SELECT blocked_until FROM login_rate_limits WHERE ip_address = ? LIMIT 1"
+                        );
+                        if ($rate_check) {
+                            $rate_check->bind_param("s", $ip_binary);
+                            try {
+                                if ($rate_check->execute()) {
+                                    $rate_result = $rate_check->get_result();
+                                    $rate_row = $rate_result ? $rate_result->fetch_assoc() : null;
+                                    $login_blocked = !empty($rate_row['blocked_until']) &&
+                                        strtotime($rate_row['blocked_until']) > time();
+                                } else {
+                                    error_log("login.php: rate-limit check failed: " . $rate_check->error);
+                                    $rate_limit_ready = false;
+                                }
+                            } catch (Throwable $e) {
+                                error_log("login.php: rate-limit check failed: " . $e->getMessage());
+                                $rate_limit_ready = false;
+                            }
+                            $rate_check->close();
+                        } else {
+                            error_log("login.php: rate-limit check prepare failed: " . $conn->error);
+                            $rate_limit_ready = false;
+                        }
+                    }
+                } else {
+                    error_log("login.php: could not parse client IP for rate limiting.");
+                }
+
+                if ($login_blocked) {
+                    http_response_code(429);
+                    $message = "تلاش‌های ناموفق زیاد بوده است. لطفاً ۱۵ دقیقه بعد دوباره تلاش کنید.";
+                } else {
+                    $stmt = $conn->prepare("SELECT * FROM users WHERE phone=? AND national_id=? LIMIT 1");
+
+                    if (!$stmt) {
+                        error_log("login.php: user lookup prepare failed: " . $conn->error);
+                        http_response_code(500);
+                        $message = "در حال حاضر امکان ورود وجود ندارد. لطفاً بعداً تلاش کنید.";
+                    } else {
+                        $stmt->bind_param("ss", $phone, $national_id);
+
+                        try {
+                            $query_ok = $stmt->execute();
+                        } catch (Throwable $e) {
+                            $query_ok = false;
+                            error_log("login.php: user lookup failed: " . $e->getMessage());
+                        }
+
+                        $result = $query_ok ? $stmt->get_result() : false;
+                        $user = $result ? $result->fetch_assoc() : null;
+                        $stmt->close();
+
+                        if ($user && password_verify($password, $user['password'])) {
+                            if ($rate_limit_ready && $ip_binary !== false) {
+                                $rate_reset = $conn->prepare(
+                                    "UPDATE login_rate_limits SET failed_attempts = 0, blocked_until = NULL, window_started_at = NOW() WHERE ip_address = ?"
+                                );
+                                if ($rate_reset) {
+                                    $rate_reset->bind_param("s", $ip_binary);
+                                    try {
+                                        $rate_reset->execute();
+                                    } catch (Throwable $e) {
+                                        error_log("login.php: rate-limit reset failed: " . $e->getMessage());
+                                    }
+                                    $rate_reset->close();
+                                }
+                            }
+
+                            // Prevent session fixation by issuing a new session ID after successful authentication.
+                            session_regenerate_id(true);
+                            $_SESSION['user_id'] = $user['id'];
+                            $_SESSION['username'] = $user['username'];
+                            header("Location: profile.php");
+                            exit;
+                        }
+
+                        if ($rate_limit_ready && $ip_binary !== false) {
+                            $rate_failure = $conn->prepare(
+                                "UPDATE login_rate_limits
+                                 SET failed_attempts = IF(window_started_at < DATE_SUB(NOW(), INTERVAL 15 MINUTE), 1, LEAST(failed_attempts + 1, 255)),
+                                     blocked_until = IF(
+                                         IF(window_started_at < DATE_SUB(NOW(), INTERVAL 15 MINUTE), 1, failed_attempts + 1) >= 5,
+                                         DATE_ADD(NOW(), INTERVAL 15 MINUTE),
+                                         blocked_until
+                                     ),
+                                     window_started_at = IF(window_started_at < DATE_SUB(NOW(), INTERVAL 15 MINUTE), NOW(), window_started_at)
+                                 WHERE ip_address = ?"
+                            );
+                            if ($rate_failure) {
+                                $rate_failure->bind_param("s", $ip_binary);
+                                try {
+                                    $rate_failure->execute();
+                                    $attempts_result = $conn->query(
+                                        "SELECT blocked_until FROM login_rate_limits WHERE ip_address = '" .
+                                        $conn->real_escape_string($ip_binary) . "' LIMIT 1"
+                                    );
+                                    $attempts_row = $attempts_result ? $attempts_result->fetch_assoc() : null;
+                                    if (!empty($attempts_row['blocked_until']) &&
+                                        strtotime($attempts_row['blocked_until']) > time()) {
+                                        http_response_code(429);
+                                        $message = "تلاش‌های ناموفق زیاد بوده است. لطفاً ۱۵ دقیقه بعد دوباره تلاش کنید.";
+                                    }
+                                } catch (Throwable $e) {
+                                    error_log("login.php: failed-attempt recording failed: " . $e->getMessage());
+                                }
+                                $rate_failure->close();
+                            } else {
+                                error_log("login.php: failed-attempt prepare failed: " . $conn->error);
+                            }
+                        }
+
+                        if ($message === '') {
+                            $message = "شماره همراه، شماره ملی یا رمز عبور اشتباه است.";
+                        }
+                    }
+                }
+            }
         }
-    }
-    }
     }
 }
 ?>
