@@ -1,5 +1,7 @@
 import importlib.util
 import unittest
+from urllib.error import URLError
+from urllib.request import Request
 from pathlib import Path
 
 path = Path(__file__).with_name("site_smoke_test.py")
@@ -30,6 +32,24 @@ class RunnerTests(unittest.TestCase):
     def test_plain_http_is_rejected(self):
         with self.assertRaises(ValueError):
             runner.SiteClient("http" + "://" + "example.invalid")
+
+    def test_cross_origin_redirect_is_rejected(self):
+        handler = runner.SameOriginHTTPSRedirectHandler(("https", "example.com", 443))
+        request = Request("https://example.com/login.php")
+        with self.assertRaises(URLError):
+            handler.redirect_request(
+                request, None, 307, "Temporary Redirect", {},
+                "https://attacker.invalid/collect",
+            )
+
+    def test_https_downgrade_redirect_is_rejected(self):
+        handler = runner.SameOriginHTTPSRedirectHandler(("https", "example.com", 443))
+        request = Request("https://example.com/login.php")
+        with self.assertRaises(URLError):
+            handler.redirect_request(
+                request, None, 302, "Found", {},
+                "http://example.com/login.php",
+            )
 
 
 if __name__ == "__main__":
