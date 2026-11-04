@@ -11,7 +11,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Preserve the exact password entered at registration; spaces may be intentional.
     $password = (string)($_POST['password'] ?? '');
 
-    if (empty($phone) || empty($national_id) || empty($password)) {
+    if ($phone === '' || $national_id === '' || $password === '') {
         $message = "لطفاً همه فیلدها را پر کنید.";
     } else {
         $stmt = $conn->prepare("SELECT * FROM users WHERE phone=? AND national_id=? LIMIT 1");
