@@ -146,7 +146,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="کاوش فقط‌خواندنی صفحات امن دولت عشق")
     parser.add_argument("--base-url", default=_runner.DEFAULT_BASE_URL)
     parser.add_argument("--start", choices=("profile", "stats"), default="profile")
-    parser.add_argument("--output", default="site_explorer_report.json")
+    parser.add_argument("--output", default=str(HERE / "site_explorer_report.json"))
     args = parser.parse_args()
     try:
         accounts = load_accounts()
