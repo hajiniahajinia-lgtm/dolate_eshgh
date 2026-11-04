@@ -137,7 +137,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 "UPDATE login_rate_limits
                                  SET failed_attempts = IF(window_started_at < DATE_SUB(NOW(), INTERVAL 15 MINUTE), 1, LEAST(failed_attempts + 1, 255)),
                                      blocked_until = IF(
-                                         IF(window_started_at < DATE_SUB(NOW(), INTERVAL 15 MINUTE), 1, failed_attempts + 1) >= 5,
+                                         IF(window_started_at < DATE_SUB(NOW(), INTERVAL 15 MINUTE), 1, failed_attempts) >= 5,
                                          DATE_ADD(NOW(), INTERVAL 15 MINUTE),
                                          blocked_until
                                      ),
@@ -148,11 +148,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 $rate_failure->bind_param("s", $ip_binary);
                                 try {
                                     $rate_failure->execute();
-                                    $attempts_result = $conn->query(
-                                        "SELECT blocked_until FROM login_rate_limits WHERE ip_address = '" .
-                                        $conn->real_escape_string($ip_binary) . "' LIMIT 1"
+                                    $attempts_check = $conn->prepare(
+                                        "SELECT blocked_until FROM login_rate_limits WHERE ip_address = ? LIMIT 1"
                                     );
-                                    $attempts_row = $attempts_result ? $attempts_result->fetch_assoc() : null;
+                                    $attempts_row = null;
+                                    if ($attempts_check) {
+                                        $attempts_check->bind_param("s", $ip_binary);
+                                        if ($attempts_check->execute()) {
+                                            $attempts_result = $attempts_check->get_result();
+                                            $attempts_row = $attempts_result ? $attempts_result->fetch_assoc() : null;
+                                        }
+                                        $attempts_check->close();
+                                    }
                                     if (!empty($attempts_row['blocked_until']) &&
                                         strtotime($attempts_row['blocked_until']) > time()) {
                                         http_response_code(429);
