@@ -19,7 +19,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urljoin, urlparse
-from urllib.request import HTTPCookieProcessor, Request, build_opener
+from urllib.request import HTTPRedirectHandler, HTTPCookieProcessor, Request, build_opener
 
 DEFAULT_BASE_URL = "https://dolateeshgh.kesug.com/"
 ACCOUNT_FILE = Path(__file__).with_name("test_accounts.local.json")
@@ -69,7 +69,7 @@ def new_account() -> dict[str, str]:
     }
 
 
-class SameOriginHTTPSRedirectHandler(__import__("urllib.request", fromlist=["HTTPRedirectHandler"]).HTTPRedirectHandler):
+class SameOriginHTTPSRedirectHandler(HTTPRedirectHandler):
     """Reject redirects that could move credentials or the session off-site."""
 
     def __init__(self, origin: tuple[str, str, int]) -> None:
