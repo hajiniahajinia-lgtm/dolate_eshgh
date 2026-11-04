@@ -31,7 +31,7 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           EVENT_BEFORE: ${{ github.event.before }}
           DEPLOY_ALL: ${{ inputs.deploy_all }}
-          GITHUB_SHA: ${{ github.sha }}
+          COMMIT_SHA: ${{ github.sha }}
         shell: bash
         run: |
           set -euo pipefail
@@ -40,7 +40,7 @@ jobs:
             if [[ -z "$EVENT_BEFORE" || "$EVENT_BEFORE" =~ ^0+$ ]]; then
               mapfile -d '' files < <(git ls-files -z)
             else
-              mapfile -d '' files < <(git diff --name-only -z --diff-filter=ACMRT "$EVENT_BEFORE" "$GITHUB_SHA")
+              mapfile -d '' files < <(git diff --name-only -z --diff-filter=ACMRT "$EVENT_BEFORE" "$COMMIT_SHA")
             fi
           elif [[ "$DEPLOY_ALL" == "true" ]]; then
             mapfile -d '' files < <(git ls-files -z)
