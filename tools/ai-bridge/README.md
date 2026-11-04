@@ -21,6 +21,22 @@ python tools/ai-bridge/site_smoke_test.py --base-url https://dolateeshgh.kesug.c
 Start with one account. The runner uses the site's actual CSRF tokens and session cookies,
 then verifies that the authenticated profile page displays the generated test username.
 
+### Windows (PowerShell)
+
+Open PowerShell in the downloaded repository folder, then run:
+
+```powershell
+py -3 --version
+py -3 tools/ai-bridge/site_smoke_test.py --count 1
+py -3 tools/ai-bridge/site_explorer.py --start profile
+py -3 tools/ai-bridge/site_explorer.py --start stats
+```
+
+The first command only checks the installed Python version. The second command creates
+one persistent test account on the configured site. Run it only once unless another
+test account is intentionally needed. The explorer commands reuse the saved account
+and do not submit any forms.
+
 Generated credentials are stored in `test_accounts.local.json` beside the script.
 That file is git-ignored and restricted to owner read/write where the operating system
 supports POSIX permissions. Keep it private and back it up securely if the account is
