@@ -1,0 +1,36 @@
+name: Upload only the two corrected migration files
+
+on:
+  workflow_dispatch:
+
+jobs:
+  upload-migrations:
+    name: Upload exactly two migration files
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Upload only the selected migration files
+        env:
+          FTP_SERVER: ${{ secrets.FTP_SERVER }}
+          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+          FTP_SERVER_DIR: ${{ secrets.FTP_SERVER_DIR }}
+        run: |
+          set -eu
+
+          test -n "$FTP_SERVER"
+          test -n "$FTP_USERNAME"
+          test -n "$FTP_PASSWORD"
+          test -n "$FTP_SERVER_DIR"
+
+          curl --fail --show-error --silent --ftp-create-dirs \
+            --user "$FTP_USERNAME:$FTP_PASSWORD" \
+            --upload-file "migrations/20261027_community_finance_assets.sql" \
+            "ftp://${FTP_SERVER}${FTP_SERVER_DIR%/}/migrations/20261027_community_finance_assets.sql"
+
+          curl --fail --show-error --silent --ftp-create-dirs \
+            --user "$FTP_USERNAME:$FTP_PASSWORD" \
+            --upload-file "migrations/20261104_community_budget_request_links_indexes.sql" \
+            "ftp://${FTP_SERVER}${FTP_SERVER_DIR%/}/migrations/20261104_community_budget_request_links_indexes.sql"
