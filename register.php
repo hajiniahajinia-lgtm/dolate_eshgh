@@ -3,6 +3,38 @@
 session_start();
 include "db.php";
 
+ 
+// Convert Persian and Arabic-Indic digits for validation only.
+// Submitted values remain unchanged to avoid altering existing login identifiers.
+function digits_for_validation(string $value): string {
+    return strtr($value, [
+        '۰'=>'0','۱'=>'1','۲'=>'2','۳'=>'3','۴'=>'4',
+        '۵'=>'5','۶'=>'6','۷'=>'7','۸'=>'8','۹'=>'9',
+        '٠'=>'0','١'=>'1','٢'=>'2','٣'=>'3','٤'=>'4',
+        '٥'=>'5','٦'=>'6','٧'=>'7','٨'=>'8','٩'=>'9'
+    ]);
+}
+
+function is_valid_iranian_mobile(string $value): bool {
+    return preg_match('/^09[0-9]{9}$/', digits_for_validation($value)) === 1;
+}
+
+function is_valid_iranian_national_id(string $value): bool {
+    $code = digits_for_validation($value);
+    if (!preg_match('/^[0-9]{10}$/', $code) || preg_match('/^(.)\\1{9}$/', $code)) {
+        return false;
+    }
+
+    $sum = 0;
+    for ($i = 0; $i < 9; $i++) {
+        $sum += (int)$code[$i] * (10 - $i);
+    }
+    $remainder = $sum % 11;
+    $check_digit = $remainder < 2 ? $remainder : 11 - $remainder;
+
+    return $check_digit === (int)$code[9];
+}
+
 // CSRF protection for the public registration form.
 if (empty($_SESSION['register_csrf_token'])) {
     $_SESSION['register_csrf_token'] = bin2hex(random_bytes(32));
@@ -14,14 +46,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         http_response_code(403);
         die("درخواست نامعتبر است. لطفاً صفحه را تازه‌سازی و دوباره تلاش کنید.");
     }
-    $username = trim($_POST['username'] ?? '');
-    $phone = trim($_POST['phone'] ?? '');
-    $national_id = trim($_POST['national_id'] ?? '');
+    $username_input = $_POST['username'] ?? '';
+    $phone_input = $_POST['phone'] ?? '';
+    $national_id_input = $_POST['national_id'] ?? '';
     $password = $_POST['password'] ?? '';
 
-    // ساده‌سازی اعتبارسنجی (می‌تونی بعداً قوی‌ترش کنی)
+    if (!is_string($username_input) || !is_string($phone_input) ||
+        !is_string($national_id_input) || !is_string($password)) {
+        http_response_code(400);
+        die("اطلاعات ارسالی معتبر نیست.");
+    }
+
+    $username = trim($username_input);
+    $phone = trim($phone_input);
+    $national_id = trim($national_id_input);
+
     if ($username === '' || $phone === '' || $national_id === '' || $password === '') {
         die("لطفاً همه فیلدها را پر کنید.");
+    }
+
+    if (!is_valid_iranian_mobile($phone)) {
+        http_response_code(400);
+        die("شماره همراه باید با 09 شروع شود و ۱۱ رقم داشته باشد.");
+    }
+
+    if (!is_valid_iranian_national_id($national_id)) {
+        http_response_code(400);
+        die("شماره ملی معتبر نیست. لطفاً شماره ۱۰ رقمی را بررسی کنید.");
     }
 
     // بررسی تکراری بودن شماره یا ملی
