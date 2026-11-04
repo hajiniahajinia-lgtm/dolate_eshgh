@@ -29,3 +29,22 @@ needed later. Do not paste credentials into chat, issues, logs, or commits.
 Accounts are persistent. The runner does not delete users or alter database records
 except for creating the explicitly requested test account through the normal form.
 Do not point it at a production database.
+
+
+## Read-only page explorer
+
+After a test account has been created and saved locally, run:
+
+```sh
+python tools/ai-bridge/site_explorer.py --start profile
+python tools/ai-bridge/site_explorer.py --start stats
+```
+
+The explorer logs in with the latest locally saved test account and performs GET requests
+only to `profile.php`, `stats.php`, and numeric `community_stats.php?community_id=...`
+links discovered from the profile. It records page titles, HTTP statuses, and form field
+names—not page contents, personal values, passwords, cookies, or CSRF values.
+
+Important: `community.php`, `archived_topics.php`, and `votes.php` are intentionally
+excluded because their GET handlers can finalize elections or create/update database rows.
+No forms are submitted. The report is local and can be deleted after review.
