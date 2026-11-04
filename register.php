@@ -3,7 +3,17 @@
 session_start();
 include "db.php";
 
+// CSRF protection for the public registration form.
+if (empty($_SESSION['register_csrf_token'])) {
+    $_SESSION['register_csrf_token'] = bin2hex(random_bytes(32));
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $submitted_token = $_POST['csrf_token'] ?? '';
+    if (!is_string($submitted_token) || !hash_equals($_SESSION['register_csrf_token'], $submitted_token)) {
+        http_response_code(403);
+        die("درخواست نامعتبر است. لطفاً صفحه را تازه‌سازی و دوباره تلاش کنید.");
+    }
     $username = trim($_POST['username'] ?? '');
     $phone = trim($_POST['phone'] ?? '');
     $national_id = trim($_POST['national_id'] ?? '');
@@ -142,6 +152,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
 
         <form method="post" action="">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['register_csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
             <label for="username">نام و نام خانوادگی</label>
             <input type="text" id="username" name="username" placeholder="مثال: علی رضایی" required>
 
