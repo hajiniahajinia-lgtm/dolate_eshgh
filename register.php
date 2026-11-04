@@ -108,15 +108,64 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     $insert_stmt->bind_param("ssss", $username, $phone, $national_id, $hashed_password);
 
-    if ($insert_stmt->execute()) {
+    // Handle both mysqli strict-mode exceptions and ordinary execute() failures.
+    $inserted = false;
+    $insert_error_code = 0;
+    $insert_error_message = '';
+
+    try {
+        $inserted = $insert_stmt->execute();
+        if (!$inserted) {
+            $insert_error_code = (int)$insert_stmt->errno;
+            $insert_error_message = $insert_stmt->error;
+        }
+    } catch (mysqli_sql_exception $e) {
+        $insert_error_code = (int)$e->getCode();
+        $insert_error_message = $e->getMessage();
+    }
+
+    if ($inserted) {
         // بعد از ثبت، هدایت به صفحه ورود
         header("Location: login.php");
         exit;
-    } else {
-        error_log("register.php: failed to insert user: " . $insert_stmt->error);
-        http_response_code(500);
-        die("ثبت‌نام انجام نشد. لطفاً بعداً دوباره تلاش کنید.");
     }
+
+    if ($insert_error_code === 1062) {
+        // A unique index is the final protection against simultaneous duplicate registrations.
+        // Identify which submitted field already exists so the user gets a useful message.
+        $duplicate_stmt = $conn->prepare(
+            "SELECT phone, national_id FROM users WHERE phone = ? OR national_id = ? LIMIT 1"
+        );
+
+        if ($duplicate_stmt) {
+            $duplicate_stmt->bind_param("ss", $phone, $national_id);
+            try {
+                if ($duplicate_stmt->execute()) {
+                    $duplicate_result = $duplicate_stmt->get_result();
+                    if ($duplicate_result && $duplicate_user = $duplicate_result->fetch_assoc()) {
+                        if ($duplicate_user['phone'] === $phone) {
+                            http_response_code(409);
+                            die("این شماره همراه قبلاً ثبت شده است.");
+                        }
+                        if ($duplicate_user['national_id'] === $national_id) {
+                            http_response_code(409);
+                            die("این شماره ملی قبلاً ثبت شده است.");
+                        }
+                    }
+                }
+            } catch (mysqli_sql_exception $e) {
+                error_log("register.php: duplicate lookup failed: " . $e->getMessage());
+            }
+        }
+
+        error_log("register.php: unique constraint rejected a duplicate user registration.");
+        http_response_code(409);
+        die("این شماره همراه یا شماره ملی قبلاً ثبت شده است.");
+    }
+
+    error_log("register.php: failed to insert user (code " . $insert_error_code . "): " . $insert_error_message);
+    http_response_code(500);
+    die("ثبت‌نام انجام نشد. لطفاً بعداً دوباره تلاش کنید.");
 
 } else {
     // نمایش فرم — قبل از خروج از بلوک PHP تکه‌ی HTML را چاپ می‌کنیم
