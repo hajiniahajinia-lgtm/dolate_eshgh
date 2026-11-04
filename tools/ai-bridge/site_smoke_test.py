@@ -11,7 +11,6 @@ import argparse
 import http.cookiejar
 import json
 import os
-import re
 import secrets
 import string
 import sys
@@ -176,9 +175,11 @@ def main() -> int:
         for _ in range(args.count):
             account = new_account()
             client.register(account)
-            client.login(account)
+            # Persist credentials immediately after successful registration so a
+            # later login/network failure never leaves an untracked test account.
             accounts.append(account)
             save_accounts(accounts)
+            client.login(account)
             print(f"ثبت‌نام و ورود موفق: {account['username']}")
 
         print(f"تعداد حساب‌های ذخیره‌شده محلی: {len(accounts)}")
