@@ -85,7 +85,35 @@ try {
             if (!hash_equals((string)$existing['checksum'], $checksum)) {
                 // Applied migration files are immutable. Make a new dated file for any correction.
                 $current_stage = 'checksum_mismatch';
-                throw new RuntimeException('Applied migration file checksum changed: ' . $migration_name);
+                $message = 'Applied migration file checksum changed; skipped without re-running: ' . $migration_name;
+                error_log('[Dolate Eshgh migrations] ' . $message);
+
+                // Record this immutable-file warning once, then continue with independent migrations.
+                $warning_check = $conn->prepare(
+                    "SELECT id FROM app_schema_migration_errors
+                     WHERE migration_name = ? AND stage = 'checksum_mismatch'
+                     AND error_message = ? LIMIT 1"
+                );
+                if ($warning_check) {
+                    $warning_check->bind_param('ss', $migration_name, $message);
+                    $warning_check->execute();
+                    $warning_exists = $warning_check->get_result()->fetch_assoc();
+                    $warning_check->close();
+
+                    if (!$warning_exists) {
+                        $warning = $conn->prepare(
+                            'INSERT INTO app_schema_migration_errors (migration_name, stage, error_code, error_message) VALUES (?, ?, ?, ?)'
+                        );
+                        if ($warning) {
+                            $warning_code = 'checksum_mismatch';
+                            $warning->bind_param('ssss', $migration_name, $current_stage, $warning_code, $message);
+                            $warning->execute();
+                            $warning->close();
+                        }
+                    }
+                }
+
+                continue;
             }
             continue;
         }
