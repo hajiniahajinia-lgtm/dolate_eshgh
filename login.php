@@ -5,9 +5,25 @@ include "db.php";
 
 $message = '';
 
+// Create a per-session CSRF token for the login form.
+if (empty($_SESSION['login_csrf_token']) || !is_string($_SESSION['login_csrf_token'])) {
+    $_SESSION['login_csrf_token'] = bin2hex(random_bytes(32));
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $phone = trim($_POST['phone']);
-    $national_id = trim($_POST['national_id']);
+    $submitted_token = $_POST['csrf_token'] ?? '';
+    if (!is_string($submitted_token) || !hash_equals($_SESSION['login_csrf_token'], $submitted_token)) {
+        http_response_code(400);
+        $message = "درخواست معتبر نیست. صفحه را تازه‌سازی کنید و دوباره تلاش کنید.";
+    } else {
+    $phone_input = $_POST['phone'] ?? '';
+    $national_id_input = $_POST['national_id'] ?? '';
+    if (!is_string($phone_input) || !is_string($national_id_input)) {
+        http_response_code(400);
+        $message = "اطلاعات ارسالی معتبر نیست.";
+    } else {
+    $phone = trim($phone_input);
+    $national_id = trim($national_id_input);
     // Preserve the exact password entered at registration; spaces may be intentional.
     $password = (string)($_POST['password'] ?? '');
 
@@ -32,6 +48,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $message = "کاربر یافت نشد. لطفاً ثبت‌نام کنید.";
         }
+    }
+    }
     }
 }
 ?>
@@ -172,6 +190,7 @@ a:hover {
     <?php endif; ?>
 
     <form method="post" action="">
+        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['login_csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
         <label>شماره همراه:</label>
         <input type="text" name="phone" placeholder="0912xxxxxxx" required>
 
