@@ -1,11 +1,11 @@
-name: Upload only the four corrected migration files
+name: Upload only the five corrected migration files
 
 on:
   workflow_dispatch:
 
 jobs:
   upload-migrations:
-    name: Upload exactly four migration files
+    name: Upload exactly five migration files
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -44,3 +44,8 @@ jobs:
             --user "$FTP_USERNAME:$FTP_PASSWORD" \
             --upload-file "migrations/20261031_topic_expertise_proposal_voting.sql" \
             "ftp://${FTP_SERVER}${FTP_SERVER_DIR%/}/migrations/20261031_topic_expertise_proposal_voting.sql"
+
+          curl --fail --show-error --silent --ftp-create-dirs \
+            --user "$FTP_USERNAME:$FTP_PASSWORD" \
+            --upload-file "migrations/20261102_expertise_application_workflow.sql" \
+            "ftp://${FTP_SERVER}${FTP_SERVER_DIR%/}/migrations/20261102_expertise_application_workflow.sql"
