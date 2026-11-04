@@ -69,13 +69,44 @@ def new_account() -> dict[str, str]:
     }
 
 
+class SameOriginHTTPSRedirectHandler(__import__("urllib.request", fromlist=["HTTPRedirectHandler"]).HTTPRedirectHandler):
+    """Reject redirects that could move credentials or the session off-site."""
+
+    def __init__(self, origin: tuple[str, str, int]) -> None:
+        super().__init__()
+        self.origin = origin
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        target = urlparse(urljoin(req.full_url, newurl))
+        target_port = target.port or (443 if target.scheme == "https" else 80)
+        if (
+            target.scheme != "https"
+            or target.username is not None
+            or target.password is not None
+            or (target.hostname or "").lower() != self.origin[1]
+            or target_port != self.origin[2]
+        ):
+            raise URLError("هدایت ناامن یا خارج از دامنهٔ اصلی سایت رد شد.")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
 class SiteClient:
     def __init__(self, base_url: str) -> None:
         parsed = urlparse(base_url)
-        if parsed.scheme != "https" or not parsed.netloc:
-            raise ValueError("برای جلوگیری از افشای رمز، نشانی سایت باید HTTPS باشد.")
+        if (
+            parsed.scheme != "https"
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.port not in (None, 443)
+        ):
+            raise ValueError("برای جلوگیری از افشای رمز، نشانی معتبر HTTPS با درگاه استاندارد لازم است.")
         self.base_url = base_url.rstrip("/") + "/"
-        self.opener = build_opener(HTTPCookieProcessor(http.cookiejar.CookieJar()))
+        origin = ("https", parsed.hostname.lower(), 443)
+        self.opener = build_opener(
+            SameOriginHTTPSRedirectHandler(origin),
+            HTTPCookieProcessor(http.cookiejar.CookieJar()),
+        )
 
     def request(self, path: str, data: dict[str, str] | None = None) -> tuple[str, str, int]:
         url = urljoin(self.base_url, path)
