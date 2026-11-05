@@ -215,32 +215,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->close();
     } elseif ($error === '' && $action === 'edit') {
         $entry_id = (int)($_POST['entry_id'] ?? 0);
-        $check = $conn->prepare('SELECT * FROM collective_knowledge_entries WHERE id=? AND created_by=? LIMIT 1');
-        $check->bind_param('ii', $entry_id, $user_id);
-        $check->execute();
-        $old = $check->get_result()->fetch_assoc();
-        $check->close();
-        if (!$old) {
-            http_response_code(403);
-            exit('فقط ثبت‌کنندهٔ مدخل می‌تواند آن را ویرایش کند.');
-        }
-        $scope_community = $visibility === 'community' ? $community_id : null;
-        $topic_value = $source_topic_id > 0 ? $source_topic_id : null;
-        $idea_value = $source_idea_id > 0 ? $source_idea_id : null;
-        if (!$conn->begin_transaction()) {
+        if ($entry_id <= 0 || !$conn->begin_transaction()) {
             $error = 'شروع ثبت امن ویرایش ناموفق بود؛ تغییری اعمال نشد.';
         } else {
+            // قفل ردیف، تا دو ویرایش هم‌زمان نسخهٔ قبلی یکسان ثبت نکنند.
+            $check = $conn->prepare('SELECT * FROM collective_knowledge_entries WHERE id=? AND created_by=? LIMIT 1 FOR UPDATE');
+            $old = null;
+            if ($check) {
+                $check->bind_param('ii', $entry_id, $user_id);
+                if ($check->execute()) $old = $check->get_result()->fetch_assoc();
+                $check->close();
+            }
+            if (!$old) {
+                $conn->rollback();
+                http_response_code(403);
+                exit('مدخل پیدا نشد یا فقط ثبت‌کنندهٔ آن می‌تواند ویرایش کند.');
+            }
+
+            $scope_community = $visibility === 'community' ? $community_id : null;
+            $topic_value = $source_topic_id > 0 ? $source_topic_id : null;
+            $idea_value = $source_idea_id > 0 ? $source_idea_id : null;
             $rev = $conn->prepare('INSERT INTO collective_knowledge_revisions (entry_id, editor_user_id, previous_title, previous_entry_type, previous_summary, previous_content, previous_evidence, previous_visibility, previous_community_id, previous_source_topic_id, previous_source_idea_id, previous_status, revision_note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
             if (!$rev) {
                 $conn->rollback();
                 $error = 'ثبت سابقهٔ ویرایش ناموفق بود؛ متن قبلی حفظ شد و تغییری اعمال نشد.';
             } else {
                 $rev->bind_param('iissssssiiiss', $entry_id, $user_id, $old['title'], $old['entry_type'], $old['summary'], $old['content'], $old['evidence'], $old['visibility'], $old['community_id'], $old['source_topic_id'], $old['source_idea_id'], $old['status'], $revision_note);
-                if (!$rev->execute()) {
-                    $conn->rollback();
-                    $error = 'ثبت سابقهٔ ویرایش ناموفق بود؛ متن قبلی حفظ شد و تغییری اعمال نشد.';
-                }
+                if (!$rev->execute()) $error = 'ثبت سابقهٔ ویرایش ناموفق بود؛ متن قبلی حفظ شد و تغییری اعمال نشد.';
                 $rev->close();
+                if ($error !== '') $conn->rollback();
             }
             if ($error === '') {
                 $update = $conn->prepare("UPDATE collective_knowledge_entries SET title=?, entry_type=?, summary=?, content=?, evidence=?, visibility=?, community_id=?, source_topic_id=?, source_idea_id=?, updated_by=?, version_no=version_no+1, status='unreviewed' WHERE id=? AND created_by=?");
@@ -249,18 +252,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $error = 'آماده‌سازی ویرایش ناموفق بود؛ متن قبلی حفظ شد.';
                 } else {
                     $update->bind_param('ssssssiiiiii', $title, $type, $summary, $content, $evidence, $visibility, $scope_community, $topic_value, $idea_value, $user_id, $entry_id, $user_id);
-                    if ($update->execute()) {
-                        $update->close();
+                    if (!$update->execute()) {
+                        $conn->rollback();
+                        $error = 'ویرایش انجام نشد؛ نسخهٔ قبلی حفظ شد.';
+                    }
+                    $update->close();
+                    if ($error === '') {
                         if ($conn->commit()) {
                             header('Location: knowledge_library.php?id=' . $entry_id . '&updated=1');
                             exit;
                         }
                         $conn->rollback();
                         $error = 'تأیید نهایی ویرایش در پایگاه داده ناموفق بود.';
-                    } else {
-                        $update->close();
-                        $conn->rollback();
-                        $error = 'ویرایش انجام نشد؛ نسخهٔ قبلی حفظ شد.';
                     }
                 }
             }
