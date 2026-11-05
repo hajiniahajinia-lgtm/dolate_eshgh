@@ -106,14 +106,21 @@ if (!$valid_category) {
     exit("لطفاً یک دسته‌بندی معتبر برای موضوع انتخاب کنید.");
 }
 
+// ماهیت موضوع؛ مقدار پیش‌فرض برای سازگاری mixed است.
+$topic_purpose = (string)($_POST['topic_purpose'] ?? 'mixed');
+if (!in_array($topic_purpose, ['knowledge', 'execution', 'mixed'], true)) {
+    http_response_code(400);
+    exit("ماهیت انتخاب‌شده برای موضوع معتبر نیست.");
+}
+
 $stmt = $conn->prepare("
     INSERT INTO topics
-    (community_id, title, description, user_id, priority, urgency, urgency_minutes, urgency_default_minutes, deadline, created_at, urgency_updated_at, category_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    (community_id, title, description, user_id, priority, urgency, urgency_minutes, urgency_default_minutes, deadline, created_at, urgency_updated_at, category_id, topic_purpose)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ");
 
 $stmt->bind_param(
-    "issiiiiisssi",
+    "issiiiiisssis",
     $community_id,
     $title,
     $description,
@@ -125,7 +132,8 @@ $stmt->bind_param(
     $deadline,
     $created_at,
     $urgency_updated_at,
-    $topic_category_id
+    $topic_category_id,
+    $topic_purpose
 );
 
 if ($stmt->execute()) {
