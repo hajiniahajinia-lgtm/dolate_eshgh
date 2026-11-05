@@ -56,83 +56,96 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $review_vote = (string)($_POST['review_vote'] ?? '');
         $review_reason = trim((string)($_POST['review_reason'] ?? ''));
         $review_error = false;
+        $transaction_open = false;
 
-        if (!in_array($review_vote, ['approve', 'reject', 'revise'], true) ||
+        if ($review_entry_id <= 0 ||
+            !in_array($review_vote, ['approve', 'reject', 'revise'], true) ||
             mb_strlen($review_reason, 'UTF-8') < 5 ||
             mb_strlen($review_reason, 'UTF-8') > 4000) {
             $review_error = true;
+        } elseif (!$conn->begin_transaction()) {
+            $review_error = true;
         } else {
-            $review_check = $conn->prepare('SELECT id, version_no, created_by, visibility, community_id FROM collective_knowledge_entries WHERE id=? LIMIT 1');
+            $transaction_open = true;
+            // قفل مدخل تا رأی هم‌زمان با ویرایش، روی نسخهٔ اشتباه ثبت نشود.
+            $review_check = $conn->prepare('SELECT id, version_no, created_by, visibility, community_id FROM collective_knowledge_entries WHERE id=? LIMIT 1 FOR UPDATE');
             if (!$review_check) {
                 $review_error = true;
             } else {
                 $review_check->bind_param('i', $review_entry_id);
-                $review_check->execute();
-                $review_entry = $review_check->get_result()->fetch_assoc();
-                $review_check->close();
-
-                if (!$review_entry ||
-                    (int)$review_entry['created_by'] === $user_id ||
-                    ($review_entry['visibility'] === 'community' && !kl_member($conn, (int)$review_entry['community_id'], $user_id))) {
-                    $review_error = true;
-                } elseif (!$conn->begin_transaction()) {
+                if (!$review_check->execute()) {
                     $review_error = true;
                 } else {
-                    $version_no = (int)$review_entry['version_no'];
-                    $save_review = $conn->prepare('INSERT INTO collective_knowledge_reviews (entry_id, version_no, reviewer_user_id, vote, reason) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE vote=VALUES(vote), reason=VALUES(reason), updated_at=CURRENT_TIMESTAMP');
-                    if (!$save_review) {
-                        $conn->rollback();
+                    $review_entry = $review_check->get_result()->fetch_assoc();
+                    if (!$review_entry ||
+                        (int)$review_entry['created_by'] === $user_id ||
+                        ($review_entry['visibility'] === 'community' && !kl_member($conn, (int)$review_entry['community_id'], $user_id))) {
                         $review_error = true;
-                    } else {
-                        $save_review->bind_param('iiiss', $review_entry_id, $version_no, $user_id, $review_vote, $review_reason);
-                        if (!$save_review->execute()) {
-                            $conn->rollback();
-                            $review_error = true;
-                        }
-                        $save_review->close();
-                    }
-
-                    if (!$review_error) {
-                        $count_review = $conn->prepare('SELECT vote, COUNT(*) AS total FROM collective_knowledge_reviews WHERE entry_id=? AND version_no=? GROUP BY vote');
-                        if (!$count_review) {
-                            $conn->rollback();
-                            $review_error = true;
-                        } else {
-                            $count_review->bind_param('ii', $review_entry_id, $version_no);
-                            $count_review->execute();
-                            $count_result = $count_review->get_result();
-                            $counts = ['approve'=>0, 'reject'=>0, 'revise'=>0];
-                            while ($count_row = $count_result->fetch_assoc()) {
-                                $counts[$count_row['vote']] = (int)$count_row['total'];
-                            }
-                            $count_review->close();
-                            $total_reviews = array_sum($counts);
-                            $new_status = 'unreviewed';
-                            if ($total_reviews > 0) {
-                                $new_status = 'under_review';
-                                $threshold = (int)ceil($total_reviews * 2 / 3);
-                                if ($total_reviews >= 3) {
-                                    if ($counts['approve'] >= $threshold) $new_status = 'verified';
-                                    elseif ($counts['reject'] >= $threshold) $new_status = 'rejected';
-                                    elseif ($counts['revise'] >= $threshold) $new_status = 'needs_update';
-                                }
-                            }
-                            $update_status = $conn->prepare('UPDATE collective_knowledge_entries SET status=? WHERE id=? AND version_no=?');
-                            if (!$update_status) {
-                                $conn->rollback();
-                                $review_error = true;
-                            } else {
-                                $update_status->bind_param('sii', $new_status, $review_entry_id, $version_no);
-                                if (!$update_status->execute() || !$conn->commit()) {
-                                    $conn->rollback();
-                                    $review_error = true;
-                                }
-                                $update_status->close();
-                            }
-                        }
                     }
                 }
+                $review_check->close();
             }
+
+            if (!$review_error) {
+                $version_no = (int)$review_entry['version_no'];
+                $save_review = $conn->prepare('INSERT INTO collective_knowledge_reviews (entry_id, version_no, reviewer_user_id, vote, reason) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE vote=VALUES(vote), reason=VALUES(reason), updated_at=CURRENT_TIMESTAMP');
+                if (!$save_review) {
+                    $review_error = true;
+                } else {
+                    $save_review->bind_param('iiiss', $review_entry_id, $version_no, $user_id, $review_vote, $review_reason);
+                    if (!$save_review->execute()) $review_error = true;
+                    $save_review->close();
+                }
+            }
+
+            if (!$review_error) {
+                $count_review = $conn->prepare('SELECT vote, COUNT(*) AS total FROM collective_knowledge_reviews WHERE entry_id=? AND version_no=? GROUP BY vote');
+                if (!$count_review) {
+                    $review_error = true;
+                } else {
+                    $count_review->bind_param('ii', $review_entry_id, $version_no);
+                    if (!$count_review->execute()) {
+                        $review_error = true;
+                    } else {
+                        $count_result = $count_review->get_result();
+                        $counts = ['approve'=>0, 'reject'=>0, 'revise'=>0];
+                        while ($count_row = $count_result->fetch_assoc()) {
+                            if (isset($counts[$count_row['vote']])) $counts[$count_row['vote']] = (int)$count_row['total'];
+                        }
+                        $total_reviews = array_sum($counts);
+                        $new_status = 'unreviewed';
+                        if ($total_reviews > 0) {
+                            $new_status = 'under_review';
+                            $threshold = (int)ceil($total_reviews * 2 / 3);
+                            if ($total_reviews >= 3) {
+                                if ($counts['approve'] >= $threshold) $new_status = 'verified';
+                                elseif ($counts['reject'] >= $threshold) $new_status = 'rejected';
+                                elseif ($counts['revise'] >= $threshold) $new_status = 'needs_update';
+                            }
+                        }
+                        $update_status = $conn->prepare('UPDATE collective_knowledge_entries SET status=? WHERE id=? AND version_no=?');
+                        if (!$update_status) {
+                            $review_error = true;
+                        } else {
+                            $update_status->bind_param('sii', $new_status, $review_entry_id, $version_no);
+                            if (!$update_status->execute()) $review_error = true;
+                            $update_status->close();
+                        }
+                    }
+                    $count_review->close();
+                }
+            }
+            if ($review_error) {
+                $conn->rollback();
+                $transaction_open = false;
+            } elseif (!$conn->commit()) {
+                $conn->rollback();
+                $transaction_open = false;
+                $review_error = true;
+            } else {
+                $transaction_open = false;
+            }
+            if ($transaction_open) $conn->rollback();
         }
 
         if ($review_error) {
