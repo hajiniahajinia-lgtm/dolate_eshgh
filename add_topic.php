@@ -92,12 +92,12 @@ $urgency_updated_at = date("Y-m-d H:i:s");
 
 // دسته‌بندی موضوع؛ دستهٔ نامعتبر پذیرفته نمی‌شود.
 $topic_category_id = (int)($_POST['topic_category_id'] ?? 0);
-$category_check = $conn->prepare("SELECT id FROM topic_categories WHERE id=? AND is_active=1 LIMIT 1");
+$category_check = $conn->prepare("SELECT id FROM topic_categories WHERE id=? AND is_active=1 AND (community_id IS NULL OR community_id=?) LIMIT 1");
 if (!$category_check) {
     http_response_code(500);
     exit("امکان بررسی دسته‌بندی موضوع وجود ندارد.");
 }
-$category_check->bind_param("i", $topic_category_id);
+$category_check->bind_param("ii", $topic_category_id, $community_id);
 $category_check->execute();
 $valid_category = $category_check->get_result()->fetch_assoc();
 $category_check->close();
