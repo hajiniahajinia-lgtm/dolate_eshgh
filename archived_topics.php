@@ -20,9 +20,7 @@ $cstmt->close();
 if (!$community) die("Community not found.");
 if (empty($_SESSION['community_duty_csrf'])) { $_SESSION['community_duty_csrf'] = bin2hex(random_bytes(32)); }
 $community_duty_csrf = $_SESSION['community_duty_csrf'];
-require_once __DIR__ . '/community_member_removal_helpers.php';
-$community_removal_ready = community_removal_tables_ready($conn);
-if ($community_removal_ready) community_removal_finalize_expired($conn, $community_id);
+// رأی‌گیری‌های منقضی فقط توسط maintenance/run_due_tasks.php نهایی می‌شوند.
 $arch_count = 0;
 $arch_count_stmt = $conn->prepare("SELECT COUNT(*) AS total FROM topics t JOIN topic_voting_meta m ON m.topic_id=t.id WHERE t.community_id=? AND m.finalized=1 AND m.finalized_at IS NOT NULL");
 if ($arch_count_stmt) { $arch_count_stmt->bind_param("i", $community_id); $arch_count_stmt->execute(); $arch_count = (int)($arch_count_stmt->get_result()->fetch_assoc()['total'] ?? 0); $arch_count_stmt->close(); }
