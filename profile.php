@@ -174,7 +174,8 @@ document.addEventListener("DOMContentLoaded", function() {
 <div class="box">
 <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
 <h2 style="margin:0;">پروفایل</h2>
-<a href="expertise.php" style="display:inline-flex;align-items:center;justify-content:center;background:#287a55;color:#fff;text-decoration:none;padding:9px 13px;border-radius:8px;font-size:14px;font-weight:bold;white-space:nowrap;">شایستگی تخصصی</a>\n<a href="search.php" style="display:inline-flex;align-items:center;justify-content:center;gap:6px;background:#1769aa;color:#fff;text-decoration:none;padding:9px 13px;border-radius:8px;font-size:14px;font-weight:bold;white-space:nowrap;">🔎 سرچ</a>
+<a href="expertise.php" style="display:inline-flex;align-items:center;justify-content:center;background:#287a55;color:#fff;text-decoration:none;padding:9px 13px;border-radius:8px;font-size:14px;font-weight:bold;white-space:nowrap;">شایستگی تخصصی</a>
+<a href="search.php" style="display:inline-flex;align-items:center;justify-content:center;gap:6px;background:#1769aa;color:#fff;text-decoration:none;padding:9px 13px;border-radius:8px;font-size:14px;font-weight:bold;white-space:nowrap;">🔎 سرچ</a>
 </div>
 <a href="knowledge_library.php" style="display:block;text-align:center;background:#176b56;color:#fff;text-decoration:none;padding:10px 13px;border-radius:8px;font-size:14px;font-weight:bold;margin:8px 0 12px;">📚 کتابخانهٔ دانش جمعی</a>
 <button type="button" class="edit" onclick="toggleEditForm()">تکمیل/ویرایش پروفایل</button>
