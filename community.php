@@ -1626,6 +1626,7 @@ if ($remaining_seconds < 0) $remaining_seconds = 0;
   <?php if (trim((string)($t2['description'] ?? '')) !== ''): ?>
     <div style="margin:0 0 10px;padding:8px 10px;background:rgba(255,255,255,.75);border-radius:7px;line-height:1.8;font-size:13px;"><?= nl2br(htmlspecialchars($t2['description'], ENT_QUOTES, 'UTF-8')) ?></div>
   <?php endif; ?>
+  <p style="margin:8px 0;"><a href="knowledge_library.php?source_topic_id=<?= (int)$tid ?>" style="display:inline-block;padding:5px 9px;border-radius:6px;background:#e8f1fb;color:#2456a6;font-size:12px;text-decoration:none;font-weight:bold;">📚 ثبت تجربه یا دانش مرتبط با این موضوع</a></p>
   <div class="topic-header">
     <div class="topic-meta" style="font-size:13px;color:#333;margin-top:4px;">
         ⏱ ثبت شده در: <?= htmlspecialchars(community_format_jalali_datetime($t2['created_at']), ENT_QUOTES, 'UTF-8') ?>
@@ -1681,6 +1682,7 @@ if ($remaining_seconds < 0) $remaining_seconds = 0;
             </div>
             <div class="community-idea-content" id="community-idea-content-<?= (int)$i['id'] ?>"><?= nl2br(htmlspecialchars($i['content'], ENT_QUOTES, 'UTF-8')) ?></div>
             <button type="button" class="community-idea-read-more" aria-expanded="false" aria-controls="community-idea-content-<?= (int)$i['id'] ?>" onclick="toggleCommunityIdeaContent(<?= (int)$i['id'] ?>)">مشاهده ادامه</button>
+            <a href="knowledge_library.php?source_topic_id=<?= (int)$tid ?>&amp;source_idea_id=<?= (int)$i['id'] ?>" style="display:inline-block;margin-top:5px;padding:4px 8px;border-radius:6px;background:#e8f1fb;color:#2456a6;font-size:12px;text-decoration:none;font-weight:bold;">📚 ثبت این ایده در کتابخانهٔ دانش</a>
             <?php if ($idea_revisions_ready): ?>
               <details class="community-idea-edit" id="community-idea-edit-<?= (int)$i['id'] ?>">
                 <summary>📜 نسخه‌های قبلی و اصلاح ایده</summary>
