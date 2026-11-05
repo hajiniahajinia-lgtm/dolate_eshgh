@@ -47,6 +47,8 @@ jobs:
           php -l add_idea.php
           php -l update_topic.php
           php -l update_idea.php
+          php -l leave_community.php
+          php -l toggle_priority.php
           php -l update_urgency.php
           php -l increase_urgency.php
           php -l maintenance/run_due_tasks.php
