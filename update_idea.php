@@ -46,7 +46,7 @@ if (!$is_member) {
     http_response_code(403);
     exit("فقط اعضای جامعه می‌توانند رأی معقولیت بدهند.");
 }
-if ((int)$data['closed'] === 1) {
+if ((int)$data['closed'] !== 0) {
     header("Location: community.php?id=".$community_id);
     exit;
 }
