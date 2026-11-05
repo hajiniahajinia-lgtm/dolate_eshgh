@@ -394,6 +394,7 @@ function ensure_collective_knowledge_drafts_for_community($conn, $community_id, 
     $stmt->close();
 
     $created = 0;
+    $debug_errors = [];
     foreach ($topic_ids as $topic_id) {
         if (!$conn->begin_transaction()) continue;
         try {
@@ -445,8 +446,17 @@ function ensure_collective_knowledge_drafts_for_community($conn, $community_id, 
             $created++;
         } catch (Throwable $e) {
             $conn->rollback();
+            $debug_errors[] = "موضوع " . $topic_id . ": " . $e->getMessage();
             error_log("Knowledge draft creation failed for topic " . $topic_id . ": " . $e->getMessage());
         }
+    }
+    if (session_status() === PHP_SESSION_ACTIVE && $user_id === 27) {
+        $_SESSION['knowledge_draft_debug'] =
+            "شناسه جامعه: " . $community_id .
+            "؛ شناسه کاربر: " . $user_id .
+            "؛ تعداد موضوعات واجد شرایط: " . count($topic_ids) .
+            "؛ پرونده‌های ساخته‌شده: " . $created .
+            (!empty($debug_errors) ? "؛ خطاها: " . implode(" | ", $debug_errors) : "؛ خطای ثبت‌شده‌ای وجود ندارد.");
     }
     return $created;
 }
