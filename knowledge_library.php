@@ -179,20 +179,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         if ($source_topic_id > 0) {
             $source_check = $conn->prepare('SELECT community_id FROM topics WHERE id=? LIMIT 1');
-            $source_check->bind_param('i', $source_topic_id);
-            $source_check->execute();
-            $source_row = $source_check->get_result()->fetch_assoc();
-            $source_check->close();
+            $source_row = null;
+            if ($source_check) {
+                $source_check->bind_param('i', $source_topic_id);
+                if ($source_check->execute()) $source_row = $source_check->get_result()->fetch_assoc();
+                $source_check->close();
+            }
             if (!$source_row || ($visibility === 'community' && (int)$source_row['community_id'] !== $community_id)) {
                 $error = 'موضوع مرجع پیدا نشد یا با جامعه انتخاب‌شده هم‌خوانی ندارد.';
             }
         }
         if ($error === '' && $source_idea_id > 0) {
             $source_check = $conn->prepare('SELECT t.community_id, i.topic_id FROM ideas i JOIN topics t ON t.id=i.topic_id WHERE i.id=? LIMIT 1');
-            $source_check->bind_param('i', $source_idea_id);
-            $source_check->execute();
-            $source_row = $source_check->get_result()->fetch_assoc();
-            $source_check->close();
+            $source_row = null;
+            if ($source_check) {
+                $source_check->bind_param('i', $source_idea_id);
+                if ($source_check->execute()) $source_row = $source_check->get_result()->fetch_assoc();
+                $source_check->close();
+            }
             if (!$source_row || ($visibility === 'community' && (int)$source_row['community_id'] !== $community_id) || ($source_topic_id > 0 && (int)$source_row['topic_id'] !== $source_topic_id)) {
                 $error = 'ایدهٔ مرجع پیدا نشد یا با موضوع و جامعهٔ انتخاب‌شده هم‌خوانی ندارد.';
             }
@@ -204,15 +208,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $topic_value = $source_topic_id > 0 ? $source_topic_id : null;
         $idea_value = $source_idea_id > 0 ? $source_idea_id : null;
         $stmt = $conn->prepare('INSERT INTO collective_knowledge_entries (title, entry_type, summary, content, evidence, visibility, community_id, source_topic_id, source_idea_id, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-        $stmt->bind_param('ssssssiiii', $title, $type, $summary, $content, $evidence, $visibility, $scope_community, $topic_value, $idea_value, $user_id);
-        if ($stmt->execute()) {
-            $new_id = (int)$conn->insert_id;
+        if (!$stmt) {
+            $error = 'آماده‌سازی ذخیرهٔ دانش ناموفق بود؛ لطفاً دوباره تلاش کنید.';
+        } else {
+            $stmt->bind_param('ssssssiiii', $title, $type, $summary, $content, $evidence, $visibility, $scope_community, $topic_value, $idea_value, $user_id);
+            if ($stmt->execute()) {
+                $new_id = (int)$conn->insert_id;
+                $stmt->close();
+                header('Location: knowledge_library.php?id=' . $new_id . '&saved=1');
+                exit;
+            }
+            $error = 'ذخیرهٔ مدخل انجام نشد. لطفاً دوباره تلاش کنید.';
             $stmt->close();
-            header('Location: knowledge_library.php?id=' . $new_id . '&saved=1');
-            exit;
         }
-        $error = 'ذخیرهٔ مدخل انجام نشد. لطفاً دوباره تلاش کنید.';
-        $stmt->close();
     } elseif ($error === '' && $action === 'edit') {
         $entry_id = (int)($_POST['entry_id'] ?? 0);
         if ($entry_id <= 0 || !$conn->begin_transaction()) {
