@@ -19,7 +19,7 @@ mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 $conn->set_charset('utf8mb4');
 
 function maintenance_table_exists(mysqli $conn, string $table): bool {
-    $stmt = $conn->prepare('SHOW TABLES LIKE ?');
+    $stmt = $conn->prepare('SELECT 1 FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name=? LIMIT 1');
     $stmt->bind_param('s', $table);
     $stmt->execute();
     $exists = $stmt->get_result()->num_rows > 0;
