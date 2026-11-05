@@ -544,7 +544,12 @@ textarea{resize:vertical}button,.button{display:inline-block;border:0;border-rad
 </section>
 <?php endif; ?>
 
-<?php if ((int)$entry['created_by'] !== $user_id): ?>
+<?php if (strpos((string)$entry['title'], 'پروندهٔ در حال شکل‌گیری:') === 0): ?>
+<section class="panel">
+<h3>وضعیت پرونده</h3>
+<p class="muted">این پرونده هنوز در حال شکل‌گیری است. تا نهایی‌شدن موضوع، نتیجهٔ جمعی یا اعتبار نهایی برای آن ثبت نمی‌شود.</p>
+</section>
+<?php elseif ((int)$entry['created_by'] !== $user_id): ?>
 <section class="panel">
 <h3>ارزیابی جمعی این نسخه</h3>
 <p class="muted">ارزیابی باید همراه با دلیل باشد. هر عضو برای هر نسخه یک رأی دارد و می‌تواند آن را اصلاح کند. نتیجهٔ اعتبار فقط با دست‌کم ۳ ارزیابی و موافقت دوسوم ارزیابان تعیین می‌شود.</p>
@@ -574,7 +579,7 @@ textarea{resize:vertical}button,.button{display:inline-block;border:0;border-rad
 </article>
 <?php endforeach; ?>
 </section>
-<div class="entry-actions"><a class="button secondary" href="knowledge_library.php">بازگشت به فهرست</a><?php if ((int)$entry['created_by']===$user_id): ?><a class="button" href="knowledge_library.php?id=<?= (int)$entry['id'] ?>&edit=1">ویرایش و تکمیل</a><?php endif; ?></div>
+<div class="entry-actions"><a class="button secondary" href="knowledge_library.php">بازگشت به فهرست</a><?php if ((int)$entry['created_by']===$user_id && strpos((string)$entry['title'], 'پروندهٔ در حال شکل‌گیری:') !== 0): ?><a class="button" href="knowledge_library.php?id=<?= (int)$entry['id'] ?>&edit=1">ویرایش و تکمیل</a><?php endif; ?></div>
 </section>
 <?php endif; ?>
 <?php else: ?>
