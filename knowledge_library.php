@@ -19,6 +19,10 @@ function kl_type_label($type) {
     $labels = ['experience'=>'تجربه','solution'=>'راه‌حل','research'=>'پژوهش و دانش','lesson'=>'درس‌آموخته'];
     return $labels[$type] ?? 'دانش جمعی';
 }
+function kl_review_label($vote) {
+    $labels = ['approve'=>'تأیید','reject'=>'مخالفت','revise'=>'نیازمند اصلاح'];
+    return $labels[$vote] ?? 'ارزیابی';
+}
 function kl_status_label($status) {
     $labels = ['unreviewed'=>'بررسی‌نشده','under_review'=>'در حال بررسی','verified'=>'تأییدشده با شواهد','rejected'=>'ردشده با دلیل','needs_update'=>'نیازمند به‌روزرسانی'];
     return $labels[$status] ?? 'وضعیت نامشخص';
@@ -274,6 +278,7 @@ $entry = null;
 $revisions = [];
 $review_counts = ['approve'=>0, 'reject'=>0, 'revise'=>0];
 $my_review = null;
+$review_details = [];
 
 if ($entry_id > 0) {
     $stmt = $conn->prepare("SELECT k.*, u.username, c.name AS community_name, t.title AS source_topic_title, t.community_id AS source_topic_community_id,
@@ -309,6 +314,12 @@ if ($entry_id > 0) {
         $my_review_stmt->execute();
         $my_review = $my_review_stmt->get_result()->fetch_assoc();
         $my_review_stmt->close();
+
+        $review_details_stmt = $conn->prepare('SELECT r.vote, r.reason, r.updated_at, u.username FROM collective_knowledge_reviews r JOIN users u ON u.id=r.reviewer_user_id WHERE r.entry_id=? AND r.version_no=? ORDER BY r.updated_at DESC, r.id DESC');
+        $review_details_stmt->bind_param('ii', $entry_id, $current_version);
+        $review_details_stmt->execute();
+        $review_details = $review_details_stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+        $review_details_stmt->close();
     }
     if ($entry && $edit_mode && (int)$entry['created_by'] === $user_id) {
         $rs = $conn->prepare('SELECT r.*, u.username FROM collective_knowledge_revisions r JOIN users u ON u.id=r.editor_user_id WHERE r.entry_id=? ORDER BY r.id DESC LIMIT 20');
@@ -429,6 +440,16 @@ textarea{resize:vertical}button,.button{display:inline-block;border:0;border-rad
 </form>
 </section>
 <?php endif; ?>
+<section class="panel">
+<h3>دلایل ارزیابی اعضا</h3>
+<?php if (!$review_details): ?><p class="muted">هنوز ارزیابی‌ای برای این نسخه ثبت نشده است.</p><?php endif; ?>
+<?php foreach ($review_details as $review_item): ?>
+<article class="entry">
+<div class="top"><strong><?= kl_h(kl_review_label($review_item['vote'])) ?></strong><span class="muted"><?= kl_h($review_item['username']) ?> · <?= kl_h($review_item['updated_at']) ?></span></div>
+<p class="content"><?= nl2br(kl_h($review_item['reason'])) ?></p>
+</article>
+<?php endforeach; ?>
+</section>
 <div class="entry-actions"><a class="button secondary" href="knowledge_library.php">بازگشت به فهرست</a><?php if ((int)$entry['created_by']===$user_id): ?><a class="button" href="knowledge_library.php?id=<?= (int)$entry['id'] ?>&edit=1">ویرایش و تکمیل</a><?php endif; ?></div>
 </section>
 <?php endif; ?>
