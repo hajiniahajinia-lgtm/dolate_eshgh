@@ -10,7 +10,7 @@ if (!isset($_SESSION['user_id'])) {
 $user_id = (int)$_SESSION['user_id'];
 
 // جامعه جاری
-$community_id = isset($_GET['community_id']) ? (int)$_GET['community_id'] : 0;
+$community_id = (int)($_GET['community_id'] ?? $_GET['id'] ?? 0);
 $community = null;
 if($community_id > 0){
     $cstmt = $conn->prepare("SELECT * FROM communities WHERE id=?");

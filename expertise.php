@@ -14,74 +14,7 @@ $is_member=false;
 foreach($communities as $c) if((int)$c['id']===$community_id) $is_member=true;
 if(!$is_member) $community_id=0;
 
-/* مهلت رأی‌گیری فقط پس از تکمیل سه ارزیابی مستقل آغاز می‌شود. */
-$expired=$conn->prepare("SELECT a.id FROM expertise_applications a WHERE a.community_id IN (SELECT cm.community_id FROM community_members cm WHERE cm.user_id=?) AND a.status='pending' AND a.decision_at IS NULL AND a.expires_at IS NOT NULL AND a.expires_at<=NOW() AND (SELECT COUNT(*) FROM expertise_application_reviews r WHERE r.application_id=a.id AND r.status='submitted' AND r.conflict_of_interest='none')>=3");
-if($expired){$expired->bind_param("i",$user_id);$expired->execute();$ids=$expired->get_result()->fetch_all(MYSQLI_ASSOC);$expired->close();
- foreach($ids as $item){
-  $conn->begin_transaction();
-  try{
-   $id=(int)$item['id']; $lock=$conn->prepare("SELECT a.*,(SELECT COUNT(*) FROM expertise_application_reviews r WHERE r.application_id=a.id AND r.status='submitted' AND r.conflict_of_interest='none') AS independent_review_count FROM expertise_applications a WHERE a.id=? FOR UPDATE");$lock->bind_param("i",$id);$lock->execute();$a=$lock->get_result()->fetch_assoc();$lock->close();
-   if($a && $a['status']==='pending' && $a['decision_at']===null && !empty($a['expires_at']) && strtotime($a['expires_at'])<=time() && (int)$a['independent_review_count']>=3){
-    $cnt=$conn->prepare("SELECT SUM(vote='yes') yes_count,SUM(vote='no') no_count FROM expertise_application_votes WHERE application_id=?");$cnt->bind_param("i",$id);$cnt->execute();$votes=$cnt->get_result()->fetch_assoc();$cnt->close();
-    $yes=(int)($votes['yes_count']??0);$no=(int)($votes['no_count']??0);$total=$yes+$no;
-    $reviews=$conn->prepare("SELECT COUNT(*) total FROM expertise_application_reviews WHERE application_id=? AND status='submitted' AND conflict_of_interest='none'");
-    $reviews->bind_param("i",$id);$reviews->execute();$reviewCount=(int)$reviews->get_result()->fetch_assoc()['total'];$reviews->close();
-    $status='not_approved';
-    if($reviewCount<3){
-      $reason='عدم تصویب: حداقل سه ارزیابی مستقل معتبر در زمان نهایی‌سازی موجود نبود.';
-    } elseif($total===0){
-      $reason='عدم تصویب: تا پایان مهلت، هیچ رأی معتبری ثبت نشده بود.';
-    } else {
-      $reason='عدم تصویب: هیچ‌یک از گزینه‌های موافق یا مخالف به حدنصاب دوسوم نرسید.';
-    }
-    if($reviewCount>=3 && $total>0 && $yes*3 >= $total*2){
-      $scoreQuery=$conn->prepare("SELECT AVG(theoretical_score*0.20+practical_score*0.30+achievements_score*0.30+professional_score*0.20) weighted_score FROM expertise_application_reviews WHERE application_id=? AND status='submitted' AND conflict_of_interest='none'");
-      $scoreQuery->bind_param("i",$id);$scoreQuery->execute();$scoreRow=$scoreQuery->get_result()->fetch_assoc();$scoreQuery->close();
-      $score=(float)($scoreRow['weighted_score']??0);
-      if($score<60){$status='rejected';$reason='رد درخواست: امتیاز ارزیابی مستقل کمتر از ۶۰ است.';}
-      else{
-        if($score<70){$level=1;$weight=1.25;}
-        elseif($score<80){$level=2;$weight=1.50;}
-        elseif($score<90){$level=3;$weight=2.00;}
-        else{$level=4;$weight=3.00;}
-        $up=$conn->prepare("INSERT INTO expertise_competencies (user_id,domain_id,level,weight,approved_in_community_id,source_application_id,valid_from,valid_until) VALUES (?,?,?,?,?,?,NOW(),DATE_ADD(NOW(),INTERVAL 3 YEAR)) ON DUPLICATE KEY UPDATE level=VALUES(level),weight=VALUES(weight),approved_in_community_id=VALUES(approved_in_community_id),source_application_id=VALUES(source_application_id),valid_from=NOW(),valid_until=DATE_ADD(NOW(),INTERVAL 3 YEAR)");
-        $up->bind_param("iiidii",$a['target_user_id'],$a['domain_id'],$level,$weight,$a['community_id'],$id);$up->execute();$up->close();
-        $status='approved';$reason='تصویب: رأی موافق به حداقل دوسوم رسیده و امتیاز شایستگی کافی است.';
-      }
-    } elseif($reviewCount>=3 && $total>0 && $no*3 >= $total*2){
-      $status='rejected';$reason='رد درخواست: رأی مخالف به حداقل دوسوم رسیده است.';
-    } elseif($reviewCount>=3){
-      $status='not_approved';$reason='عدم تصویب: هیچ‌یک از دو گزینهٔ موافق یا مخالف به دوسوم آرا نرسید.';
-    }
-    $fin=$conn->prepare("UPDATE expertise_applications SET status=?,decision_at=NOW() WHERE id=? AND decision_at IS NULL");
-    $fin->bind_param("si",$status,$id);$fin->execute();$fin->close();
-    $detail=$reason." ارزیابی مستقل: ".$reviewCount."؛ موافق: ".$yes."؛ مخالف: ".$no."؛ شرط تصمیم: دوسوم.";
-    $hist=$conn->prepare("INSERT INTO expertise_application_history (application_id,actor_user_id,event_type,details) VALUES (?,NULL,'voting_closed',?)");$hist->bind_param("is",$id,$detail);$hist->execute();$hist->close();
-   }
-   $conn->commit();
-  }catch(Throwable $e){$conn->rollback();error_log("Expertise finalization: ".$e->getMessage());}
- }
-}
-/* بستن رأی‌گیری حوزه‌های تخصصی پس از ۷ روز؛ تساوی بدون تأیید باقی می‌ماند. */
-if($community_id){
- $expiredDomains=$conn->prepare("SELECT id FROM expertise_domains WHERE proposed_in_community_id=? AND status='pending' AND decided_at IS NULL AND created_at<=DATE_SUB(NOW(),INTERVAL 7 DAY)");
- $expiredDomains->bind_param("i",$community_id);$expiredDomains->execute();$expiredIds=$expiredDomains->get_result()->fetch_all(MYSQLI_ASSOC);$expiredDomains->close();
- foreach($expiredIds as $expiredDomain){
-  $did=(int)$expiredDomain['id'];$conn->begin_transaction();
-  try{
-   $lock=$conn->prepare("SELECT id,status,decided_at FROM expertise_domains WHERE id=? FOR UPDATE");$lock->bind_param("i",$did);$lock->execute();$domainRow=$lock->get_result()->fetch_assoc();$lock->close();
-   if($domainRow && $domainRow['status']==='pending' && $domainRow['decided_at']===null){
-    $cnt=$conn->prepare("SELECT SUM(vote='yes') yes_count,SUM(vote='no') no_count FROM expertise_domain_votes WHERE domain_id=?");$cnt->bind_param("i",$did);$cnt->execute();$vr=$cnt->get_result()->fetch_assoc();$cnt->close();
-    $yes=(int)($vr['yes_count']??0);$no=(int)($vr['no_count']??0);
-    if($yes>$no){$up=$conn->prepare("UPDATE expertise_domains SET status='approved',decided_at=NOW() WHERE id=? AND status='pending' AND decided_at IS NULL");}
-    elseif($no>$yes){$up=$conn->prepare("UPDATE expertise_domains SET status='rejected',decided_at=NOW() WHERE id=? AND status='pending' AND decided_at IS NULL");}
-    else{$up=$conn->prepare("UPDATE expertise_domains SET decided_at=NOW() WHERE id=? AND status='pending' AND decided_at IS NULL");}
-    $up->bind_param("i",$did);$up->execute();$up->close();
-   }
-   $conn->commit();
-  }catch(Throwable $e){$conn->rollback();error_log("Expertise domain finalization: ".$e->getMessage());}
- }
-}
+// Finalization of expired applications and domain proposals is handled only by CLI maintenance.
 $domainProposals=[];$domainVoteCounts=[];
 if($community_id){
  $dp=$conn->prepare("SELECT d.id,d.name,d.description,d.status,d.created_by,d.created_at,d.decided_at,u.username proposer_name FROM expertise_domains d JOIN users u ON u.id=d.created_by WHERE d.proposed_in_community_id=? ORDER BY d.created_at DESC LIMIT 100");

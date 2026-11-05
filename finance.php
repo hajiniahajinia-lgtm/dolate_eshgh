@@ -23,8 +23,6 @@ if (!$schema_ready) {
   exit;
 }
 
-require_once __DIR__ . '/finance_helpers.php';
-finance_finalize_expired_requests($conn, $community_id);
 if (empty($_SESSION['community_finance_csrf'])) $_SESSION['community_finance_csrf'] = bin2hex(random_bytes(32));
 $csrf = $_SESSION['community_finance_csrf'];
 $message = '';
@@ -53,19 +51,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($acquired !== null && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $acquired)) {
       $error = 'تاریخ ثبت‌شده معتبر نیست.';
     } else {
-      $ins = $conn->prepare("INSERT INTO community_assets (community_id,asset_name,category,description,quantity,unit,estimated_value,location,asset_condition,acquired_on,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)");
-      $types = 'isssdsdsssii';
-      $ins->bind_param($types, $community_id, $name, $category, $description, $quantity, $unit, $value, $location, $condition, $acquired, $user_id, $user_id);
-      if ($ins->execute()) {
+      try {
+        $conn->begin_transaction();
+        $ins = $conn->prepare("INSERT INTO community_assets (community_id,asset_name,category,description,quantity,unit,estimated_value,location,asset_condition,acquired_on,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)");
+        if (!$ins) throw new RuntimeException('Asset insert prepare failed: ' . $conn->error);
+        $types = 'isssdsdsssii';
+        $ins->bind_param($types, $community_id, $name, $category, $description, $quantity, $unit, $value, $location, $condition, $acquired, $user_id, $user_id);
+        if (!$ins->execute()) throw new RuntimeException('Asset insert failed: ' . $ins->error);
         $asset_id = (int)$conn->insert_id;
+        $ins->close();
+
         $move_type = 'registered'; $notes = 'ثبت اولیهٔ مال در دفتر جامعه';
-        $mv = $conn->prepare("INSERT INTO community_asset_movements (asset_id,community_id,movement_type,quantity_change,to_location,notes,created_by) VALUES (?,?,?, ?,?,?,?)");
         $mv = $conn->prepare("INSERT INTO community_asset_movements (asset_id,community_id,movement_type,quantity_change,to_location,notes,created_by) VALUES (?,?,?,?,?,?,?)");
+        if (!$mv) throw new RuntimeException('Asset movement prepare failed: ' . $conn->error);
         $mv->bind_param('iisdssi', $asset_id, $community_id, $move_type, $quantity, $location, $notes, $user_id);
-        $mv->execute(); $mv->close();
+        if (!$mv->execute()) throw new RuntimeException('Asset movement insert failed: ' . $mv->error);
+        $mv->close();
+        $conn->commit();
         $message = 'مال در فهرست اولیه ثبت شد. مالکیت و ارزش آن هنوز به‌صورت مستقل تأیید نشده است.';
-      } else { $error = 'ثبت مال انجام نشد؛ لطفاً دوباره تلاش کنید.'; }
-      $ins->close();
+      } catch (Throwable $e) {
+        $conn->rollback();
+        error_log('Community asset registration failed: ' . $e->getMessage());
+        $error = 'ثبت مال کامل نشد؛ هیچ ثبت ناقصی نگهداری نشد. لطفاً دوباره تلاش کنید.';
+      }
     }
   } elseif ($action === 'add_request') {
     $title = trim((string)($_POST['title'] ?? ''));
@@ -88,7 +96,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($request_id < 1 || !in_array($choice, ['approve','reject','abstain'], true)) {
       $error = 'رأی معتبر نیست.';
     } else {
-      $rq = $conn->prepare("SELECT id FROM community_budget_requests WHERE id=? AND community_id=? AND status='voting' LIMIT 1");
+      $rq = $conn->prepare("SELECT id FROM community_budget_requests WHERE id=? AND community_id=? AND status='voting' AND vote_deadline>NOW() LIMIT 1");
       $rq->bind_param('ii', $request_id, $community_id); $rq->execute();
       $valid = (bool)$rq->get_result()->fetch_assoc(); $rq->close();
       if (!$valid) $error = 'این درخواست برای رأی‌گیری باز نیست.';
@@ -103,8 +111,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   }
 }
 
-$settings = $conn->prepare("INSERT IGNORE INTO community_finance_settings (community_id,created_by,updated_by) VALUES (?,?,?)");
-$settings->bind_param('iii', $community_id, $user_id, $user_id); $settings->execute(); $settings->close();
 $currency = 'IRR';
 $curq = $conn->prepare("SELECT currency_code FROM community_finance_settings WHERE community_id=?");
 $curq->bind_param('i', $community_id); $curq->execute(); $currency = $curq->get_result()->fetch_assoc()['currency_code'] ?? 'IRR'; $curq->close();

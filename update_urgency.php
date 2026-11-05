@@ -29,11 +29,28 @@ $user_id = (int)$_SESSION['user_id'];
 $topic_id = isset($_POST['topic_id']) ? (int)$_POST['topic_id'] : 0;
 $community_id = isset($_POST['community_id']) ? (int)$_POST['community_id'] : 0;
 $urgency_units = isset($_POST['urgency_days']) ? (int)$_POST['urgency_days'] : 1;
-$urgency_units = max(1, min(360, $urgency_units));
+$urgency_units = max(1, min(300, $urgency_units));
 
 if ($topic_id <= 0 || $community_id <= 0) {
     http_response_code(400);
     exit("موضوع یا جامعه نامعتبر است.");
+}
+
+// موضوع باید متعلق به همین جامعه و هنوز باز باشد؛ ارسال‌کننده نیز باید عضو باشد.
+$access = $conn->prepare("
+    SELECT t.id
+    FROM topics t
+    JOIN community_members cm ON cm.community_id=t.community_id AND cm.user_id=?
+    WHERE t.id=? AND t.community_id=? AND t.closed=0
+    LIMIT 1
+");
+$access->bind_param("iii", $user_id, $topic_id, $community_id);
+$access->execute();
+$allowed = (bool)$access->get_result()->fetch_row();
+$access->close();
+if (!$allowed) {
+    http_response_code(403);
+    exit("موضوع باز نیست یا شما عضو این جامعه نیستید.");
 }
 
 // ثبت فوریت کاربر با نام ستون واقعی جدول هاست: urgency_units
@@ -57,7 +74,7 @@ $avg_sql->execute();
 $avg_result = $avg_sql->get_result()->fetch_assoc();
 $avg_sql->close();
 
-$avg_urgency_units = max(1, min(360, (int)round((float)($avg_result['avg_urgency'] ?? $urgency_units))));
+$avg_urgency_units = max(1, min(300, (int)round((float)($avg_result['avg_urgency'] ?? $urgency_units))));
 
 // به‌روزرسانی فوریت موضوع بر اساس میانگین روزها
 $update_topic = $conn->prepare("

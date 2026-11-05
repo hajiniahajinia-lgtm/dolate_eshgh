@@ -174,7 +174,9 @@ document.addEventListener("DOMContentLoaded", function() {
 <div class="box">
 <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
 <h2 style="margin:0;">پروفایل</h2>
-<a href="expertise.php" style="display:inline-flex;align-items:center;justify-content:center;background:#287a55;color:#fff;text-decoration:none;padding:9px 13px;border-radius:8px;font-size:14px;font-weight:bold;white-space:nowrap;">شایستگی تخصصی</a>\n<a href="search.php" style="display:inline-flex;align-items:center;justify-content:center;gap:6px;background:#1769aa;color:#fff;text-decoration:none;padding:9px 13px;border-radius:8px;font-size:14px;font-weight:bold;white-space:nowrap;">🔎 سرچ</a>
+<a href="expertise.php" style="display:inline-flex;align-items:center;justify-content:center;background:#287a55;color:#fff;text-decoration:none;padding:9px 13px;border-radius:8px;font-size:14px;font-weight:bold;white-space:nowrap;">شایستگی تخصصی</a>
+<a href="search.php" style="display:inline-flex;align-items:center;justify-content:center;gap:6px;background:#1769aa;color:#fff;text-decoration:none;padding:9px 13px;border-radius:8px;font-size:14px;font-weight:bold;white-space:nowrap;">🔎 سرچ</a>
+<a href="stats.php" style="display:inline-flex;align-items:center;justify-content:center;background:#5b6472;color:#fff;text-decoration:none;padding:9px 13px;border-radius:8px;font-size:14px;font-weight:bold;white-space:nowrap;">📊 آمار سامانه</a>
 </div>
 <button type="button" class="edit" onclick="toggleEditForm()">تکمیل/ویرایش پروفایل</button>
 <div id="editForm" class="edit-form">
@@ -216,8 +218,6 @@ document.addEventListener("DOMContentLoaded", function() {
 </div>
 
 <p><strong>نام کاربری:</strong> <?= htmlspecialchars($user['username']) ?></p>
-<p><strong>شماره همراه:</strong> <?= htmlspecialchars($user['phone']) ?></p>
-<p><strong>شماره ملی:</strong> <?= htmlspecialchars($user['national_id']) ?></p>
 <?php if($user['gender']): ?><p><strong>جنسیت:</strong> <?= htmlspecialchars($user['gender']) ?></p><?php endif; ?>
 <?php if($user['education']): ?><p><strong>تحصیلات:</strong> <?= htmlspecialchars($user['education']) ?></p><?php endif; ?>
 <?php if($user['job']): ?><p><strong>شغل:</strong> <?= htmlspecialchars($user['job']) ?></p><?php endif; ?>

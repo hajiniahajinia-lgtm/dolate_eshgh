@@ -1,17 +1,11 @@
 <?php
 session_start();
 
-// Temporary diagnostic handler for the execution page's HTTP 500.
-// It avoids exposing diagnostic details to visitors who are not logged in.
+// Log detailed diagnostics privately; never expose exception details to visitors.
 set_exception_handler(function ($e) {
     error_log('execution.php failure: ' . get_class($e) . ': ' . $e->getMessage());
     http_response_code(500);
-    if (!empty($_SESSION['user_id'])) {
-        $detail = htmlspecialchars(get_class($e) . ': ' . $e->getMessage(), ENT_QUOTES, 'UTF-8');
-        echo '<!doctype html><html lang="fa" dir="rtl"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>خطای صفحهٔ اجرا</title><body style="font-family:tahoma;max-width:850px;margin:30px auto;padding:16px;line-height:2"><h2>خطا در صفحهٔ نظارت و اجرای طرح</h2><p>این پیام برای تشخیص خطاست؛ لطفاً متن زیر را برای پشتیبانی بفرستید.</p><pre style="white-space:pre-wrap;overflow-wrap:anywhere;background:#f3f4f6;padding:12px;border-radius:8px">' . $detail . '</pre><p><a href="javascript:history.back()">بازگشت</a></p></body></html>';
-    } else {
-        echo 'خطای داخلی سرور. لطفاً دوباره وارد شوید.';
-    }
+    echo 'خطای داخلی سرور رخ داد. لطفاً بعداً دوباره تلاش کنید.';
     exit;
 });
 
@@ -38,21 +32,51 @@ $member=$conn->prepare("SELECT 1 FROM community_members WHERE community_id=? AND
 if (!$is_member) { http_response_code(403); exit('فقط اعضای این جامعه می‌توانند صفحهٔ نظارت را ببینند.'); }
 if (empty($_SESSION['execution_monitor_csrf'])) $_SESSION['execution_monitor_csrf']=bin2hex(random_bytes(32));
 $csrf=$_SESSION['execution_monitor_csrf']; $message='';
-if ($finance_schema_ready) { require_once __DIR__ . '/finance_helpers.php'; finance_finalize_expired_requests($conn, $community_id); }
+// درخواست‌های مالی منقضی فقط توسط maintenance/run_due_tasks.php نهایی می‌شوند؛ GET این صفحه خواندنی است.
 $stage_schema_q=$conn->query("SELECT COUNT(*) AS n FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='topic_execution_stages'");
 $stages_ready=$stage_schema_q && (int)$stage_schema_q->fetch_assoc()['n']===1;
 $stages=[];
 $state=$conn->prepare("SELECT * FROM topic_execution_plans WHERE topic_id=? AND idea_id=? LIMIT 1");$state->bind_param('ii',$topic_id,$idea_id);$state->execute();$execution=$state->get_result()->fetch_assoc();$state->close();
+$execution_exists = (bool)$execution;
 if (!$execution) {
-  $ins=$conn->prepare("INSERT IGNORE INTO topic_execution_plans (topic_id,idea_id,community_id,executor_user_id,initial_plan, status) VALUES (?,?,?,?,?,'preparing')");
-  $executor=(int)$plan['final_candidate_user_id'];$initial=(string)$plan['initial_plan'];$ins->bind_param('iiiis',$topic_id,$idea_id,$community_id,$executor,$initial);$ins->execute();$ins->close();
-  $state=$conn->prepare("SELECT * FROM topic_execution_plans WHERE topic_id=? AND idea_id=? LIMIT 1");$state->bind_param('ii',$topic_id,$idea_id);$state->execute();$execution=$state->get_result()->fetch_assoc();$state->close();
+  // مقدار پیش‌فرض فقط برای نمایش است؛ رکورد پایگاه داده با GET ساخته نمی‌شود.
+  $execution = ['id'=>0, 'status'=>'preparing', 'detailed_plan'=>'', 'timeline'=>''];
 }
 $pid=(int)$execution['id'];
 if ($_SERVER['REQUEST_METHOD']==='POST') {
   if (!hash_equals($csrf,(string)($_POST['csrf_token']??''))) { http_response_code(403); exit('درخواست معتبر نیست؛ صفحه را تازه‌سازی کنید.'); }
   $action=(string)($_POST['action']??'');
-  if ($action==='save_plan' && $user_id===(int)$plan['final_candidate_user_id']) {
+  if ($action==='initialize_plan') {
+    if ($user_id !== (int)$plan['final_candidate_user_id']) {
+      http_response_code(403);
+      $message='فقط مجری منتخب می‌تواند پروندهٔ اجرای طرح را آغاز کند.';
+    } else {
+      $ins=$conn->prepare("INSERT IGNORE INTO topic_execution_plans (topic_id,idea_id,community_id,executor_user_id,initial_plan,status) VALUES (?,?,?,?,?,'preparing')");
+      if (!$ins) {
+        $message='آغاز پروندهٔ اجرا ممکن نشد؛ ساختار پایگاه داده را بررسی کنید.';
+      } else {
+        $executor=(int)$plan['final_candidate_user_id'];
+        $initial=(string)$plan['initial_plan'];
+        $ins->bind_param('iiiis',$topic_id,$idea_id,$community_id,$executor,$initial);
+        $ok=$ins->execute();
+        $ins->close();
+        if ($ok) {
+          $state=$conn->prepare("SELECT * FROM topic_execution_plans WHERE topic_id=? AND idea_id=? LIMIT 1");
+          $state->bind_param('ii',$topic_id,$idea_id);
+          $state->execute();
+          $execution=$state->get_result()->fetch_assoc();
+          $state->close();
+          $execution_exists=(bool)$execution;
+          $pid=(int)($execution['id']??0);
+          $message='پروندهٔ اجرای طرح آغاز شد.';
+        } else {
+          $message='ایجاد پروندهٔ اجرای طرح انجام نشد.';
+        }
+      }
+    }
+  } elseif (!$execution_exists) {
+    $message='پروندهٔ اجرا هنوز آغاز نشده است؛ ابتدا مجری منتخب باید آن را آغاز کند.';
+  } elseif ($action==='save_plan' && $user_id===(int)$plan['final_candidate_user_id']) {
     $detail=trim((string)($_POST['detailed_plan']??''));$timeline=trim((string)($_POST['timeline']??''));$status=(string)($_POST['status']??'preparing');
     if (!in_array($status,['preparing','in_progress','blocked','completed'],true)) $status='preparing';
     if (mb_strlen($detail)>20000 || mb_strlen($timeline)>12000) { $message='متن برنامه بیش از حد طولانی است.'; }
@@ -97,7 +121,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
       if ($request_id<1 || !in_array($choice,['approve','reject','abstain'],true)) {
         $message='رأی معتبر نیست.';
       } else {
-        $rq=$conn->prepare("SELECT id FROM community_budget_requests WHERE id=? AND community_id=? AND topic_id=? AND idea_id=? AND execution_plan_id=? AND status='voting' LIMIT 1");
+        $rq=$conn->prepare("SELECT id FROM community_budget_requests WHERE id=? AND community_id=? AND topic_id=? AND idea_id=? AND execution_plan_id=? AND status='voting' AND vote_deadline>NOW() LIMIT 1");
         $pid=(int)$execution['id'];$rq->bind_param('iiiii',$request_id,$community_id,$topic_id,$idea_id,$pid);$rq->execute();
         $valid=(bool)$rq->get_result()->fetch_assoc();$rq->close();
         if (!$valid) $message='این درخواست مالی مربوط به همین طرح نیست یا رأی‌گیری آن باز نیست.';
@@ -227,6 +251,11 @@ $labels=['planned'=>'در انتظار شروع','in_progress'=>'در حال ا�
 <p><a class="btn" href="community.php?id=<?= $community_id ?>">بازگشت به جامعه</a> <a class="btn" href="archived_topics.php?community_id=<?= $community_id ?>">بازگشت به آرشیو</a> <a class="btn" href="finance.php?community_id=<?= $community_id ?>">🏦 بانک مالی جامعه</a></p>
 <h1>🔎 نظارت و اجرای طرح</h1><section class="box hero"><div class="muted"><?= em_h($plan['community_name']) ?></div><h2><?= em_h($plan['title']) ?></h2><h3>طرح منتخب</h3><div><?= nl2br(em_h($plan['idea_content'])) ?></div><p>مجری منتخب: <strong><?= em_h($executor_name) ?></strong></p><p>برنامهٔ اولیهٔ ارائه‌شده هنگام نامزدی:</p><div><?= nl2br(em_h($plan['initial_plan'])) ?></div><p>مدت تخمینی اولیه: <?= $plan['estimated_days'] ? (int)$plan['estimated_days'].' روز' : 'اعلام نشده' ?></p><p>وضعیت فعلی: <strong><?= em_h($labels[$execution['status']]??$execution['status']) ?></strong></p></section>
 <?php if($message!==''): ?><p class="notice"><?= em_h($message) ?></p><?php endif; ?>
+<?php if(!$execution_exists): ?>
+<section class="box notice"><strong>پروندهٔ اجرای این طرح هنوز آغاز نشده است.</strong><p class="muted">برای جلوگیری از تغییر خودکار اطلاعات هنگام بازدید، ایجاد پرونده فقط با اقدام صریح مجری منتخب انجام می‌شود.</p>
+<?php if($user_id===(int)$plan['final_candidate_user_id']): ?><form method="post"><input type="hidden" name="csrf_token" value="<?= em_h($csrf) ?>"><input type="hidden" name="action" value="initialize_plan"><button type="submit">آغاز پروندهٔ اجرای طرح</button></form><?php endif; ?>
+</section>
+<?php endif; ?>
 <section class="box"><h2>برنامهٔ تفصیلی و زمان‌بندی اعلام‌شده</h2><?php if(trim((string)($execution['detailed_plan']??''))===''): ?><p class="muted">مجری هنوز جزئیات برنامه را ثبت نکرده است.</p><?php else: ?><div><?= nl2br(em_h($execution['detailed_plan'])) ?></div><?php endif; ?><h3>زمان‌بندی مراحل</h3><?php if(trim((string)($execution['timeline']??''))===''): ?><p class="muted">زمان‌بندی تفصیلی هنوز اعلام نشده است.</p><?php else: ?><div><?= nl2br(em_h($execution['timeline'])) ?></div><?php endif; ?></section>
 <?php if($user_id===(int)$plan['final_candidate_user_id']): ?><section class="box"><h2>برنامهٔ تفصیلی مجری</h2><p class="muted">برنامهٔ اولیه برای رأی‌گیری ثبت شده بود؛ در اینجا جزئیات مراحل و زمان‌بندی را اعلام و در طول اجرا به‌روزرسانی کنید.</p><form method="post"><input type="hidden" name="csrf_token" value="<?= em_h($csrf) ?>"><input type="hidden" name="action" value="save_plan"><label>جزئیات مراحل اجرا<textarea class="field" name="detailed_plan" rows="6" maxlength="20000"><?= em_h($execution['detailed_plan']??'') ?></textarea></label><label>زمان‌بندی و مهلت هر مرحله<textarea class="field" name="timeline" rows="5" maxlength="12000"><?= em_h($execution['timeline']??'') ?></textarea></label><label>وضعیت اجرا<select class="field" name="status"><?php foreach(['preparing','in_progress','blocked','completed'] as $st): ?><option value="<?= $st ?>" <?= $execution['status']===$st?'selected':'' ?>><?= em_h($labels[$st]) ?></option><?php endforeach; ?></select></label><button type="submit">ذخیرهٔ برنامه و وضعیت</button></form></section><?php endif; ?>
 <section class="box"><h2>مراحل اجرایی و زمان‌بندی</h2>

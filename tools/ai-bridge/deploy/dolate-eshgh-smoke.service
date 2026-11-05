@@ -1,0 +1,16 @@
+[Unit]
+Description=Dolate Eshgh authenticated test-account smoke check
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=dolate-test
+Group=dolate-test
+WorkingDirectory=/opt/dolate-eshgh/tools/ai-bridge
+ExecStart=/usr/bin/python3 /opt/dolate-eshgh/tools/ai-bridge/site_smoke_test.py --login-latest
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/dolate-eshgh/tools/ai-bridge

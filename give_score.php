@@ -1,5 +1,9 @@
 <?php
 session_start();
+if (empty($_SESSION['give_score_csrf'])) {
+    $_SESSION['give_score_csrf'] = bin2hex(random_bytes(32));
+}
+$give_score_csrf = $_SESSION['give_score_csrf'];
 include "db.php";
 
 if (!isset($_SESSION['user_id'])) {
@@ -49,6 +53,11 @@ if ($existing_q) {
 // ثبت فقط وقتی هر چهار معیار امتیاز معتبر از ۱ تا ۵ داشته باشند.
 $error_message = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $posted_csrf = (string)($_POST['csrf_token'] ?? '');
+    if ($posted_csrf === '' || !hash_equals($give_score_csrf, $posted_csrf)) {
+        http_response_code(403);
+        exit('درخواست معتبر نیست؛ صفحه را تازه‌سازی کنید.');
+    }
     $ratings = [];
     foreach (['lawfulness', 'ethics', 'honesty', 'executive_skill'] as $key) {
         $value = filter_input(INPUT_POST, $key, FILTER_VALIDATE_INT);
@@ -110,6 +119,7 @@ button{margin-top:20px;width:100%;padding:10px;background:#27ae60;color:#fff;bor
 <h2>امتیازدهی به <?= htmlspecialchars($target_user['username']) ?></h2>
 
 <form method="post">
+    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($give_score_csrf, ENT_QUOTES, 'UTF-8') ?>">
     <?php
     $criteria = [
         'lawfulness'=>'قانون‌مداری',

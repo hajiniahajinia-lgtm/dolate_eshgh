@@ -87,52 +87,7 @@ if ($community_id > 0) {
     $cstmt->close();
 }
 
-// نهایی‌کردن رأی‌گیری‌های اخراجی که مهلت آن‌ها گذشته است؛ فقط اگر جداول افزونه نصب شده باشند.
-require_once __DIR__ . "/community_member_removal_helpers.php";
-$community_removal_ready = community_removal_tables_ready($conn);
-if ($community_removal_ready && $community_id > 0 && $community) {
-    community_removal_finalize_expired($conn, $community_id);
-}
-
-// بررسی بسته شدن خودکار موضوعات و انتقال ایده برتر
-$topics_check = $conn->prepare("SELECT id, urgency, created_at FROM topics WHERE community_id=? AND closed=0");
-$topics_check->bind_param("i", $community_id);
-$topics_check->execute();
-$topics_result = $topics_check->get_result();
-
-while ($topic = $topics_result->fetch_assoc()) {
-    $created = strtotime($topic['created_at']);
-    $urgency = intval($topic['urgency']);
-   $urgency = intval($topic['urgency']);
-$deadline = ($urgency > 0) ? $created + ($urgency * 24 * 60 * 60) : $created + (3 * 24 * 60 * 60);
-
-    if (time() >= $deadline) {
-        $up = $conn->prepare("UPDATE topics SET closed=1 WHERE id=?");
-        $up->bind_param("i", $topic['id']);
-        $up->execute();
-        $up->close();
-
-        $best_idea_q = $conn->prepare("
-            SELECT id
-            FROM ideas
-            WHERE topic_id=?
-            ORDER BY idea_rationality_weighted DESC, idea_rationality DESC, id ASC
-            LIMIT 1
-        ");
-        $best_idea_q->bind_param("i", $topic['id']);
-        $best_idea_q->execute();
-        $best_idea = $best_idea_q->get_result()->fetch_assoc();
-        $best_idea_q->close();
-
-        if ($best_idea) {
-            $ins = $conn->prepare("INSERT IGNORE INTO topic_final_votes (topic_id, idea_id) VALUES (?, ?)");
-            $ins->bind_param("ii", $topic['id'], $best_idea['id']);
-            $ins->execute();
-            $ins->close();
-        }
-    }
-}
-$topics_check->close();
+// عملیات زمان‌بندی‌شده در maintenance/run_due_tasks.php اجرا می‌شود؛ بارگذاری صفحه فقط خواندنی است.
 ?>
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
@@ -1247,25 +1202,7 @@ if ($is_community_member) {
 // در تساوی، وضعیت pending باقی می‌ماند و رأی‌گیری بسته می‌شود.
 $topic_expertise_proposals = [];
 try {
-    $finalize_expertise = $conn->prepare("
-        UPDATE topic_expertise_proposals p
-        SET status = CASE
-            WHEN (SELECT COUNT(*) FROM topic_expertise_proposal_votes v WHERE v.proposal_id=p.id AND v.vote='yes')
-               > (SELECT COUNT(*) FROM topic_expertise_proposal_votes v WHERE v.proposal_id=p.id AND v.vote='no') THEN 'approved'
-            WHEN (SELECT COUNT(*) FROM topic_expertise_proposal_votes v WHERE v.proposal_id=p.id AND v.vote='no')
-               > (SELECT COUNT(*) FROM topic_expertise_proposal_votes v WHERE v.proposal_id=p.id AND v.vote='yes') THEN 'rejected'
-            ELSE 'pending'
-        END,
-        decided_at = CASE
-            WHEN (SELECT COUNT(*) FROM topic_expertise_proposal_votes v WHERE v.proposal_id=p.id AND v.vote='yes')
-               <> (SELECT COUNT(*) FROM topic_expertise_proposal_votes v WHERE v.proposal_id=p.id AND v.vote='no') THEN NOW()
-            ELSE NULL
-        END
-        WHERE p.community_id=? AND p.status='pending' AND p.expires_at IS NOT NULL AND p.expires_at<=NOW()
-    ");
-    $finalize_expertise->bind_param("i", $community_id);
-    $finalize_expertise->execute();
-    $finalize_expertise->close();
+    // وضعیت پیشنهادهای منقضی فقط در کار زمان‌بندی‌شده به‌روزرسانی می‌شود؛ GET صرفاً نمایش می‌دهد.
 
     $expertise_list = $conn->prepare("
         SELECT p.id,p.status,p.expires_at,p.proposed_at,p.decided_at,
@@ -1567,7 +1504,7 @@ if ($remaining_seconds < 0) $remaining_seconds = 0;
           <input type="hidden" name="topic_id" value="<?= $tid ?>">
           <input type="hidden" name="community_id" value="<?= $community['id'] ?>">
           <label class="community-urgency-label">مدت فوریت (روز)</label>
-          <input class="urgency-input" type="number" name="urgency_days" min="1" max="360" value="<?= $urgency ?>" required>
+          <input class="urgency-input" type="number" name="urgency_days" min="1" max="300" value="<?= $urgency ?>" required>
           <button class="urgency-btn" type="submit" title="فوریت را بر حسب روز ثبت می‌کند؛ میانگین پیشنهادهای اعضا زمان موضوع را تعیین می‌کند.">ثبت فوریت</button>
           <small class="community-urgency-help">زمان فوریت موضوع بر اساس میانگین پیشنهادهای ثبت‌شدهٔ اعضا محاسبه می‌شود.</small>
           <small class="community-urgency-status" role="status" aria-live="polite"></small>

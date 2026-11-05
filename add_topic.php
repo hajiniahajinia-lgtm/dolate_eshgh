@@ -111,38 +111,60 @@ $stmt->bind_param(
     $urgency_updated_at
 );
 
+$conn->begin_transaction();
 if ($stmt->execute()) {
     $new_topic_id = (int)$conn->insert_id;
     if ($expertise_domain_id > 0) {
         $proposal_stmt = $conn->prepare("INSERT INTO topic_expertise_proposals (topic_id, community_id, domain_id, proposed_by, status, expires_at) VALUES (?, ?, ?, ?, 'pending', DATE_ADD(NOW(), INTERVAL 7 DAY))");
-        if ($proposal_stmt) {
-            $proposal_stmt->bind_param("iiii", $new_topic_id, $community_id, $expertise_domain_id, $user_id);
-            if (!$proposal_stmt->execute()) {
-                error_log("Topic expertise proposal insert failed: " . $proposal_stmt->error);
-            }
-            $proposal_stmt->close();
-        } else {
+        if (!$proposal_stmt) {
             error_log("Topic expertise proposal prepare failed: " . $conn->error);
+            $conn->rollback();
+            $stmt->close();
+            http_response_code(500);
+            exit("ثبت پیشنهاد حوزهٔ تخصصی انجام نشد؛ موضوع نیز ذخیره نشد.");
         }
+        $proposal_stmt->bind_param("iiii", $new_topic_id, $community_id, $expertise_domain_id, $user_id);
+        if (!$proposal_stmt->execute()) {
+            error_log("Topic expertise proposal insert failed: " . $proposal_stmt->error);
+            $proposal_stmt->close();
+            $conn->rollback();
+            $stmt->close();
+            http_response_code(500);
+            exit("ثبت پیشنهاد حوزهٔ تخصصی انجام نشد؛ موضوع نیز ذخیره نشد.");
+        }
+        $proposal_stmt->close();
     }
     if ($initial_idea !== '') {
         $idea_stmt = $conn->prepare("INSERT INTO ideas (topic_id, user_id, content) VALUES (?, ?, ?)");
+        if (!$idea_stmt) {
+            error_log("Initial idea prepare failed: " . $conn->error);
+            $conn->rollback();
+            $stmt->close();
+            http_response_code(500);
+            exit("ذخیره ایده اولیه ممکن نشد؛ موضوع نیز ذخیره نشد.");
+        }
         $idea_stmt->bind_param("iis", $new_topic_id, $user_id, $initial_idea);
         if (!$idea_stmt->execute()) {
-            echo "⚠️ موضوع ثبت شد، اما ذخیره طرح ایده ناموفق بود: " . htmlspecialchars($idea_stmt->error, ENT_QUOTES, 'UTF-8');
+            error_log("Initial idea insert failed: " . $idea_stmt->error);
             $idea_stmt->close();
+            $conn->rollback();
             $stmt->close();
-            $conn->close();
-            exit();
+            http_response_code(500);
+            exit("ثبت موضوع و ایده کامل نشد؛ هیچ‌کدام ذخیره نشدند. لطفاً دوباره تلاش کنید.");
         }
         $idea_stmt->close();
+        $conn->commit();
         header("Location: community.php?id=" . $community_id . "&success_topic=1&success_idea=1");
     } else {
+        $conn->commit();
         header("Location: community.php?id=" . $community_id . "&success_topic=1");
     }
     exit();
 } else {
-    echo "❌ خطا در ذخیره موضوع: " . htmlspecialchars($stmt->error, ENT_QUOTES, 'UTF-8');
+    error_log("Topic insert failed: " . $stmt->error);
+    $conn->rollback();
+    http_response_code(500);
+    echo "ثبت موضوع انجام نشد. لطفاً دوباره تلاش کنید.";
 }
 
 $stmt->close();

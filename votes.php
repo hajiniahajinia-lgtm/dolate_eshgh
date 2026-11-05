@@ -25,35 +25,7 @@ $user_id = (int)$_SESSION['user_id'];
 $community_id = isset($_GET['community_id']) ? (int)$_GET['community_id'] : 0;
 if($community_id <= 0) die("Community not specified.");
 
-// ----- create helper table for enforce votes (one row per user/idea) -----
-$conn->query("
-CREATE TABLE IF NOT EXISTS topic_enforce_votes (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  topic_id INT NOT NULL,
-  idea_id INT NOT NULL,
-  user_id INT NOT NULL,
-  enforceable TINYINT(1) NOT NULL,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE KEY uq_topic_idea_user_enf (topic_id, idea_id, user_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-");
-
-// جدول آمار لازم‌الاجرا؛ در نسخهٔ پایگاه دادهٔ قدیمی ممکن است هنوز وجود نداشته باشد.
-$conn->query("
-CREATE TABLE IF NOT EXISTS topic_enforce_stats (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  topic_id INT NOT NULL,
-  idea_id INT NOT NULL,
-  enforce_count INT NOT NULL DEFAULT 0,
-  non_enforce_count INT NOT NULL DEFAULT 0,
-  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uq_topic_idea_enforce_stats (topic_id, idea_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-");
-
-// (existing tables creation in your code were left intact — ensure they exist)
-// if topic_voting_ballots/topic_voting_meta/topic_winners not present, previous code creates them
-
+// ساختار جداول رأی‌گیری باید با migration نصب شود؛ این صفحه هیچ DDL اجرا نمی‌کند.
 // --- اطلاعات جامعه ---
 $cstmt = $conn->prepare("SELECT * FROM communities WHERE id=? LIMIT 1");
 $cstmt->bind_param("i", $community_id);
@@ -76,9 +48,7 @@ function community_gregorian_to_jalali($gy, $gm, $gd) {
     return [$jy,$jm,$jd];
 }
 function community_persian_digits($value) { return strtr((string)$value, ['0'=>'۰','1'=>'۱','2'=>'۲','3'=>'۳','4'=>'۴','5'=>'۵','6'=>'۶','7'=>'۷','8'=>'۸','9'=>'۹']); }
-require_once __DIR__ . '/community_member_removal_helpers.php';
-$community_removal_ready = community_removal_tables_ready($conn);
-if ($community_removal_ready && $community_id > 0 && $community) community_removal_finalize_expired($conn, $community_id);
+// نهایی‌سازی رأی‌های منقضی در maintenance/run_due_tasks.php انجام می‌شود.
 
 
 // جداول نامزدی با migration مستقل ساخته می‌شوند؛ در این فایل schema خودکار تغییر نمی‌کند.
@@ -130,7 +100,16 @@ if($_SERVER['REQUEST_METHOD'] === 'POST'){
         $idea_id  = (int)($_POST['idea_id'] ?? 0);
         $vote_type = (isset($_POST['vote_type']) && $_POST['vote_type'] === 'no') ? 'no' : 'yes';
 
-        $valid = $conn->prepare("SELECT 1 FROM ideas i JOIN topics t ON t.id=i.topic_id WHERE i.id=? AND t.id=? AND t.community_id=? LIMIT 1");
+        $valid = $conn->prepare("
+            SELECT 1
+            FROM ideas i
+            JOIN topics t ON t.id=i.topic_id
+            JOIN topic_final_votes tfv ON tfv.topic_id=t.id AND tfv.idea_id=i.id
+            LEFT JOIN topic_voting_meta m ON m.topic_id=t.id
+            WHERE i.id=? AND t.id=? AND t.community_id=? AND t.closed=1
+              AND (m.finalized IS NULL OR m.finalized=0)
+            LIMIT 1
+        ");
         $valid->bind_param("iii", $idea_id, $topic_id, $community_id);
         $valid->execute();
         $valid_idea = (bool)$valid->get_result()->fetch_row();
@@ -204,9 +183,40 @@ if($_SERVER['REQUEST_METHOD'] === 'POST'){
 
     // ---------- رأی لازم‌الاجرا / غیر لازم‌الاجرا ----------
     if(isset($_POST['vote_enforceable'])){
-        $topic_id = (int)$_POST['topic_id'];
-        $idea_id  = (int)$_POST['idea_id'];
+        $topic_id = (int)($_POST['topic_id'] ?? 0);
+        $idea_id  = (int)($_POST['idea_id'] ?? 0);
         $enforceable = (isset($_POST['vote_enforceable']) && intval($_POST['vote_enforceable']) === 1) ? 1 : 0;
+
+        $valid = $conn->prepare("
+            SELECT 1
+            FROM ideas i
+            JOIN topics t ON t.id=i.topic_id
+            JOIN topic_final_votes tfv ON tfv.topic_id=t.id AND tfv.idea_id=i.id
+            LEFT JOIN topic_voting_meta m ON m.topic_id=t.id
+            WHERE i.id=? AND t.id=? AND t.community_id=? AND t.closed=1
+              AND (m.finalized IS NULL OR m.finalized=0)
+            LIMIT 1
+        ");
+        $valid->bind_param("iii", $idea_id, $topic_id, $community_id);
+        $valid->execute();
+        $valid_idea = (bool)$valid->get_result()->fetch_row();
+        $valid->close();
+        if (!$valid_idea) {
+            http_response_code(400);
+            echo json_encode(['success'=>false,'message'=>'این ایده در مرحلهٔ رأی‌گیری الزام‌آوری نیست.']);
+            exit;
+        }
+
+        $member = $conn->prepare("SELECT 1 FROM community_members WHERE community_id=? AND user_id=? LIMIT 1");
+        $member->bind_param("ii", $community_id, $user_id);
+        $member->execute();
+        $is_member = (bool)$member->get_result()->fetch_row();
+        $member->close();
+        if (!$is_member) {
+            http_response_code(403);
+            echo json_encode(['success'=>false,'message'=>'فقط اعضای جامعه می‌توانند رأی بدهند.']);
+            exit;
+        }
 
         // insert/update در جدول topic_enforce_votes (هر کاربر فقط یک رکورد دارد)
         $stmt = $conn->prepare("
@@ -229,26 +239,52 @@ if($_SERVER['REQUEST_METHOD'] === 'POST'){
     // ---------- ثبت فوریت کاربر، محاسبه میانگین و به‌روزرسانی مدت رأی‌گیری ----------
     if(isset($_POST['set_urgency'])){
         $topic_id = (int)($_POST['topic_id'] ?? 0);
-        $urg = max(1, min(365, (int)($_POST['urgency_days'] ?? 5)));
+        $urg = max(1, min(300, (int)($_POST['urgency_days'] ?? 5)));
 
         if($topic_id <= 0){
             echo json_encode(['success'=>false,'message'=>'موضوع نامعتبر است']);
             exit;
         }
 
-        // ساخت جدول با همان نام ستون‌های نسخه SQL؛ هر کاربر برای هر موضوع یک رأی دارد.
-        $conn->query("
-            CREATE TABLE IF NOT EXISTS topic_voting_urgency_votes (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                topic_id INT NOT NULL,
-                user_id INT NOT NULL,
-                urgency_days INT NOT NULL DEFAULT 1,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE KEY uq_voting_topic_user (topic_id, user_id),
-                KEY idx_topic_id (topic_id),
-                KEY idx_user_id (user_id)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        // فقط عضو همان جامعه و فقط برای موضوعِ واردشده به مرحلهٔ رأی‌گیری نهایی می‌تواند فوریت پیشنهاد کند.
+        $valid_topic_stmt = $conn->prepare("
+            SELECT t.id
+            FROM topics t
+            JOIN topic_final_votes tfv ON tfv.topic_id=t.id
+            LEFT JOIN topic_voting_meta m ON m.topic_id=t.id
+            WHERE t.id=? AND t.community_id=? AND t.closed=1
+              AND (m.finalized IS NULL OR m.finalized=0)
+            LIMIT 1
         ");
+        $valid_topic_stmt->bind_param("ii", $topic_id, $community_id);
+        $valid_topic_stmt->execute();
+        $valid_topic = (bool)$valid_topic_stmt->get_result()->fetch_row();
+        $valid_topic_stmt->close();
+        if (!$valid_topic) {
+            http_response_code(400);
+            echo json_encode(['success'=>false,'message'=>'این موضوع در مرحلهٔ رأی‌گیری فوریت نیست.']);
+            exit;
+        }
+
+        $member_stmt = $conn->prepare("SELECT 1 FROM community_members WHERE community_id=? AND user_id=? LIMIT 1");
+        $member_stmt->bind_param("ii", $community_id, $user_id);
+        $member_stmt->execute();
+        $is_member = (bool)$member_stmt->get_result()->fetch_row();
+        $member_stmt->close();
+        if (!$is_member) {
+            http_response_code(403);
+            echo json_encode(['success'=>false,'message'=>'فقط اعضای جامعه می‌توانند دربارهٔ فوریت رأی بدهند.']);
+            exit;
+        }
+
+        $urgency_table_check = $conn->prepare("SELECT 1 FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='topic_voting_urgency_votes' LIMIT 1");
+        $urgency_table_check->execute();
+        $urgency_table_ready = $urgency_table_check->get_result()->num_rows > 0;
+        $urgency_table_check->close();
+        if (!$urgency_table_ready) {
+            echo json_encode(['success'=>false,'message'=>'ساختار رأی فوریت نصب نشده است؛ مدیر سامانه باید migration مربوط را اجرا کند.']);
+            exit;
+        }
 
         $save_vote = $conn->prepare("
             INSERT INTO topic_voting_urgency_votes (topic_id, user_id, urgency_days)
@@ -321,140 +357,7 @@ function participation_percent($conn,$topic_id){
     $voters = (int)$r2->get_result()->fetch_assoc()['voters']; $r2->close();
     return round(($voters/$total)*100,1);
 }
-$conn->query("
-    INSERT INTO topic_voting_meta (topic_id, urgency_days, voting_started, finalized)
-    SELECT t.id, 5, t.created_at, 0
-    FROM topics t
-    LEFT JOIN topic_voting_meta m ON m.topic_id = t.id
-    WHERE t.closed=1 AND m.topic_id IS NULL
-");
-// =========================
-// نهایی‌سازی اتوماتیک موضوعات
-// =========================
-
-// ساخت meta برای تمام موضوعات بسته شده که meta ندارند
-$conn->query("
-    INSERT INTO topic_voting_meta (topic_id, urgency_days, voting_started, finalized)
-    SELECT t.id, 5, t.created_at, 0
-    FROM topics t
-    LEFT JOIN topic_voting_meta m ON m.topic_id = t.id
-    WHERE t.community_id=$community_id AND t.closed=1 AND m.topic_id IS NULL
-");
-
-// گرفتن لیست موضوعات در حال رأی‌گیری
-$finalize_q = $conn->prepare("
-    SELECT t.id, m.voting_started, m.urgency_days, m.finalized
-    FROM topics t
-    JOIN topic_voting_meta m ON m.topic_id = t.id
-    WHERE t.community_id=? 
-      AND t.closed = 1
-      AND m.finalized = 0
-");
-$finalize_q->bind_param("i", $community_id);
-$finalize_q->execute();
-$finalize_res = $finalize_q->get_result();
-
-while($row = $finalize_res->fetch_assoc()){
-
-    $tid = (int)$row['id'];
-    $started = strtotime($row['voting_started']);
-    $days    = (int)$row['urgency_days'];
-    $deadline = $started + ($days * 24 * 3600);
-
-    // اگر زمان رأی‌گیری تمام شده
-    if(time() >= $deadline){
-
-        // ==========================
-        // 1️⃣ — گرفتن تعداد لازم‌الاجرا / غیر لازم‌الاجرا برای هر ایده
-        // ==========================
-        $ideas_q = $conn->query("
-            SELECT id AS idea_id
-            FROM ideas
-            WHERE topic_id = $tid
-        ");
-
-        if($ideas_q && $ideas_q->num_rows > 0){
-            while($idea_row = $ideas_q->fetch_assoc()){
-                $iid = (int)$idea_row['idea_id'];
-
-                $en = $conn->query("
-                    SELECT 
-                        SUM(enforceable = 1) AS enforce_count,
-                        SUM(enforceable = 0) AS non_enforce_count
-                    FROM topic_enforce_votes
-                    WHERE topic_id = $tid AND idea_id = $iid
-                ")->fetch_assoc();
-
-                $enforce_count      = (int)$en['enforce_count'];
-                $non_enforce_count  = (int)$en['non_enforce_count'];
-
-                // ذخیره در topic_enforce_stats با idea_id
-                $conn->query("
-                    INSERT INTO topic_enforce_stats (topic_id, idea_id, enforce_count, non_enforce_count)
-                    VALUES ($tid, $iid, $enforce_count, $non_enforce_count)
-                    ON DUPLICATE KEY UPDATE 
-                        enforce_count = VALUES(enforce_count),
-                        non_enforce_count = VALUES(non_enforce_count),
-                        updated_at = CURRENT_TIMESTAMP
-                ");
-            }
-        }
-
-        // ==========================
-        // 2️⃣ — مشخص کردن ایده برنده
-        // ==========================
-        $best = $conn->query("
-            SELECT id, content, user_id
-            FROM ideas
-            WHERE topic_id=$tid
-            ORDER BY idea_rationality DESC, idea_rationality_weighted DESC, id ASC
-            LIMIT 1
-        ");
-
-        if($best && $best->num_rows > 0){
-            $best_data = $best->fetch_assoc();
-            $idea_id = (int)$best_data['id'];
-
-            // جدول topic_winners در پایگاه دادهٔ فعلی فقط ستون‌های id, topic_id, idea_id و selected_at را دارد.
-            $winner_check = $conn->prepare("SELECT id FROM topic_winners WHERE topic_id=? LIMIT 1");
-            $winner_check->bind_param("i", $tid);
-            $winner_check->execute();
-            $existing_winner = $winner_check->get_result()->fetch_assoc();
-            $winner_check->close();
-
-            if ($existing_winner) {
-                $winner_row_id = (int)$existing_winner['id'];
-                $winner_update = $conn->prepare("UPDATE topic_winners SET idea_id=?, selected_at=NOW() WHERE id=?");
-                $winner_update->bind_param("ii", $idea_id, $winner_row_id);
-                $winner_update->execute();
-                $winner_update->close();
-            } else {
-                $winner_insert = $conn->prepare("INSERT INTO topic_winners (topic_id, idea_id, selected_at) VALUES (?, ?, NOW())");
-                $winner_insert->bind_param("ii", $tid, $idea_id);
-                $winner_insert->execute();
-                $winner_insert->close();
-            }        }
-
-        // ==========================
-        // 3️⃣ — نهایی‌سازی meta
-        // ==========================
-        $conn->query("
-            UPDATE topic_voting_meta 
-            SET finalized=1, finalized_at=NOW() 
-            WHERE topic_id=$tid
-        ");
-
-        // ==========================
-        // 4️⃣ — انتقال موضوع به آرشیو
-        // ==========================
-        $conn->query("UPDATE topics SET closed=2 WHERE id=$tid");
-    }
-}
-
-$finalize_q->close();
-// ------------- existing finalization logic (kept) --------------
-// (اگر می‌خواهی enforceable_weight براساس votes_enforce محاسبه شود، اطلاع بده تا اضافه کنم)
-// ... (بقیه منطق نهایی‌سازی شما همان است - دست نزدم تا رفتار کلی طبق قبلی بماند) ...
+// هیچ رأی‌گیری یا آرشیوی هنگام بارگذاری این صفحه نهایی نمی‌شود.
 
 // --- نمایش HTML و کارت‌ها ---
 $active_q = $conn->prepare("

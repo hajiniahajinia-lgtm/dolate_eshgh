@@ -1,14 +1,5 @@
 <?php
-session_start();
-include "db.php";
-
-if (!isset($_GET['topic_id'], $_GET['community_id'])) exit("❌ داده نامعتبر");
-
-$topic_id = (int)$_GET['topic_id'];
-$community_id = (int)$_GET['community_id'];
-
-$conn->query("UPDATE topics SET urgency = urgency + 1 WHERE id = $topic_id");
-
-header("Location: community.php?id=".$community_id);
-exit;
+http_response_code(410);
+header('Content-Type: text/plain; charset=utf-8');
+exit("این مسیر قدیمی غیرفعال شده است. برای ثبت فوریت از فرم امن صفحهٔ جامعه استفاده کنید.");
 ?>
