@@ -44,3 +44,24 @@ CREATE TABLE IF NOT EXISTS collective_knowledge_revisions (
     KEY idx_knowledge_revisions_entry (entry_id, id),
     KEY idx_knowledge_revisions_editor (editor_user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- شمارهٔ نسخه باعث می‌شود ارزیابی‌های نسخه‌های قبلی با نسخهٔ تازه مخلوط نشوند.
+ALTER TABLE collective_knowledge_entries
+    ADD COLUMN version_no INT UNSIGNED NOT NULL DEFAULT 1 AFTER id;
+
+-- هر عضو برای هر نسخه فقط یک ارزیابی دارد؛ تغییر رأی، سابقهٔ همان رأی را به‌روز می‌کند.
+CREATE TABLE IF NOT EXISTS collective_knowledge_reviews (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    entry_id BIGINT UNSIGNED NOT NULL,
+    version_no INT UNSIGNED NOT NULL,
+    reviewer_user_id INT NOT NULL,
+    vote ENUM('approve','reject','revise') NOT NULL,
+    reason TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_knowledge_review_version_user (entry_id, version_no, reviewer_user_id),
+    KEY idx_knowledge_review_entry_version (entry_id, version_no, vote),
+    KEY idx_knowledge_review_user (reviewer_user_id, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
