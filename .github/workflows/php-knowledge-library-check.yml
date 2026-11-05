@@ -1,0 +1,27 @@
+name: PHP syntax check - knowledge library
+
+on:
+  push:
+    branches:
+      - feature/collective-knowledge-library
+  pull_request:
+    paths:
+      - 'knowledge_library.php'
+      - 'profile.php'
+      - 'migrations/20261106_collective_knowledge_library.sql'
+      - '.github/workflows/php-knowledge-library-check.yml'
+
+jobs:
+  php-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+      - name: Check PHP syntax
+        run: |
+          php -l knowledge_library.php
+          php -l profile.php
