@@ -368,6 +368,30 @@ if ($entry_id > 0) {
         http_response_code(403);
         exit('این مدخل فقط برای اعضای جامعهٔ مربوط قابل مشاهده است.');
     }
+
+    // بازخوردهای تمام ایده‌های موضوع مادر را بدون کپی‌کردن داده‌ها در پرونده نشان بده.
+    $source_feedback = [];
+    if ($entry && !empty($entry['source_topic_id']) && $can_view_source_topic) {
+        $feedback_stmt = $conn->prepare("
+            SELECT f.id, f.idea_id, f.content, f.review_status, f.created_at,
+                   u.username, i.content AS idea_content
+            FROM community_idea_feedback f
+            JOIN users u ON u.id = f.user_id
+            JOIN ideas i ON i.id = f.idea_id AND i.topic_id = f.topic_id
+            WHERE f.topic_id = ? AND f.community_id = ?
+            ORDER BY f.created_at ASC, f.id ASC
+        ");
+        if ($feedback_stmt) {
+            $source_topic_id = (int)$entry['source_topic_id'];
+            $source_community_id = (int)$entry['source_topic_community_id'];
+            $feedback_stmt->bind_param('ii', $source_topic_id, $source_community_id);
+            $feedback_stmt->execute();
+            $feedback_result = kl_fetch_all($feedback_stmt);
+            if ($feedback_result !== null) $source_feedback = $feedback_result;
+            $feedback_stmt->close();
+        }
+    }
+
     if ($entry) {
         $review_count_stmt = $conn->prepare('SELECT vote, COUNT(*) AS total FROM collective_knowledge_reviews WHERE entry_id=? AND version_no=? GROUP BY vote');
         $current_version = (int)$entry['version_no'];
@@ -500,6 +524,26 @@ textarea{resize:vertical}button,.button{display:inline-block;border:0;border-rad
 <?php if (!empty($entry['evidence'])): ?><h3>شواهد و منابع</h3><div class="content"><?= kl_h($entry['evidence']) ?></div><?php endif; ?>
 <?php if (!empty($entry['source_topic_id']) && $can_view_source_topic): ?><p>موضوع مرتبط: <a href="community.php?id=<?= (int)($entry['source_topic_community_id'] ?? 0) ?>#topic-<?= (int)$entry['source_topic_id'] ?>">موضوع شمارهٔ <?= (int)$entry['source_topic_id'] ?></a> — <?= kl_h($entry['source_topic_title'] ?? '') ?></p><?php elseif (!empty($entry['source_topic_id'])): ?><p class="muted">موضوع مرجع در جامعهٔ دیگری است؛ برای مشاهده باید عضو آن جامعه باشید.</p><?php endif; ?>
 <?php if (!empty($entry['source_idea_id']) && $can_view_source_idea): ?><p>ایدهٔ مرتبط: <a href="community.php?id=<?= (int)($entry['source_idea_community_id'] ?? 0) ?>#topic-<?= (int)($entry['source_idea_topic_id'] ?? 0) ?>">مشاهدهٔ موضوع و ایدهٔ مرتبط</a> — <?= kl_h(mb_substr(strip_tags((string)($entry['source_idea_content'] ?? '')),0,180,'UTF-8')) ?></p><?php elseif (!empty($entry['source_idea_id'])): ?><p class="muted">ایدهٔ مرجع در جامعهٔ دیگری است؛ برای مشاهده باید عضو آن جامعه باشید.</p><?php endif; ?>
+
+<?php if (!empty($entry['source_topic_id']) && $can_view_source_topic): ?>
+<section class="panel">
+<h3>نقدها و بازخوردهای همهٔ ایده‌های این موضوع (<?= count($source_feedback) ?>)</h3>
+<p class="muted">این بازخوردها مستقیماً از سوابق موضوع خوانده می‌شوند؛ ایدهٔ منتخب یا رقیب بودن، باعث حذف آن‌ها نمی‌شود. وضعیت بررسی نیز همان وضعیت ثبت‌شده در جامعه است.</p>
+<?php if (!$source_feedback): ?><p class="muted">برای این موضوع هنوز بازخوردی ثبت نشده است.</p><?php endif; ?>
+<?php foreach ($source_feedback as $feedback_item): ?>
+<article class="entry">
+<div class="top">
+<strong>ایدهٔ شمارهٔ <?= (int)$feedback_item['idea_id'] ?></strong>
+<span class="tag"><?= kl_h(($feedback_item['review_status'] ?? '') === 'accepted' ? 'پذیرفته‌شده' : (($feedback_item['review_status'] ?? '') === 'rejected' ? 'پذیرفته‌نشده' : 'در انتظار بررسی')) ?></span>
+</div>
+<?php if (!empty($feedback_item['idea_content'])): ?><p class="muted">ایده: <?= kl_h(mb_substr(strip_tags((string)$feedback_item['idea_content']), 0, 220, 'UTF-8')) ?></p><?php endif; ?>
+<div class="content"><?= nl2br(kl_h($feedback_item['content'])) ?></div>
+<p class="muted">ثبت‌کننده: <?= kl_h($feedback_item['username']) ?> · <?= kl_h($feedback_item['created_at']) ?></p>
+</article>
+<?php endforeach; ?>
+</section>
+<?php endif; ?>
+
 <?php if ((int)$entry['created_by'] !== $user_id): ?>
 <section class="panel">
 <h3>ارزیابی جمعی این نسخه</h3>
