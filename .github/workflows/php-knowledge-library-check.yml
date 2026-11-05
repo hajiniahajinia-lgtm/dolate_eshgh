@@ -8,6 +8,7 @@ on:
     paths:
       - 'knowledge_library.php'
       - 'profile.php'
+      - 'community.php'
       - 'migrations/20261106_collective_knowledge_library.sql'
       - '.github/workflows/php-knowledge-library-check.yml'
 
@@ -25,3 +26,4 @@ jobs:
         run: |
           php -l knowledge_library.php
           php -l profile.php
+          php -l community.php
