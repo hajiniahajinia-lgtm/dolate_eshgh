@@ -1403,6 +1403,22 @@ try {
     <form action="add_topic.php" method="post">
       <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($community_duty_csrf, ENT_QUOTES, 'UTF-8') ?>">
       <input type="hidden" name="community_id" value="<?= (int)$community['id'] ?>">
+      <label for="topic-category-select" style="display:block;margin-top:8px;font-size:13px;">دسته‌بندی موضوع <span style="color:#b42318;">*</span></label>
+      <select id="topic-category-select" name="topic_category_id" required>
+        <option value="">انتخاب دسته‌بندی</option>
+        <?php
+        $topic_category_options = $conn->query("SELECT id, name FROM topic_categories WHERE is_active=1 ORDER BY sort_order ASC, name ASC");
+        if ($topic_category_options) {
+            while ($topic_category_option = $topic_category_options->fetch_assoc()) {
+                echo '<option value="' . (int)$topic_category_option['id'] . '">' .
+                    htmlspecialchars($topic_category_option['name'], ENT_QUOTES, 'UTF-8') .
+                    '</option>';
+            }
+            $topic_category_options->free();
+        }
+        ?>
+      </select>
+      <div class="topic-field-hint"><span>دسته‌ای را انتخاب کنید که مسئله بیش از همه به آن مربوط است.</span></div>
       <label for="topic-expertise-domain" style="display:block;margin-top:8px;font-size:13px;">حوزهٔ تخصصی مرتبط (پیشنهادی)</label>
       <select id="topic-expertise-domain" name="expertise_domain_id">
         <option value="0">بدون تعیین حوزهٔ تخصصی</option>
@@ -1436,8 +1452,38 @@ try {
 
 <!-- موضوعات در حال بحث و ایده‌ها -->
 <?php
-$topics_count_q = $conn->prepare("SELECT COUNT(*) AS cnt FROM topics WHERE community_id=? AND closed=0");
-$topics_count_q->bind_param("i", $community['id']);
+$topic_category_filter_id = max(0, (int)($_GET['topic_category'] ?? 0));
+$topic_category_counts = [];
+$topic_category_query = $conn->prepare("
+    SELECT c.id, c.name, COUNT(t.id) AS topic_count
+    FROM topic_categories c
+    LEFT JOIN topics t ON t.category_id=c.id AND t.community_id=? AND t.closed=0
+    WHERE c.is_active=1
+    GROUP BY c.id, c.name, c.sort_order
+    ORDER BY c.sort_order ASC, c.name ASC
+");
+$topic_category_query->bind_param("i", $community['id']);
+$topic_category_query->execute();
+$topic_category_result = $topic_category_query->get_result();
+while ($topic_category_row = $topic_category_result->fetch_assoc()) {
+    $topic_category_counts[] = $topic_category_row;
+}
+$topic_category_query->close();
+
+$valid_topic_category_ids = array_map(static function ($item) {
+    return (int)$item['id'];
+}, $topic_category_counts);
+if ($topic_category_filter_id > 0 && !in_array($topic_category_filter_id, $valid_topic_category_ids, true)) {
+    $topic_category_filter_id = 0;
+}
+
+if ($topic_category_filter_id > 0) {
+    $topics_count_q = $conn->prepare("SELECT COUNT(*) AS cnt FROM topics WHERE community_id=? AND closed=0 AND category_id=?");
+    $topics_count_q->bind_param("ii", $community['id'], $topic_category_filter_id);
+} else {
+    $topics_count_q = $conn->prepare("SELECT COUNT(*) AS cnt FROM topics WHERE community_id=? AND closed=0");
+    $topics_count_q->bind_param("i", $community['id']);
+}
 $topics_count_q->execute();
 $topics_count_res = $topics_count_q->get_result()->fetch_assoc();
 $topics_count_q->close();
@@ -1445,24 +1491,43 @@ $topics_count = (int)$topics_count_res['cnt'];
 ?>
 <div class="box" style="background:#fff3a6; padding:20px;">
 <?php if ($topics_count > 5): ?>
-<details class="community-topics-toggle"<?= (isset($_GET['open_topic']) && (int)$_GET['open_topic'] > 0) ? ' open' : '' ?>>
+<details class="community-topics-toggle"<?= ((isset($_GET['open_topic']) && (int)$_GET['open_topic'] > 0) || isset($_GET['topic_category'])) ? ' open' : '' ?>>
   <summary>📘 نمایش موضوعات در حال بحث (<?= $topics_count ?>)</summary>
   <div id="topics-wrapper" style="max-height:540px; overflow-y:auto; padding:10px;">
 <?php else: ?>
 <h3>📘 موضوعات در حال بحث (<?= $topics_count ?>)</h3>
 <div id="topics-wrapper" style="max-height:540px; overflow-y:auto; padding:10px;">
 <?php endif; ?>
+<form method="get" action="community.php" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:0 10px 8px;">
+  <input type="hidden" name="id" value="<?= (int)$community['id'] ?>">
+  <label for="topic-category-filter" style="font-size:13px;font-weight:bold;">نمایش دسته:</label>
+  <select id="topic-category-filter" name="topic_category" onchange="this.form.submit()" style="flex:1;min-width:180px;max-width:360px;margin:0;">
+    <option value="0"<?= $topic_category_filter_id === 0 ? ' selected' : '' ?>>همهٔ دسته‌ها</option>
+    <?php foreach ($topic_category_counts as $category_option): ?>
+      <option value="<?= (int)$category_option['id'] ?>"<?= $topic_category_filter_id === (int)$category_option['id'] ? ' selected' : '' ?>>
+        <?= htmlspecialchars($category_option['name'], ENT_QUOTES, 'UTF-8') ?> (<?= (int)$category_option['topic_count'] ?>)
+      </option>
+    <?php endforeach; ?>
+  </select>
+</form>
 <?php
-$topics_list = $conn->prepare("
-    SELECT t.*, 
-           COUNT(tp.user_id) AS total_priority 
-    FROM topics t 
-    LEFT JOIN topic_priority_votes tp ON t.id=tp.topic_id 
-    WHERE t.community_id=? AND t.closed=0 
-    GROUP BY t.id 
-    ORDER BY total_priority DESC, t.id ASC
-");
-$topics_list->bind_param("i", $community['id']);
+$topic_sql = "
+    SELECT t.*, tc.name AS category_name,
+           COUNT(tp.user_id) AS total_priority
+    FROM topics t
+    LEFT JOIN topic_categories tc ON tc.id=t.category_id
+    LEFT JOIN topic_priority_votes tp ON t.id=tp.topic_id
+    WHERE t.community_id=? AND t.closed=0";
+if ($topic_category_filter_id > 0) {
+    $topic_sql .= " AND t.category_id=?";
+}
+$topic_sql .= " GROUP BY t.id, tc.name ORDER BY total_priority DESC, t.id ASC";
+$topics_list = $conn->prepare($topic_sql);
+if ($topic_category_filter_id > 0) {
+    $topics_list->bind_param("ii", $community['id'], $topic_category_filter_id);
+} else {
+    $topics_list->bind_param("i", $community['id']);
+}
 $topics_list->execute();
 $topics_res2 = $topics_list->get_result();
 
@@ -1534,7 +1599,12 @@ if ($remaining_seconds < 0) $remaining_seconds = 0;
   $priority_check->close();
 ?>
 <details class="topic community-topic-item" id="topic-<?= (int)$tid ?>"<?= (isset($_GET['open_topic']) && (int)$_GET['open_topic'] === (int)$tid) ? ' open' : '' ?> style="<?= $is_closed ? 'opacity:0.6;' : '' ?>">
-  <summary><span class="community-topic-title"><?= htmlspecialchars($t2['title'], ENT_QUOTES, 'UTF-8') ?></span></summary>
+  <summary>
+    <span class="community-topic-title"><?= htmlspecialchars($t2['title'], ENT_QUOTES, 'UTF-8') ?></span>
+    <small style="flex:0 0 auto;padding:3px 7px;border-radius:12px;background:#dcecff;color:#2456a6;font-size:10px;font-weight:normal;">
+      <?= htmlspecialchars($t2['category_name'] ?? 'سایر موضوعات', ENT_QUOTES, 'UTF-8') ?>
+    </small>
+  </summary>
   <div class="community-topic-body">
   <?php if (trim((string)($t2['description'] ?? '')) !== ''): ?>
     <div style="margin:0 0 10px;padding:8px 10px;background:rgba(255,255,255,.75);border-radius:7px;line-height:1.8;font-size:13px;"><?= nl2br(htmlspecialchars($t2['description'], ENT_QUOTES, 'UTF-8')) ?></div>
