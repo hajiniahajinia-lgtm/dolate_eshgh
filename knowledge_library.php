@@ -294,6 +294,16 @@ if ($entry_id > 0) {
     $stmt->execute();
     $entry = $stmt->get_result()->fetch_assoc();
     $stmt->close();
+
+    // نمایش اطلاعات مرجع فقط برای اعضای جامعهٔ مرجع
+    $can_view_source_topic = false;
+    $can_view_source_idea = false;
+    if ($entry && !empty($entry['source_topic_id'])) {
+        $can_view_source_topic = kl_member($conn, (int)$entry['source_topic_community_id'], $user_id);
+    }
+    if ($entry && !empty($entry['source_idea_id'])) {
+        $can_view_source_idea = kl_member($conn, (int)$entry['source_idea_community_id'], $user_id);
+    }
     if ($entry && $entry['visibility'] === 'community' && !kl_member($conn, (int)$entry['community_id'], $user_id)) {
         http_response_code(403);
         exit('این مدخل فقط برای اعضای جامعهٔ مربوط قابل مشاهده است.');
@@ -418,8 +428,8 @@ textarea{resize:vertical}button,.button{display:inline-block;border:0;border-rad
 <h3>خلاصه</h3><p><?= nl2br(kl_h($entry['summary'])) ?></p>
 <h3>شرح و جزئیات</h3><div class="content"><?= kl_h($entry['content']) ?></div>
 <?php if (!empty($entry['evidence'])): ?><h3>شواهد و منابع</h3><div class="content"><?= kl_h($entry['evidence']) ?></div><?php endif; ?>
-<?php if (!empty($entry['source_topic_id'])): ?><p>موضوع مرتبط: <a href="community.php?id=<?= (int)($entry['source_topic_community_id'] ?? 0) ?>#topic-<?= (int)$entry['source_topic_id'] ?>">موضوع شمارهٔ <?= (int)$entry['source_topic_id'] ?></a> — <?= kl_h($entry['source_topic_title'] ?? '') ?></p><?php endif; ?>
-<?php if (!empty($entry['source_idea_id'])): ?><p>ایدهٔ مرتبط: <a href="community.php?id=<?= (int)($entry['source_idea_community_id'] ?? 0) ?>#topic-<?= (int)($entry['source_idea_topic_id'] ?? 0) ?>">مشاهدهٔ موضوع و ایدهٔ مرتبط</a> — <?= kl_h(mb_substr(strip_tags((string)($entry['source_idea_content'] ?? '')),0,180,'UTF-8')) ?></p><?php endif; ?>
+<?php if (!empty($entry['source_topic_id']) && $can_view_source_topic): ?><p>موضوع مرتبط: <a href="community.php?id=<?= (int)($entry['source_topic_community_id'] ?? 0) ?>#topic-<?= (int)$entry['source_topic_id'] ?>">موضوع شمارهٔ <?= (int)$entry['source_topic_id'] ?></a> — <?= kl_h($entry['source_topic_title'] ?? '') ?></p><?php elseif (!empty($entry['source_topic_id'])): ?><p class="muted">موضوع مرجع در جامعهٔ دیگری است؛ برای مشاهده باید عضو آن جامعه باشید.</p><?php endif; ?>
+<?php if (!empty($entry['source_idea_id']) && $can_view_source_idea): ?><p>ایدهٔ مرتبط: <a href="community.php?id=<?= (int)($entry['source_idea_community_id'] ?? 0) ?>#topic-<?= (int)($entry['source_idea_topic_id'] ?? 0) ?>">مشاهدهٔ موضوع و ایدهٔ مرتبط</a> — <?= kl_h(mb_substr(strip_tags((string)($entry['source_idea_content'] ?? '')),0,180,'UTF-8')) ?></p><?php elseif (!empty($entry['source_idea_id'])): ?><p class="muted">ایدهٔ مرجع در جامعهٔ دیگری است؛ برای مشاهده باید عضو آن جامعه باشید.</p><?php endif; ?>
 <?php if ((int)$entry['created_by'] !== $user_id): ?>
 <section class="panel">
 <h3>ارزیابی جمعی این نسخه</h3>
