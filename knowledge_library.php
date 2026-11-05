@@ -31,8 +31,12 @@ function kl_member($conn, $community_id, $user_id) {
     $stmt = $conn->prepare('SELECT 1 FROM community_members WHERE community_id=? AND user_id=? LIMIT 1');
     if (!$stmt) return false;
     $stmt->bind_param('ii', $community_id, $user_id);
-    $stmt->execute();
-    $ok = (bool)$stmt->get_result()->fetch_row();
+    if (!$stmt->execute()) {
+        $stmt->close();
+        return false;
+    }
+    $result = $stmt->get_result();
+    $ok = $result ? (bool)$result->fetch_row() : false;
     $stmt->close();
     return $ok;
 }
