@@ -43,6 +43,31 @@ try {
         community_removal_finalize_expired($conn, 0);
     }
 
+    // Expired community finance requests are finalized only by this CLI task, never by page GET.
+    $financeTables = [
+        'community_finance_settings',
+        'community_finance_transactions',
+        'community_budget_requests',
+        'community_budget_request_votes',
+        'community_assets',
+        'community_asset_movements'
+    ];
+    $financeReady = true;
+    foreach ($financeTables as $table) {
+        if (!maintenance_table_exists($conn, $table)) {
+            $financeReady = false;
+            break;
+        }
+    }
+    if ($financeReady) {
+        require_once __DIR__ . '/../finance_helpers.php';
+        $financeCommunities = $conn->query('SELECT DISTINCT community_id FROM community_budget_requests');
+        while ($financeCommunity = $financeCommunities->fetch_assoc()) {
+            finance_finalize_expired_requests($conn, (int)$financeCommunity['community_id']);
+        }
+        $financeCommunities->close();
+    }
+
     // Close topics whose urgency period has elapsed.
     $topics = $conn->query("SELECT id, urgency, created_at FROM topics WHERE closed=0");
     while ($topic = $topics->fetch_assoc()) {
