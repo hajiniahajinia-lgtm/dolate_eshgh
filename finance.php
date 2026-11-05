@@ -96,7 +96,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($request_id < 1 || !in_array($choice, ['approve','reject','abstain'], true)) {
       $error = 'رأی معتبر نیست.';
     } else {
-      $rq = $conn->prepare("SELECT id FROM community_budget_requests WHERE id=? AND community_id=? AND status='voting' LIMIT 1");
+      $rq = $conn->prepare("SELECT id FROM community_budget_requests WHERE id=? AND community_id=? AND status='voting' AND vote_deadline>NOW() LIMIT 1");
       $rq->bind_param('ii', $request_id, $community_id); $rq->execute();
       $valid = (bool)$rq->get_result()->fetch_assoc(); $rq->close();
       if (!$valid) $error = 'این درخواست برای رأی‌گیری باز نیست.';
