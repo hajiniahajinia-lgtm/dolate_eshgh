@@ -1504,7 +1504,7 @@ if ($remaining_seconds < 0) $remaining_seconds = 0;
           <input type="hidden" name="topic_id" value="<?= $tid ?>">
           <input type="hidden" name="community_id" value="<?= $community['id'] ?>">
           <label class="community-urgency-label">مدت فوریت (روز)</label>
-          <input class="urgency-input" type="number" name="urgency_days" min="1" max="360" value="<?= $urgency ?>" required>
+          <input class="urgency-input" type="number" name="urgency_days" min="1" max="300" value="<?= $urgency ?>" required>
           <button class="urgency-btn" type="submit" title="فوریت را بر حسب روز ثبت می‌کند؛ میانگین پیشنهادهای اعضا زمان موضوع را تعیین می‌کند.">ثبت فوریت</button>
           <small class="community-urgency-help">زمان فوریت موضوع بر اساس میانگین پیشنهادهای ثبت‌شدهٔ اعضا محاسبه می‌شود.</small>
           <small class="community-urgency-status" role="status" aria-live="polite"></small>
