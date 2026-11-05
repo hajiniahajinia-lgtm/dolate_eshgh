@@ -23,8 +23,6 @@ if (!$schema_ready) {
   exit;
 }
 
-require_once __DIR__ . '/finance_helpers.php';
-finance_finalize_expired_requests($conn, $community_id);
 if (empty($_SESSION['community_finance_csrf'])) $_SESSION['community_finance_csrf'] = bin2hex(random_bytes(32));
 $csrf = $_SESSION['community_finance_csrf'];
 $message = '';
@@ -59,7 +57,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       if ($ins->execute()) {
         $asset_id = (int)$conn->insert_id;
         $move_type = 'registered'; $notes = 'ثبت اولیهٔ مال در دفتر جامعه';
-        $mv = $conn->prepare("INSERT INTO community_asset_movements (asset_id,community_id,movement_type,quantity_change,to_location,notes,created_by) VALUES (?,?,?, ?,?,?,?)");
         $mv = $conn->prepare("INSERT INTO community_asset_movements (asset_id,community_id,movement_type,quantity_change,to_location,notes,created_by) VALUES (?,?,?,?,?,?,?)");
         $mv->bind_param('iisdssi', $asset_id, $community_id, $move_type, $quantity, $location, $notes, $user_id);
         $mv->execute(); $mv->close();
@@ -103,8 +100,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   }
 }
 
-$settings = $conn->prepare("INSERT IGNORE INTO community_finance_settings (community_id,created_by,updated_by) VALUES (?,?,?)");
-$settings->bind_param('iii', $community_id, $user_id, $user_id); $settings->execute(); $settings->close();
 $currency = 'IRR';
 $curq = $conn->prepare("SELECT currency_code FROM community_finance_settings WHERE community_id=?");
 $curq->bind_param('i', $community_id); $curq->execute(); $currency = $curq->get_result()->fetch_assoc()['currency_code'] ?? 'IRR'; $curq->close();
