@@ -148,7 +148,23 @@ function create_collective_knowledge_decision($conn, $topic_id, $fallback_user_i
 function finalize_collective_knowledge_for_community($conn, $community_id, $user_id) {
     $community_id = (int)$community_id;
     $user_id = (int)$user_id;
-    if ($community_id <= 0) return false;
+    if ($community_id <= 0 || $user_id <= 0) return false;
+
+    // فقط عضو همان جامعه اجازه دارد بازدیدش اجرای نهایی‌سازی را فعال کند.
+    $member_stmt = $conn->prepare("SELECT 1 FROM community_members WHERE community_id=? AND user_id=? LIMIT 1");
+    if (!$member_stmt) {
+        error_log("Knowledge finalizer membership check prepare failed: " . $conn->error);
+        return false;
+    }
+    $member_stmt->bind_param("ii", $community_id, $user_id);
+    if (!$member_stmt->execute()) {
+        error_log("Knowledge finalizer membership check execute failed: " . $member_stmt->error);
+        $member_stmt->close();
+        return false;
+    }
+    $is_member = (bool)$member_stmt->get_result()->fetch_row();
+    $member_stmt->close();
+    if (!$is_member) return false;
 
     // برای موضوعات بسته‌شده‌ای که هنوز meta ندارند، همان پیش‌فرض قبلی votes.php حفظ می‌شود.
     $meta_stmt = $conn->prepare("
