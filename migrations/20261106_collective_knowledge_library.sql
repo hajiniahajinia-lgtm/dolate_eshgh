@@ -1,0 +1,40 @@
+-- کتابخانه دانش جمعی؛ این مهاجرت فقط جداول جدید می‌سازد و داده‌ای را حذف یا تغییر نمی‌دهد.
+CREATE TABLE IF NOT EXISTS collective_knowledge_entries (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    title VARCHAR(180) NOT NULL,
+    entry_type ENUM('experience','solution','research','lesson') NOT NULL,
+    summary VARCHAR(1000) NOT NULL,
+    content MEDIUMTEXT NOT NULL,
+    evidence TEXT NULL,
+    visibility ENUM('public','community') NOT NULL DEFAULT 'public',
+    community_id INT NULL,
+    source_topic_id INT NULL,
+    source_idea_id INT NULL,
+    status ENUM('unreviewed','under_review','verified','rejected','needs_update') NOT NULL DEFAULT 'unreviewed',
+    created_by INT NOT NULL,
+    updated_by INT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_knowledge_visibility_created (visibility, created_at, id),
+    KEY idx_knowledge_community_created (community_id, created_at, id),
+    KEY idx_knowledge_creator (created_by, id),
+    KEY idx_knowledge_source_topic (source_topic_id),
+    KEY idx_knowledge_source_idea (source_idea_id),
+    KEY idx_knowledge_status (status, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS collective_knowledge_revisions (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    entry_id BIGINT UNSIGNED NOT NULL,
+    editor_user_id INT NOT NULL,
+    previous_title VARCHAR(180) NOT NULL,
+    previous_summary VARCHAR(1000) NOT NULL,
+    previous_content MEDIUMTEXT NOT NULL,
+    previous_evidence TEXT NULL,
+    revision_note VARCHAR(1000) NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_knowledge_revisions_entry (entry_id, id),
+    KEY idx_knowledge_revisions_editor (editor_user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
