@@ -1443,6 +1443,13 @@ try {
         ?>
       </select>
       <div class="topic-field-hint"><span>این انتخاب فقط پیشنهاد است؛ تا زمانی که جامعه آن را تأیید نکند، هیچ وزن تخصصی به رأی‌ها اضافه نمی‌شود.</span></div>
+      <label for="topic-purpose-select" style="display:block;margin-top:8px;font-size:13px;">ماهیت موضوع</label>
+      <select id="topic-purpose-select" name="topic_purpose">
+        <option value="mixed" selected>ترکیبی؛ شناخت و بررسی همراه با امکان اقدام</option>
+        <option value="knowledge">شناختی؛ برای فهم و تولید دانش، بدون الزام به اجرا</option>
+        <option value="execution">اجرایی؛ برای حل مسئله یا ایجاد تغییر عملی</option>
+      </select>
+      <div class="topic-field-hint"><span>این انتخاب هدف موضوع را مشخص می‌کند؛ دربارهٔ پذیرش ایده یا لازم‌الاجرا بودن آن تصمیم نمی‌گیرد.</span></div>
       <textarea id="topic-title-input" name="topic_title" rows="2" maxlength="100" placeholder="عنوان موضوع*" aria-label="عنوان موضوع" required></textarea>
       <div class="topic-field-hint"><span>عنوانی کوتاه و روشن برای مسئله یا چالش بنویسید.</span><span class="topic-char-count" data-for="topic-title-input">۰ از ۱۰۰ نویسه</span></div>
       <textarea id="topic-description" name="topic_description" rows="3" maxlength="500" placeholder="شرح موضوع (اختیاری)" aria-label="شرح موضوع (اختیاری)"></textarea>
