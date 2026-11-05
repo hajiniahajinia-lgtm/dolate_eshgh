@@ -27,6 +27,16 @@ function kl_status_label($status) {
     $labels = ['unreviewed'=>'بررسی‌نشده','under_review'=>'در حال بررسی','verified'=>'تأییدشده با شواهد','rejected'=>'ردشده با دلیل','needs_update'=>'نیازمند به‌روزرسانی'];
     return $labels[$status] ?? 'وضعیت نامشخص';
 }
+function kl_fetch_one($stmt) {
+    if (!$stmt || !$stmt->execute()) return null;
+    $result = $stmt->get_result();
+    return $result ? $result->fetch_assoc() : null;
+}
+function kl_fetch_all($stmt) {
+    if (!$stmt || !$stmt->execute()) return null;
+    $result = $stmt->get_result();
+    return $result ? $result->fetch_all(MYSQLI_ASSOC) : null;
+}
 function kl_member($conn, $community_id, $user_id) {
     $stmt = $conn->prepare('SELECT 1 FROM community_members WHERE community_id=? AND user_id=? LIMIT 1');
     if (!$stmt) return false;
@@ -77,15 +87,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $review_error = true;
             } else {
                 $review_check->bind_param('i', $review_entry_id);
-                if (!$review_check->execute()) {
+                $review_entry = kl_fetch_one($review_check);
+                if (!$review_entry ||
+                    (int)$review_entry['created_by'] === $user_id ||
+                    ($review_entry['visibility'] === 'community' && !kl_member($conn, (int)$review_entry['community_id'], $user_id))) {
                     $review_error = true;
-                } else {
-                    $review_entry = $review_check->get_result()->fetch_assoc();
-                    if (!$review_entry ||
-                        (int)$review_entry['created_by'] === $user_id ||
-                        ($review_entry['visibility'] === 'community' && !kl_member($conn, (int)$review_entry['community_id'], $user_id))) {
-                        $review_error = true;
-                    }
                 }
                 $review_check->close();
             }
@@ -108,12 +114,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $review_error = true;
                 } else {
                     $count_review->bind_param('ii', $review_entry_id, $version_no);
-                    if (!$count_review->execute()) {
+                    $count_rows = kl_fetch_all($count_review);
+                    if ($count_rows === null) {
                         $review_error = true;
                     } else {
-                        $count_result = $count_review->get_result();
                         $counts = ['approve'=>0, 'reject'=>0, 'revise'=>0];
-                        while ($count_row = $count_result->fetch_assoc()) {
+                        foreach ($count_rows as $count_row) {
                             if (isset($counts[$count_row['vote']])) $counts[$count_row['vote']] = (int)$count_row['total'];
                         }
                         $total_reviews = array_sum($counts);
@@ -186,7 +192,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $source_row = null;
             if ($source_check) {
                 $source_check->bind_param('i', $source_topic_id);
-                if ($source_check->execute()) $source_row = $source_check->get_result()->fetch_assoc();
+                $source_row = kl_fetch_one($source_check);
                 $source_check->close();
             }
             if (!$source_row || ($visibility === 'community' && (int)$source_row['community_id'] !== $community_id)) {
@@ -198,7 +204,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $source_row = null;
             if ($source_check) {
                 $source_check->bind_param('i', $source_idea_id);
-                if ($source_check->execute()) $source_row = $source_check->get_result()->fetch_assoc();
+                $source_row = kl_fetch_one($source_check);
                 $source_check->close();
             }
             if (!$source_row || ($visibility === 'community' && (int)$source_row['community_id'] !== $community_id) || ($source_topic_id > 0 && (int)$source_row['topic_id'] !== $source_topic_id)) {
@@ -235,7 +241,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $old = null;
             if ($check) {
                 $check->bind_param('ii', $entry_id, $user_id);
-                if ($check->execute()) $old = $check->get_result()->fetch_assoc();
+                $old = kl_fetch_one($check);
                 $check->close();
             }
             if (!$old) {
@@ -290,10 +296,12 @@ if (isset($_GET['review_error'])) $error = 'ارزیابی ثبت نشد؛ مط�
 
 $communities = [];
 $cs = $conn->prepare('SELECT c.id, c.name FROM communities c JOIN community_members m ON m.community_id=c.id WHERE m.user_id=? ORDER BY c.name');
-$cs->bind_param('i', $user_id);
-$cs->execute();
-$communities = $cs->get_result()->fetch_all(MYSQLI_ASSOC);
-$cs->close();
+if ($cs) {
+    $cs->bind_param('i', $user_id);
+    $community_rows = kl_fetch_all($cs);
+    if ($community_rows !== null) $communities = $community_rows;
+    $cs->close();
+}
 
 $default_source_topic_id = max(0, (int)($_GET['source_topic_id'] ?? 0));
 $default_source_idea_id = max(0, (int)($_GET['source_idea_id'] ?? 0));
@@ -318,10 +326,11 @@ if ($entry_id > 0) {
         LEFT JOIN ideas i ON i.id=k.source_idea_id
         LEFT JOIN topics it ON it.id=i.topic_id
         WHERE k.id=? LIMIT 1");
-    $stmt->bind_param('i', $entry_id);
-    $stmt->execute();
-    $entry = $stmt->get_result()->fetch_assoc();
-    $stmt->close();
+    if ($stmt) {
+        $stmt->bind_param('i', $entry_id);
+        $entry = kl_fetch_one($stmt);
+        $stmt->close();
+    }
 
     // نمایش اطلاعات مرجع فقط برای اعضای جامعهٔ مرجع
     $can_view_source_topic = false;
@@ -339,32 +348,40 @@ if ($entry_id > 0) {
     if ($entry) {
         $review_count_stmt = $conn->prepare('SELECT vote, COUNT(*) AS total FROM collective_knowledge_reviews WHERE entry_id=? AND version_no=? GROUP BY vote');
         $current_version = (int)$entry['version_no'];
-        $review_count_stmt->bind_param('ii', $entry_id, $current_version);
-        $review_count_stmt->execute();
-        $review_count_result = $review_count_stmt->get_result();
-        while ($review_count_row = $review_count_result->fetch_assoc()) {
-            $review_counts[$review_count_row['vote']] = (int)$review_count_row['total'];
+        if ($review_count_stmt) {
+            $review_count_stmt->bind_param('ii', $entry_id, $current_version);
+            $review_count_rows = kl_fetch_all($review_count_stmt);
+            if ($review_count_rows !== null) {
+                foreach ($review_count_rows as $review_count_row) {
+                    if (isset($review_counts[$review_count_row['vote']])) $review_counts[$review_count_row['vote']] = (int)$review_count_row['total'];
+                }
+            }
+            $review_count_stmt->close();
         }
-        $review_count_stmt->close();
 
         $my_review_stmt = $conn->prepare('SELECT vote, reason FROM collective_knowledge_reviews WHERE entry_id=? AND version_no=? AND reviewer_user_id=? LIMIT 1');
-        $my_review_stmt->bind_param('iii', $entry_id, $current_version, $user_id);
-        $my_review_stmt->execute();
-        $my_review = $my_review_stmt->get_result()->fetch_assoc();
-        $my_review_stmt->close();
+        if ($my_review_stmt) {
+            $my_review_stmt->bind_param('iii', $entry_id, $current_version, $user_id);
+            $my_review = kl_fetch_one($my_review_stmt);
+            $my_review_stmt->close();
+        }
 
         $review_details_stmt = $conn->prepare('SELECT r.vote, r.reason, r.updated_at, u.username FROM collective_knowledge_reviews r JOIN users u ON u.id=r.reviewer_user_id WHERE r.entry_id=? AND r.version_no=? ORDER BY r.updated_at DESC, r.id DESC');
-        $review_details_stmt->bind_param('ii', $entry_id, $current_version);
-        $review_details_stmt->execute();
-        $review_details = $review_details_stmt->get_result()->fetch_all(MYSQLI_ASSOC);
-        $review_details_stmt->close();
+        if ($review_details_stmt) {
+            $review_details_stmt->bind_param('ii', $entry_id, $current_version);
+            $review_rows = kl_fetch_all($review_details_stmt);
+            if ($review_rows !== null) $review_details = $review_rows;
+            $review_details_stmt->close();
+        }
     }
     if ($entry && $edit_mode && (int)$entry['created_by'] === $user_id) {
         $rs = $conn->prepare('SELECT r.*, u.username FROM collective_knowledge_revisions r JOIN users u ON u.id=r.editor_user_id WHERE r.entry_id=? ORDER BY r.id DESC LIMIT 20');
-        $rs->bind_param('i', $entry_id);
-        $rs->execute();
-        $revisions = $rs->get_result()->fetch_all(MYSQLI_ASSOC);
-        $rs->close();
+        if ($rs) {
+            $rs->bind_param('i', $entry_id);
+            $revision_rows = kl_fetch_all($rs);
+            if ($revision_rows !== null) $revisions = $revision_rows;
+            $rs->close();
+        }
     }
 }
 
@@ -378,10 +395,12 @@ if ($entry_id === 0) {
             SELECT 1 FROM community_members m WHERE m.community_id=k.community_id AND m.user_id=?
         ))) AND (?='' OR k.title LIKE ? OR k.summary LIKE ? OR k.content LIKE ?)
         ORDER BY k.updated_at DESC, k.id DESC LIMIT 100");
-    $stmt->bind_param('issss', $user_id, $q, $like, $like, $like);
-    $stmt->execute();
-    $entries = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
-    $stmt->close();
+    if ($stmt) {
+        $stmt->bind_param('issss', $user_id, $q, $like, $like, $like);
+        $entry_rows = kl_fetch_all($stmt);
+        if ($entry_rows !== null) $entries = $entry_rows;
+        $stmt->close();
+    }
 }
 
 function kl_render_form($csrf, $communities, $entry = null, $source_topic_id = 0, $source_idea_id = 0) {
