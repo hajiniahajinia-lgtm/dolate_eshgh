@@ -1,6 +1,7 @@
 <?php
 /**
  * Finalize expired expertise applications and domain proposals.
+ * This routine is invoked by the CLI scheduler after database configuration is verified.
  * This must be called only by the trusted CLI maintenance runner, never by a page GET.
  */
 function expertise_finalize_expired(mysqli $conn): array {
