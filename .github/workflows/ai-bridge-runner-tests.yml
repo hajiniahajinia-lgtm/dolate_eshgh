@@ -39,6 +39,7 @@ jobs:
           php -l votes.php
           php -l execution.php
           php -l expertise.php
+          php -l give_score.php
           php -l expertise_maintenance.php
           php -l add_topic.php
           php -l add_idea.php
