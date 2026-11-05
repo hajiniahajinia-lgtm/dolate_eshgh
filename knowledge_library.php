@@ -168,6 +168,8 @@ $cs->execute();
 $communities = $cs->get_result()->fetch_all(MYSQLI_ASSOC);
 $cs->close();
 
+$default_source_topic_id = max(0, (int)($_GET['source_topic_id'] ?? 0));
+$default_source_idea_id = max(0, (int)($_GET['source_idea_id'] ?? 0));
 $q = trim((string)($_GET['q'] ?? ''));
 $q = mb_substr($q, 0, 120, 'UTF-8');
 $like = '%' . $q . '%';
@@ -219,7 +221,7 @@ if ($entry_id === 0) {
     $stmt->close();
 }
 
-function kl_render_form($csrf, $communities, $entry = null) {
+function kl_render_form($csrf, $communities, $entry = null, $source_topic_id = 0, $source_idea_id = 0) {
     $editing = (bool)$entry;
     $type = $entry['entry_type'] ?? 'experience';
     $visibility = $entry['visibility'] ?? 'public';
@@ -239,8 +241,8 @@ function kl_render_form($csrf, $communities, $entry = null) {
     echo '<label>جامعهٔ مربوط (برای مدخل اختصاصی)</label><select name="community_id"><option value="0">انتخاب نشده</option>';
     foreach ($communities as $c) echo '<option value="' . (int)$c['id'] . '"' . ($community_id===(int)$c['id']?' selected':'') . '>' . kl_h($c['name']) . '</option>';
     echo '</select>';
-    echo '<label>شناسهٔ موضوع مرتبط (اختیاری)</label><input type="number" min="0" name="source_topic_id" value="' . (int)($entry['source_topic_id'] ?? 0) . '">';
-    echo '<label>شناسهٔ ایدهٔ مرتبط (اختیاری)</label><input type="number" min="0" name="source_idea_id" value="' . (int)($entry['source_idea_id'] ?? 0) . '">';
+    echo '<label>شناسهٔ موضوع مرتبط (اختیاری)</label><input type="number" min="0" name="source_topic_id" value="' . (int)($entry['source_topic_id'] ?? $source_topic_id) . '">';
+    echo '<label>شناسهٔ ایدهٔ مرتبط (اختیاری)</label><input type="number" min="0" name="source_idea_id" value="' . (int)($entry['source_idea_id'] ?? $source_idea_id) . '">';
     if ($editing) echo '<label>دلیل یا توضیح ویرایش (اختیاری)</label><input name="revision_note" maxlength="1000">';
     echo '<button type="submit">' . ($editing ? 'ذخیرهٔ نسخهٔ جدید' : 'ثبت در کتابخانه') . '</button></form>';
 }
@@ -296,7 +298,7 @@ textarea{resize:vertical}button,.button{display:inline-block;border:0;border-rad
 </section>
 <?php endif; ?>
 <?php else: ?>
-<section class="panel"><h2>ثبت دانش تازه</h2><?php kl_render_form($csrf, $communities); ?></section>
+<section class="panel"><h2>ثبت دانش تازه</h2><?php kl_render_form($csrf, $communities, null, $default_source_topic_id, $default_source_idea_id); ?></section>
 <section class="panel"><h2>جست‌وجو در کتابخانه</h2><form method="get"><input type="search" name="q" maxlength="120" value="<?= kl_h($q) ?>" placeholder="عنوان، خلاصه یا متن دانش را جست‌وجو کنید"><button type="submit">جست‌وجو</button></form></section>
 <section class="panel"><h2>مدخل‌های کتابخانه (<?= count($entries) ?>)</h2>
 <?php if (!$entries): ?><p class="muted">هنوز مدخلی ثبت نشده یا نتیجه‌ای با این عبارت پیدا نشد.</p><?php endif; ?>
