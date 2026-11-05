@@ -11,6 +11,8 @@ on:
       - "feature/test-account-runner-main"
     paths:
       - "tools/ai-bridge/**"
+      - "*.php"
+      - "maintenance/**"
 
 permissions:
   contents: read
