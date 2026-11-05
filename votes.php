@@ -385,6 +385,10 @@ function create_collective_knowledge_decision($conn, $topic_id, $fallback_user_i
         $topic_stmt->close();
         if (!$topic) throw new Exception("topic not found");
 
+        // نتیجهٔ پذیرش باید فقط بر پایهٔ رأی‌های ایدهٔ منتخب محاسبه شود.
+        $source_idea_id = $topic['idea_id'] !== null ? (int)$topic['idea_id'] : null;
+        $selected_idea_id = $source_idea_id ?? 0;
+
         $vote_stmt = $conn->prepare("
             SELECT
                 SUM(vote_type='yes') AS yes_count,
@@ -392,20 +396,20 @@ function create_collective_knowledge_decision($conn, $topic_id, $fallback_user_i
                 SUM(CASE WHEN vote_type='yes' THEN vote_weight ELSE 0 END) AS yes_weight,
                 SUM(CASE WHEN vote_type='no' THEN vote_weight ELSE 0 END) AS no_weight
             FROM topic_voting_ballots
-            WHERE topic_id=?
+            WHERE topic_id=? AND idea_id=?
         ");
         if (!$vote_stmt) throw new Exception("ballot prepare: " . $conn->error);
-        $vote_stmt->bind_param("i", $topic_id);
+        $vote_stmt->bind_param("ii", $topic_id, $selected_idea_id);
         if (!$vote_stmt->execute()) throw new Exception("ballot execute: " . $vote_stmt->error);
         $vote_stats = $vote_stmt->get_result()->fetch_assoc() ?: [];
         $vote_stmt->close();
 
         $enforce_stmt = $conn->prepare("
             SELECT SUM(enforceable=1) AS enforce_yes, SUM(enforceable=0) AS enforce_no
-            FROM topic_enforce_votes WHERE topic_id=?
+            FROM topic_enforce_votes WHERE topic_id=? AND idea_id=?
         ");
         if (!$enforce_stmt) throw new Exception("enforce prepare: " . $conn->error);
-        $enforce_stmt->bind_param("i", $topic_id);
+        $enforce_stmt->bind_param("ii", $topic_id, $selected_idea_id);
         if (!$enforce_stmt->execute()) throw new Exception("enforce execute: " . $enforce_stmt->error);
         $enforce_stats = $enforce_stmt->get_result()->fetch_assoc() ?: [];
         $enforce_stmt->close();
@@ -420,7 +424,8 @@ function create_collective_knowledge_decision($conn, $topic_id, $fallback_user_i
         $weighted_yes_percent = $weight_total > 0 ? round(($yes_weight / $weight_total) * 100, 2) : 0;
         $enforce_yes = (int)($enforce_stats['enforce_yes'] ?? 0);
         $enforce_no = (int)($enforce_stats['enforce_no'] ?? 0);
-        $acceptance_status = $raw_total === 0 ? 'no_votes' : ($yes_percent > 50 ? 'accepted' : 'not_accepted');
+        // با توجه به وزن تخصصی رأی‌ها، پذیرش جمعی نیز بر اساس اکثریت وزنی تعیین می‌شود.
+        $acceptance_status = $weight_total <= 0 ? 'no_votes' : ($weighted_yes_percent > 50 ? 'accepted' : 'not_accepted');
         $enforceability_status = $enforce_yes > $enforce_no ? 'enforceable' : ($enforce_no > $enforce_yes ? 'not_enforceable' : 'undecided');
 
         $purpose = in_array($topic['topic_purpose'], ['knowledge', 'execution', 'mixed'], true) ? $topic['topic_purpose'] : 'mixed';
@@ -440,8 +445,6 @@ function create_collective_knowledge_decision($conn, $topic_id, $fallback_user_i
 
         $creator_id = (int)$topic['user_id'] > 0 ? (int)$topic['user_id'] : (int)$fallback_user_id;
         $community_value = (int)$topic['community_id'];
-        $source_idea_id = $topic['idea_id'] !== null ? (int)$topic['idea_id'] : null;
-
         $entry_stmt = $conn->prepare("
             INSERT INTO collective_knowledge_entries
                 (title, entry_type, summary, content, evidence, visibility, community_id, source_topic_id, source_idea_id, created_by)
