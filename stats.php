@@ -22,9 +22,9 @@ $active_topic = $active_topic_q ? $active_topic_q->fetch_assoc() : null;
 
 // منطقی‌ترین ایده
 $top_idea_q = $conn->query("
-    SELECT content, rationality 
+    SELECT content, idea_rationality 
     FROM ideas 
-    ORDER BY rationality DESC 
+    ORDER BY idea_rationality DESC 
     LIMIT 1
 ");
 $top_idea = $top_idea_q ? $top_idea_q->fetch_assoc() : null;
@@ -72,7 +72,7 @@ $top_urgency = $top_urgency_q ? $top_urgency_q->fetch_assoc() : null;
 
     <?php if($top_idea): ?>
         <p>💡 منطقی‌ترین ایده: <b><?= htmlspecialchars($top_idea['content']) ?></b> 
-        (امتیاز: <?= $top_idea['rationality'] ?>)</p>
+        (امتیاز: <?= $top_idea['idea_rationality'] ?>)</p>
     <?php endif; ?>
 
     <?php if($top_priority): ?>
