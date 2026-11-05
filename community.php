@@ -707,7 +707,14 @@ document.addEventListener('DOMContentLoaded', function () {
 </script>
 
 </head>
-<body<?= (isset($community['name']) && trim($community['name']) === 'کشور') ? ' class="country-community-page"' : '' ?>>
+<body<?= (isset($community['name']) && trim($community['name']) === 'کشور') ? ' class="country-community-page"' : '' ?>
+<?php if ((int)$user_id === 27 && !empty($_SESSION['knowledge_draft_debug'])): ?>
+<div style="max-width:960px;margin:10px auto;padding:10px 12px;background:#fff8e1;border:1px solid #e5c76b;border-radius:8px;color:#594300;font:13px/1.9 Tahoma,Arial,sans-serif;direction:rtl;">
+<strong>گزارش موقت بررسی پرونده‌های دانش:</strong>
+<?= htmlspecialchars((string)$_SESSION['knowledge_draft_debug'], ENT_QUOTES, 'UTF-8') ?>
+</div>
+<?php endif; ?>
+>
 <div class="container">
 
 <?php if ($community): ?>
