@@ -121,7 +121,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
       if ($request_id<1 || !in_array($choice,['approve','reject','abstain'],true)) {
         $message='رأی معتبر نیست.';
       } else {
-        $rq=$conn->prepare("SELECT id FROM community_budget_requests WHERE id=? AND community_id=? AND topic_id=? AND idea_id=? AND execution_plan_id=? AND status='voting' LIMIT 1");
+        $rq=$conn->prepare("SELECT id FROM community_budget_requests WHERE id=? AND community_id=? AND topic_id=? AND idea_id=? AND execution_plan_id=? AND status='voting' AND vote_deadline>NOW() LIMIT 1");
         $pid=(int)$execution['id'];$rq->bind_param('iiiii',$request_id,$community_id,$topic_id,$idea_id,$pid);$rq->execute();
         $valid=(bool)$rq->get_result()->fetch_assoc();$rq->close();
         if (!$valid) $message='این درخواست مالی مربوط به همین طرح نیست یا رأی‌گیری آن باز نیست.';
