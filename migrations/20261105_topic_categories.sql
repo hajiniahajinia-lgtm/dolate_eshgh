@@ -32,9 +32,38 @@ ON DUPLICATE KEY UPDATE
     sort_order = VALUES(sort_order),
     is_active = 1;
 
-ALTER TABLE topics
-    ADD COLUMN category_id INT UNSIGNED NULL AFTER description,
-    ADD KEY idx_topics_community_category_open (community_id, category_id, closed);
+-- اجرای امن حتی در صورت باقی‌ماندن بخشی از تغییرات ساختاری پس از خطا
+SET @topic_category_column_exists = (
+    SELECT COUNT(*)
+    FROM information_schema.columns
+    WHERE table_schema = DATABASE()
+      AND table_name = 'topics'
+      AND column_name = 'category_id'
+);
+SET @topic_category_column_sql = IF(
+    @topic_category_column_exists = 0,
+    'ALTER TABLE topics ADD COLUMN category_id INT UNSIGNED NULL AFTER description',
+    'SELECT 1'
+);
+PREPARE topic_category_column_stmt FROM @topic_category_column_sql;
+EXECUTE topic_category_column_stmt;
+DEALLOCATE PREPARE topic_category_column_stmt;
+
+SET @topic_category_index_exists = (
+    SELECT COUNT(*)
+    FROM information_schema.statistics
+    WHERE table_schema = DATABASE()
+      AND table_name = 'topics'
+      AND index_name = 'idx_topics_community_category_open'
+);
+SET @topic_category_index_sql = IF(
+    @topic_category_index_exists = 0,
+    'ALTER TABLE topics ADD KEY idx_topics_community_category_open (community_id, category_id, closed)',
+    'SELECT 1'
+);
+PREPARE topic_category_index_stmt FROM @topic_category_index_sql;
+EXECUTE topic_category_index_stmt;
+DEALLOCATE PREPARE topic_category_index_stmt;
 
 UPDATE topics
 SET category_id = (SELECT id FROM topic_categories WHERE slug = 'other' LIMIT 1)
