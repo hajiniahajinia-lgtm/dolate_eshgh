@@ -14,6 +14,7 @@ if (PHP_SAPI !== 'cli') {
 
 require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/../community_member_removal_helpers.php';
+require_once __DIR__ . '/../expertise_maintenance.php';
 
 mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 $conn->set_charset('utf8mb4');
@@ -34,9 +35,16 @@ $summary = [
     'expertise_proposals_decided' => 0,
     'execution_elections_finalized' => 0,
     'member_removal_tables_ready' => false,
+    'expertise_applications_decided' => 0,
+    'expertise_domains_decided' => 0,
 ];
 
 try {
+    // Expired expertise applications and domain proposals are finalized only by this CLI task.
+    $expertiseSummary = expertise_finalize_expired($conn);
+    $summary['expertise_applications_decided'] = $expertiseSummary['applications'];
+    $summary['expertise_domains_decided'] = $expertiseSummary['domains'];
+
     // Expired member-removal requests are finalized only by this scheduled task.
     $summary['member_removal_tables_ready'] = community_removal_tables_ready($conn);
     if ($summary['member_removal_tables_ready']) {
