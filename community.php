@@ -1407,7 +1407,10 @@ try {
       <select id="topic-category-select" name="topic_category_id" required>
         <option value="">انتخاب دسته‌بندی</option>
         <?php
-        $topic_category_options = $conn->query("SELECT id, name FROM topic_categories WHERE is_active=1 ORDER BY sort_order ASC, name ASC");
+        $category_options_stmt = $conn->prepare("SELECT id, name, community_id FROM topic_categories WHERE is_active=1 AND (community_id IS NULL OR community_id=?) ORDER BY community_id IS NOT NULL ASC, sort_order ASC, name ASC");
+        $category_options_stmt->bind_param("i", $community['id']);
+        $category_options_stmt->execute();
+        $topic_category_options = $category_options_stmt->get_result();
         if ($topic_category_options) {
             while ($topic_category_option = $topic_category_options->fetch_assoc()) {
                 echo '<option value="' . (int)$topic_category_option['id'] . '">' .
@@ -1415,9 +1418,23 @@ try {
                     '</option>';
             }
             $topic_category_options->free();
+            $category_options_stmt->close();
         }
         ?>
       </select>
+      <details style="margin:8px 0;padding:8px;border:1px solid #d7e2ef;border-radius:7px;background:#f8fbff;">
+        <summary style="cursor:pointer;color:#205da8;font-weight:bold;">＋ افزودن دستهٔ اختصاصی این جامعه</summary>
+        <form action="add_topic_category.php" method="post" style="margin-top:8px;">
+          <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($community_duty_csrf, ENT_QUOTES, 'UTF-8') ?>">
+          <input type="hidden" name="community_id" value="<?= (int)$community['id'] ?>">
+          <label for="new-topic-category-name">نام دسته</label>
+          <input type="text" id="new-topic-category-name" name="category_name" maxlength="120" required placeholder="مثلاً آب و کشاورزی">
+          <label for="new-topic-category-description">توضیح (اختیاری)</label>
+          <textarea id="new-topic-category-description" name="category_description" maxlength="500" rows="2" placeholder="چه موضوعاتی در این دسته قرار می‌گیرند؟"></textarea>
+          <button type="submit">ثبت دسته برای این جامعه</button>
+        </form>
+        <small style="display:block;color:#667085;margin-top:5px;">این دسته فقط در همین جامعه نمایش داده می‌شود.</small>
+      </details>
       <div class="topic-field-hint"><span>دسته‌ای را انتخاب کنید که مسئله بیش از همه به آن مربوط است.</span></div>
       <label for="topic-expertise-domain" style="display:block;margin-top:8px;font-size:13px;">حوزهٔ تخصصی مرتبط (پیشنهادی)</label>
       <select id="topic-expertise-domain" name="expertise_domain_id">
@@ -1458,11 +1475,11 @@ $topic_category_query = $conn->prepare("
     SELECT c.id, c.name, COUNT(t.id) AS topic_count
     FROM topic_categories c
     LEFT JOIN topics t ON t.category_id=c.id AND t.community_id=? AND t.closed=0
-    WHERE c.is_active=1
+    WHERE c.is_active=1 AND (c.community_id IS NULL OR c.community_id=?)
     GROUP BY c.id, c.name, c.sort_order
     ORDER BY c.sort_order ASC, c.name ASC
 ");
-$topic_category_query->bind_param("i", $community['id']);
+$topic_category_query->bind_param("ii", $community['id'], $community['id']);
 $topic_category_query->execute();
 $topic_category_result = $topic_category_query->get_result();
 while ($topic_category_row = $topic_category_result->fetch_assoc()) {
