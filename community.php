@@ -133,6 +133,10 @@ $deadline = ($urgency > 0) ? $created + ($urgency * 24 * 60 * 60) : $created + (
     }
 }
 $topics_check->close();
+
+// نهایی‌سازی رأی‌های منقضی و ساخت پروندهٔ دانش، با همان منطق صفحهٔ رأی‌گیری.
+require_once __DIR__ . "/collective_knowledge_finalizer.php";
+finalize_collective_knowledge_for_community($conn, $community_id, $user_id);
 ?>
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
