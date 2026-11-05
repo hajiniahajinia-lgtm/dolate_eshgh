@@ -90,14 +90,30 @@ $priority = 0;
 $urgency_default_minutes = 3;
 $urgency_updated_at = date("Y-m-d H:i:s");
 
+// دسته‌بندی موضوع؛ دستهٔ نامعتبر پذیرفته نمی‌شود.
+$topic_category_id = (int)($_POST['topic_category_id'] ?? 0);
+$category_check = $conn->prepare("SELECT id FROM topic_categories WHERE id=? AND is_active=1 LIMIT 1");
+if (!$category_check) {
+    http_response_code(500);
+    exit("امکان بررسی دسته‌بندی موضوع وجود ندارد.");
+}
+$category_check->bind_param("i", $topic_category_id);
+$category_check->execute();
+$valid_category = $category_check->get_result()->fetch_assoc();
+$category_check->close();
+if (!$valid_category) {
+    http_response_code(400);
+    exit("لطفاً یک دسته‌بندی معتبر برای موضوع انتخاب کنید.");
+}
+
 $stmt = $conn->prepare("
-    INSERT INTO topics 
-    (community_id, title, description, user_id, priority, urgency, urgency_minutes, urgency_default_minutes, deadline, created_at, urgency_updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO topics
+    (community_id, title, description, user_id, priority, urgency, urgency_minutes, urgency_default_minutes, deadline, created_at, urgency_updated_at, category_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ");
 
 $stmt->bind_param(
-    "issiiiiisss",
+    "issiiiiisssi",
     $community_id,
     $title,
     $description,
@@ -108,7 +124,8 @@ $stmt->bind_param(
     $urgency_default_minutes,
     $deadline,
     $created_at,
-    $urgency_updated_at
+    $urgency_updated_at,
+    $topic_category_id
 );
 
 if ($stmt->execute()) {
