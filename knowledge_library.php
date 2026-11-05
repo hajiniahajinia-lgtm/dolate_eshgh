@@ -156,12 +156,14 @@ $entry = null;
 $revisions = [];
 
 if ($entry_id > 0) {
-    $stmt = $conn->prepare("SELECT k.*, u.username, c.name AS community_name, t.title AS source_topic_title, i.content AS source_idea_content
+    $stmt = $conn->prepare("SELECT k.*, u.username, c.name AS community_name, t.title AS source_topic_title, t.community_id AS source_topic_community_id,
+        i.content AS source_idea_content, it.id AS source_idea_topic_id, it.community_id AS source_idea_community_id
         FROM collective_knowledge_entries k
         JOIN users u ON u.id=k.created_by
         LEFT JOIN communities c ON c.id=k.community_id
         LEFT JOIN topics t ON t.id=k.source_topic_id
         LEFT JOIN ideas i ON i.id=k.source_idea_id
+        LEFT JOIN topics it ON it.id=i.topic_id
         WHERE k.id=? LIMIT 1");
     $stmt->bind_param('i', $entry_id);
     $stmt->execute();
@@ -190,7 +192,7 @@ if ($entry_id === 0) {
             SELECT 1 FROM community_members m WHERE m.community_id=k.community_id AND m.user_id=?
         ))) AND (?='' OR k.title LIKE ? OR k.summary LIKE ? OR k.content LIKE ?)
         ORDER BY k.updated_at DESC, k.id DESC LIMIT 100");
-    $stmt->bind_param('isssss', $user_id, $q, $like, $like, $like);
+    $stmt->bind_param('issss', $user_id, $q, $like, $like, $like);
     $stmt->execute();
     $entries = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
     $stmt->close();
@@ -267,8 +269,8 @@ textarea{resize:vertical}button,.button{display:inline-block;border:0;border-rad
 <h3>خلاصه</h3><p><?= nl2br(kl_h($entry['summary'])) ?></p>
 <h3>شرح و جزئیات</h3><div class="content"><?= kl_h($entry['content']) ?></div>
 <?php if (!empty($entry['evidence'])): ?><h3>شواهد و منابع</h3><div class="content"><?= kl_h($entry['evidence']) ?></div><?php endif; ?>
-<?php if (!empty($entry['source_topic_id'])): ?><p>موضوع مرتبط: <a href="community.php?id=<?= (int)($entry['community_id'] ?? 0) ?>#topic-<?= (int)$entry['source_topic_id'] ?>">موضوع شمارهٔ <?= (int)$entry['source_topic_id'] ?></a> — <?= kl_h($entry['source_topic_title'] ?? '') ?></p><?php endif; ?>
-<?php if (!empty($entry['source_idea_id'])): ?><p>ایدهٔ مرتبط: <?= (int)$entry['source_idea_id'] ?> — <?= kl_h(mb_substr(strip_tags((string)($entry['source_idea_content'] ?? '')),0,180,'UTF-8')) ?></p><?php endif; ?>
+<?php if (!empty($entry['source_topic_id'])): ?><p>موضوع مرتبط: <a href="community.php?id=<?= (int)($entry['source_topic_community_id'] ?? 0) ?>#topic-<?= (int)$entry['source_topic_id'] ?>">موضوع شمارهٔ <?= (int)$entry['source_topic_id'] ?></a> — <?= kl_h($entry['source_topic_title'] ?? '') ?></p><?php endif; ?>
+<?php if (!empty($entry['source_idea_id'])): ?><p>ایدهٔ مرتبط: <a href="community.php?id=<?= (int)($entry['source_idea_community_id'] ?? 0) ?>#topic-<?= (int)($entry['source_idea_topic_id'] ?? 0) ?>">مشاهدهٔ موضوع و ایدهٔ مرتبط</a> — <?= kl_h(mb_substr(strip_tags((string)($entry['source_idea_content'] ?? '')),0,180,'UTF-8')) ?></p><?php endif; ?>
 <div class="entry-actions"><a class="button secondary" href="knowledge_library.php">بازگشت به فهرست</a><?php if ((int)$entry['created_by']===$user_id): ?><a class="button" href="knowledge_library.php?id=<?= (int)$entry['id'] ?>&edit=1">ویرایش و تکمیل</a><?php endif; ?></div>
 </section>
 <?php endif; ?>
