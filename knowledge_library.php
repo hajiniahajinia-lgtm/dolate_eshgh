@@ -281,7 +281,7 @@ textarea{resize:vertical}button,.button{display:inline-block;border:0;border-rad
 <?php kl_render_form($csrf, $communities, $entry); ?>
 <h2 style="margin-top:20px">سابقهٔ نسخه‌ها</h2>
 <?php if (!$revisions): ?><p class="muted">هنوز نسخهٔ قبلی ثبت نشده است.</p><?php endif; ?>
-<?php foreach ($revisions as $rev): ?><details class="entry"><summary>نسخهٔ قبلی — <?= kl_h($rev['username']) ?> — <?= kl_h($rev['created_at']) ?></summary><p><strong><?= kl_h($rev['previous_title']) ?></strong></p><p><?= nl2br(kl_h($rev['previous_summary'])) ?></p><div class="content"><?= kl_h($rev['previous_content']) ?></div><?php if ($rev['revision_note']): ?><p class="muted">یادداشت ویرایش: <?= kl_h($rev['revision_note']) ?></p><?php endif; ?></details><?php endforeach; ?>
+<?php foreach ($revisions as $rev): ?><details class="entry"><summary>نسخهٔ قبلی — <?= kl_h($rev['username']) ?> — <?= kl_h($rev['created_at']) ?></summary><p><strong><?= kl_h($rev['previous_title']) ?></strong></p><p class="muted">نوع: <?= kl_h(kl_type_label($rev['previous_entry_type'])) ?> · دسترسی: <?= $rev['previous_visibility']==='public'?'عمومی':'ویژهٔ جامعهٔ شمارهٔ '.(int)$rev['previous_community_id'] ?> · وضعیت: <?= kl_h(kl_status_label($rev['previous_status'])) ?></p><p><?= nl2br(kl_h($rev['previous_summary'])) ?></p><div class="content"><?= kl_h($rev['previous_content']) ?></div><?php if ($rev['revision_note']): ?><p class="muted">یادداشت ویرایش: <?= kl_h($rev['revision_note']) ?></p><?php endif; ?></details><?php endforeach; ?>
 </section>
 <?php else: ?>
 <section class="panel">
