@@ -38,6 +38,8 @@ jobs:
           php -l archived_topics.php
           php -l votes.php
           php -l execution.php
+          php -l finance.php
+          php -l finance_helpers.php
           php -l expertise.php
           php -l give_score.php
           php -l expertise_maintenance.php
