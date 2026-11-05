@@ -115,16 +115,45 @@ function create_collective_knowledge_decision($conn, $topic_id, $fallback_user_i
 
         $creator_id = (int)$topic['user_id'] > 0 ? (int)$topic['user_id'] : (int)$fallback_user_id;
         $community_value = (int)$topic['community_id'];
-        $entry_stmt = $conn->prepare("
-            INSERT INTO collective_knowledge_entries
-                (title, entry_type, summary, content, evidence, visibility, community_id, source_topic_id, source_idea_id, created_by)
-            VALUES (?, ?, ?, ?, '', 'community', ?, ?, ?, ?)
+        // اگر موضوع از قبل پروندهٔ موقت داشته باشد، همان پرونده تکمیل می‌شود؛
+        // در غیر این صورت پروندهٔ نهایی تازه ساخته خواهد شد.
+        $draft_stmt = $conn->prepare("
+            SELECT id
+            FROM collective_knowledge_entries
+            WHERE source_topic_id=? AND title LIKE 'پروندهٔ در حال شکل‌گیری:%'
+            ORDER BY id ASC
+            LIMIT 1
+            FOR UPDATE
         ");
-        if (!$entry_stmt) throw new Exception("knowledge entry prepare: " . $conn->error);
-        $entry_stmt->bind_param("ssssiiii", $entry_title, $entry_type, $summary, $content, $community_value, $topic_id, $source_idea_id, $creator_id);
-        if (!$entry_stmt->execute()) throw new Exception("knowledge entry execute: " . $entry_stmt->error);
-        $entry_id = (int)$conn->insert_id;
-        $entry_stmt->close();
+        if (!$draft_stmt) throw new Exception("knowledge draft lookup prepare: " . $conn->error);
+        $draft_stmt->bind_param("i", $topic_id);
+        if (!$draft_stmt->execute()) throw new Exception("knowledge draft lookup execute: " . $draft_stmt->error);
+        $draft_row = $draft_stmt->get_result()->fetch_assoc();
+        $draft_stmt->close();
+
+        if ($draft_row) {
+            $entry_id = (int)$draft_row['id'];
+            $update_entry = $conn->prepare("
+                UPDATE collective_knowledge_entries
+                SET title=?, entry_type=?, summary=?, content=?, source_idea_id=?, status='unreviewed'
+                WHERE id=? AND source_topic_id=?
+            ");
+            if (!$update_entry) throw new Exception("knowledge draft update prepare: " . $conn->error);
+            $update_entry->bind_param("ssssiii", $entry_title, $entry_type, $summary, $content, $source_idea_id, $entry_id, $topic_id);
+            if (!$update_entry->execute()) throw new Exception("knowledge draft update execute: " . $update_entry->error);
+            $update_entry->close();
+        } else {
+            $entry_stmt = $conn->prepare("
+                INSERT INTO collective_knowledge_entries
+                    (title, entry_type, summary, content, evidence, visibility, community_id, source_topic_id, source_idea_id, created_by)
+                VALUES (?, ?, ?, ?, '', 'community', ?, ?, ?, ?)
+            ");
+            if (!$entry_stmt) throw new Exception("knowledge entry prepare: " . $conn->error);
+            $entry_stmt->bind_param("ssssiiii", $entry_title, $entry_type, $summary, $content, $community_value, $topic_id, $source_idea_id, $creator_id);
+            if (!$entry_stmt->execute()) throw new Exception("knowledge entry execute: " . $entry_stmt->error);
+            $entry_id = (int)$conn->insert_id;
+            $entry_stmt->close();
+        }
 
         $decision_stmt = $conn->prepare("
             INSERT INTO collective_knowledge_decisions
@@ -314,6 +343,113 @@ function finalize_collective_knowledge_for_community($conn, $community_id, $user
     return true;
 }
 
+
+
+// ایجاد تدریجی پرونده برای موضوعات باز؛ نتیجهٔ رأی یا تصمیم نهایی در این مرحله ثبت نمی‌شود.
+function ensure_collective_knowledge_drafts_for_community($conn, $community_id, $user_id, $limit = 10) {
+    $community_id = (int)$community_id;
+    $user_id = (int)$user_id;
+    $limit = max(1, min(10, (int)$limit));
+    if ($community_id <= 0 || $user_id <= 0) return 0;
+
+    $member_stmt = $conn->prepare("SELECT 1 FROM community_members WHERE community_id=? AND user_id=? LIMIT 1");
+    if (!$member_stmt) return 0;
+    $member_stmt->bind_param("ii", $community_id, $user_id);
+    if (!$member_stmt->execute()) {
+        $member_stmt->close();
+        return 0;
+    }
+    $is_member = (bool)$member_stmt->get_result()->fetch_row();
+    $member_stmt->close();
+    if (!$is_member) return 0;
+
+    $sql = "
+        SELECT t.id
+        FROM topics t
+        WHERE t.community_id=? AND t.closed=0
+          AND NOT EXISTS (
+              SELECT 1 FROM collective_knowledge_entries e
+              WHERE e.source_topic_id=t.id
+          )
+          AND NOT EXISTS (
+              SELECT 1 FROM collective_knowledge_decisions d
+              WHERE d.topic_id=t.id
+          )
+        ORDER BY t.id DESC
+        LIMIT " . $limit;
+    $stmt = $conn->prepare($sql);
+    if (!$stmt) {
+        error_log("Knowledge draft selection prepare failed: " . $conn->error);
+        return 0;
+    }
+    $stmt->bind_param("i", $community_id);
+    if (!$stmt->execute()) {
+        error_log("Knowledge draft selection execute failed: " . $stmt->error);
+        $stmt->close();
+        return 0;
+    }
+    $result = $stmt->get_result();
+    $topic_ids = [];
+    while ($row = $result->fetch_assoc()) $topic_ids[] = (int)$row['id'];
+    $stmt->close();
+
+    $created = 0;
+    foreach ($topic_ids as $topic_id) {
+        if (!$conn->begin_transaction()) continue;
+        try {
+            $lock = $conn->prepare("SELECT id, title, description, topic_purpose, user_id, community_id FROM topics WHERE id=? AND community_id=? AND closed=0 LIMIT 1 FOR UPDATE");
+            if (!$lock) throw new Exception("topic lock prepare: " . $conn->error);
+            $lock->bind_param("ii", $topic_id, $community_id);
+            if (!$lock->execute()) throw new Exception("topic lock execute: " . $lock->error);
+            $topic = $lock->get_result()->fetch_assoc();
+            $lock->close();
+            if (!$topic) {
+                $conn->commit();
+                continue;
+            }
+
+            $exists = $conn->prepare("SELECT id FROM collective_knowledge_entries WHERE source_topic_id=? LIMIT 1");
+            if (!$exists) throw new Exception("draft duplicate check prepare: " . $conn->error);
+            $exists->bind_param("i", $topic_id);
+            if (!$exists->execute()) throw new Exception("draft duplicate check execute: " . $exists->error);
+            $existing_entry = $exists->get_result()->fetch_assoc();
+            $exists->close();
+            if ($existing_entry) {
+                $conn->commit();
+                continue;
+            }
+
+            $purpose = in_array($topic['topic_purpose'], ['knowledge', 'execution', 'mixed'], true) ? $topic['topic_purpose'] : 'mixed';
+            $entry_type = $purpose === 'knowledge' ? 'research' : ($purpose === 'execution' ? 'solution' : 'lesson');
+            $purpose_label = $purpose === 'knowledge' ? 'شناختی' : ($purpose === 'execution' ? 'اجرایی' : 'ترکیبی');
+            $topic_title = trim((string)$topic['title']);
+            $entry_title = mb_substr('پروندهٔ در حال شکل‌گیری: ' . $topic_title, 0, 180, 'UTF-8');
+            $summary = mb_substr('پروندهٔ دانشِ در حال شکل‌گیری برای موضوع «' . $topic_title . '». این پرونده تا پایان بررسی و رأی موضوع تکمیل می‌شود.', 0, 1000, 'UTF-8');
+            $content = "موضوع: " . $topic_title . "\n\n";
+            $content .= "ماهیت موضوع: " . $purpose_label . "\n\n";
+            $content .= "شرح موضوع:\n" . trim((string)$topic['description']) . "\n\n";
+            $content .= "وضعیت: در حال شکل‌گیری؛ هنوز هیچ ایده‌ای به‌عنوان منتخب نهایی و هیچ نتیجه‌ای به‌عنوان رأی جمعی ثبت نشده است.\n\n";
+            $content .= "ایده‌ها، نقدها، بازخوردها و شواهد مرتبط در طول بررسی موضوع به این پرونده متصل می‌شوند.";
+
+            $creator_id = (int)$topic['user_id'] > 0 ? (int)$topic['user_id'] : $user_id;
+            $insert = $conn->prepare("
+                INSERT INTO collective_knowledge_entries
+                    (title, entry_type, summary, content, evidence, visibility, community_id, source_topic_id, source_idea_id, created_by)
+                VALUES (?, ?, ?, ?, '', 'community', ?, ?, NULL, ?)
+            ");
+            if (!$insert) throw new Exception("draft insert prepare: " . $conn->error);
+            $insert->bind_param("ssssiii", $entry_title, $entry_type, $summary, $content, $community_id, $topic_id, $creator_id);
+            if (!$insert->execute()) throw new Exception("draft insert execute: " . $insert->error);
+            $insert->close();
+            if (!$conn->commit()) throw new Exception("draft commit failed");
+            $created++;
+        } catch (Throwable $e) {
+            $conn->rollback();
+            error_log("Knowledge draft creation failed for topic " . $topic_id . ": " . $e->getMessage());
+        }
+    }
+    return $created;
+}
 
 // تکمیل تدریجی پرونده‌های تاریخی؛ فقط برای موضوعات نهایی‌شده و بدون پرونده.
 // این تابع برنده یا رأی‌ها را تغییر نمی‌دهد و در هر بار اجرا حداکثر ۱۰ پرونده می‌سازد.
