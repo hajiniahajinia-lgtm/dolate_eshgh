@@ -1,6 +1,7 @@
 -- کتابخانه دانش جمعی؛ این مهاجرت فقط جداول جدید می‌سازد و داده‌ای را حذف یا تغییر نمی‌دهد.
 CREATE TABLE IF NOT EXISTS collective_knowledge_entries (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    version_no INT UNSIGNED NOT NULL DEFAULT 1,
     title VARCHAR(180) NOT NULL,
     entry_type ENUM('experience','solution','research','lesson') NOT NULL,
     summary VARCHAR(1000) NOT NULL,
@@ -46,9 +47,7 @@ CREATE TABLE IF NOT EXISTS collective_knowledge_revisions (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
--- شمارهٔ نسخه باعث می‌شود ارزیابی‌های نسخه‌های قبلی با نسخهٔ تازه مخلوط نشوند.
-ALTER TABLE collective_knowledge_entries
-    ADD COLUMN version_no INT UNSIGNED NOT NULL DEFAULT 1 AFTER id;
+-- هر ارزیابی به نسخهٔ مشخصی از مدخل تعلق دارد.
 
 -- هر عضو برای هر نسخه فقط یک ارزیابی دارد؛ تغییر رأی، سابقهٔ همان رأی را به‌روز می‌کند.
 CREATE TABLE IF NOT EXISTS collective_knowledge_reviews (
