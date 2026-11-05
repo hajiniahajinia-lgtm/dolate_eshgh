@@ -369,6 +369,25 @@ if ($entry_id > 0) {
         exit('این مدخل فقط برای اعضای جامعهٔ مربوط قابل مشاهده است.');
     }
 
+    // همهٔ ایده‌های موضوع مادر را مستقیم از جدول اصلی می‌خوانیم؛ متن موازی ساخته نمی‌شود.
+    $source_ideas = [];
+    if ($entry && !empty($entry['source_topic_id']) && $can_view_source_topic) {
+        $ideas_stmt = $conn->prepare("
+            SELECT i.id, i.content, i.user_id, u.username
+            FROM ideas i
+            JOIN users u ON u.id = i.user_id
+            WHERE i.topic_id = ?
+            ORDER BY i.id ASC
+        ");
+        if ($ideas_stmt) {
+            $source_topic_id = (int)$entry['source_topic_id'];
+            $ideas_stmt->bind_param('i', $source_topic_id);
+            $ideas_rows = kl_fetch_all($ideas_stmt);
+            if ($ideas_rows !== null) $source_ideas = $ideas_rows;
+            $ideas_stmt->close();
+        }
+    }
+
     // بازخوردهای تمام ایده‌های موضوع مادر را بدون کپی‌کردن داده‌ها در پرونده نشان بده.
     $source_feedback = [];
     if ($entry && !empty($entry['source_topic_id']) && $can_view_source_topic) {
@@ -526,6 +545,18 @@ textarea{resize:vertical}button,.button{display:inline-block;border:0;border-rad
 <?php if (!empty($entry['source_idea_id']) && $can_view_source_idea): ?><p>ایدهٔ مرتبط: <a href="community.php?id=<?= (int)($entry['source_idea_community_id'] ?? 0) ?>#topic-<?= (int)($entry['source_idea_topic_id'] ?? 0) ?>">مشاهدهٔ موضوع و ایدهٔ مرتبط</a> — <?= kl_h(mb_substr(strip_tags((string)($entry['source_idea_content'] ?? '')),0,180,'UTF-8')) ?></p><?php elseif (!empty($entry['source_idea_id'])): ?><p class="muted">ایدهٔ مرجع در جامعهٔ دیگری است؛ برای مشاهده باید عضو آن جامعه باشید.</p><?php endif; ?>
 
 <?php if (!empty($entry['source_topic_id']) && $can_view_source_topic): ?>
+<section class="panel">
+<h3>ایده‌های ثبت‌شده برای این موضوع (<?= count($source_ideas) ?>)</h3>
+<p class="muted">ایده‌ها از جدول اصلی خوانده می‌شوند؛ چه منتخب باشند و چه رقیب، در پرونده باقی می‌مانند.</p>
+<?php if (!$source_ideas): ?><p class="muted">هنوز ایده‌ای برای این موضوع ثبت نشده است.</p><?php endif; ?>
+<?php foreach ($source_ideas as $idea_item): ?>
+<article class="entry">
+<strong>ایدهٔ شمارهٔ <?= (int)$idea_item['id'] ?></strong>
+<div class="content"><?= nl2br(kl_h($idea_item['content'])) ?></div>
+<p class="muted">ثبت‌کننده: <?= kl_h($idea_item['username']) ?></p>
+</article>
+<?php endforeach; ?>
+</section>
 <section class="panel">
 <h3>نقدها و بازخوردهای همهٔ ایده‌های این موضوع (<?= count($source_feedback) ?>)</h3>
 <p class="muted">این بازخوردها مستقیماً از سوابق موضوع خوانده می‌شوند؛ ایدهٔ منتخب یا رقیب بودن، باعث حذف آن‌ها نمی‌شود. وضعیت بررسی نیز همان وضعیت ثبت‌شده در جامعه است.</p>
