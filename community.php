@@ -1422,19 +1422,6 @@ try {
         }
         ?>
       </select>
-      <details style="margin:8px 0;padding:8px;border:1px solid #d7e2ef;border-radius:7px;background:#f8fbff;">
-        <summary style="cursor:pointer;color:#205da8;font-weight:bold;">＋ افزودن دستهٔ اختصاصی این جامعه</summary>
-        <form action="add_topic_category.php" method="post" style="margin-top:8px;">
-          <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($community_duty_csrf, ENT_QUOTES, 'UTF-8') ?>">
-          <input type="hidden" name="community_id" value="<?= (int)$community['id'] ?>">
-          <label for="new-topic-category-name">نام دسته</label>
-          <input type="text" id="new-topic-category-name" name="category_name" maxlength="120" required placeholder="مثلاً آب و کشاورزی">
-          <label for="new-topic-category-description">توضیح (اختیاری)</label>
-          <textarea id="new-topic-category-description" name="category_description" maxlength="500" rows="2" placeholder="چه موضوعاتی در این دسته قرار می‌گیرند؟"></textarea>
-          <button type="submit">ثبت دسته برای این جامعه</button>
-        </form>
-        <small style="display:block;color:#667085;margin-top:5px;">این دسته فقط در همین جامعه نمایش داده می‌شود.</small>
-      </details>
       <div class="topic-field-hint"><span>دسته‌ای را انتخاب کنید که مسئله بیش از همه به آن مربوط است.</span></div>
       <label for="topic-expertise-domain" style="display:block;margin-top:8px;font-size:13px;">حوزهٔ تخصصی مرتبط (پیشنهادی)</label>
       <select id="topic-expertise-domain" name="expertise_domain_id">
@@ -1464,6 +1451,19 @@ try {
       <div class="topic-field-hint"><span>راه‌حل یا پیشنهاد خود را بنویسید؛ می‌توانید این بخش را خالی بگذارید.</span><span class="topic-char-count" data-for="topic-initial-idea">۰ از ۲۵٬۰۰۰ نویسه</span></div>
       <button type="submit">✅ ثبت موضوع و طرح ایده</button>
     </form>
+    <details style="margin-top:10px;padding:10px;border:1px solid #d7e2ef;border-radius:7px;background:#f8fbff;">
+      <summary style="cursor:pointer;color:#205da8;font-weight:bold;">＋ افزودن دستهٔ اختصاصی این جامعه</summary>
+      <form action="add_topic_category.php" method="post" style="margin-top:8px;">
+        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($community_duty_csrf, ENT_QUOTES, 'UTF-8') ?>">
+        <input type="hidden" name="community_id" value="<?= (int)$community['id'] ?>">
+        <label for="new-topic-category-name">نام دسته</label>
+        <input type="text" id="new-topic-category-name" name="category_name" maxlength="120" required placeholder="مثلاً آب و کشاورزی">
+        <label for="new-topic-category-description">توضیح (اختیاری)</label>
+        <textarea id="new-topic-category-description" name="category_description" maxlength="500" rows="2" placeholder="چه موضوعاتی در این دسته قرار می‌گیرند؟"></textarea>
+        <button type="submit">ثبت دسته برای این جامعه</button>
+      </form>
+      <small style="display:block;color:#667085;margin-top:5px;">این دسته فقط در همین جامعه نمایش داده می‌شود.</small>
+    </details>
   </div>
 </details>
 
