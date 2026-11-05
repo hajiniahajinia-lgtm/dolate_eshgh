@@ -1202,25 +1202,7 @@ if ($is_community_member) {
 // در تساوی، وضعیت pending باقی می‌ماند و رأی‌گیری بسته می‌شود.
 $topic_expertise_proposals = [];
 try {
-    $finalize_expertise = $conn->prepare("
-        UPDATE topic_expertise_proposals p
-        SET status = CASE
-            WHEN (SELECT COUNT(*) FROM topic_expertise_proposal_votes v WHERE v.proposal_id=p.id AND v.vote='yes')
-               > (SELECT COUNT(*) FROM topic_expertise_proposal_votes v WHERE v.proposal_id=p.id AND v.vote='no') THEN 'approved'
-            WHEN (SELECT COUNT(*) FROM topic_expertise_proposal_votes v WHERE v.proposal_id=p.id AND v.vote='no')
-               > (SELECT COUNT(*) FROM topic_expertise_proposal_votes v WHERE v.proposal_id=p.id AND v.vote='yes') THEN 'rejected'
-            ELSE 'pending'
-        END,
-        decided_at = CASE
-            WHEN (SELECT COUNT(*) FROM topic_expertise_proposal_votes v WHERE v.proposal_id=p.id AND v.vote='yes')
-               <> (SELECT COUNT(*) FROM topic_expertise_proposal_votes v WHERE v.proposal_id=p.id AND v.vote='no') THEN NOW()
-            ELSE NULL
-        END
-        WHERE p.community_id=? AND p.status='pending' AND p.expires_at IS NOT NULL AND p.expires_at<=NOW()
-    ");
-    $finalize_expertise->bind_param("i", $community_id);
-    $finalize_expertise->execute();
-    $finalize_expertise->close();
+    // وضعیت پیشنهادهای منقضی فقط در کار زمان‌بندی‌شده به‌روزرسانی می‌شود؛ GET صرفاً نمایش می‌دهد.
 
     $expertise_list = $conn->prepare("
         SELECT p.id,p.status,p.expires_at,p.proposed_at,p.decided_at,
