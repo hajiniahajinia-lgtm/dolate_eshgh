@@ -439,7 +439,7 @@ function create_collective_knowledge_decision($conn, $topic_id, $fallback_user_i
         $content .= "ماهیت موضوع: " . $purpose_label . "\n\n";
         $content .= "شرح موضوع:\n" . trim((string)$topic['description']) . "\n\n";
         $content .= "ایدهٔ منتخب بر اساس ارزیابی ثبت‌شده در سامانه:\n" . ($idea_content !== null && trim($idea_content) !== '' ? $idea_content : 'برای این موضوع ایده‌ای به‌عنوان منتخب ثبت نشده است.') . "\n\n";
-        $content .= "نتیجهٔ رأی پذیرش جمعی: " . $acceptance_status . "؛ موافق: " . $yes_count . "، مخالف: " . $no_count . "، درصد موافق: " . $yes_percent . "٪.\n";
+        $content .= "نتیجهٔ رأی پذیرش جمعی: " . $acceptance_status . "؛ موافق: " . $yes_count . "، مخالف: " . $no_count . "، درصد موافق خام: " . $yes_percent . "٪، درصد موافق وزنی: " . $weighted_yes_percent . "٪.\n";
         $content .= "نتیجهٔ رأی لازم‌الاجرا بودن: " . $enforceability_status . "؛ موافق اجرا: " . $enforce_yes . "، مخالف اجرا: " . $enforce_no . ".\n\n";
         $content .= "یادآوری: انتخاب جمعی یا برتری یک ایده به‌تنهایی به معنای اثبات علمی یا تجربی آن نیست. شواهد و نتایج اجرا باید جداگانه بررسی و تکمیل شوند.";
 
