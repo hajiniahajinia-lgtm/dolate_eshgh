@@ -206,7 +206,10 @@ if($_SERVER['REQUEST_METHOD'] === 'POST'){
             exit;
         }
 
-        if (!$conn->query("SHOW TABLES LIKE 'topic_voting_urgency_votes'")->num_rows) {
+        $urgency_table_check = $conn->query("SHOW TABLES LIKE 'topic_voting_urgency_votes'");
+        $urgency_table_ready = $urgency_table_check && $urgency_table_check->num_rows > 0;
+        if ($urgency_table_check) $urgency_table_check->close();
+        if (!$urgency_table_ready) {
             echo json_encode(['success'=>false,'message'=>'ساختار رأی فوریت نصب نشده است؛ مدیر سامانه باید migration مربوط را اجرا کند.']);
             exit;
         }
