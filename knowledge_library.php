@@ -45,6 +45,99 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     $action = (string)($_POST['action'] ?? '');
+
+    // ارزیابی مستقل اعضا برای نسخهٔ جاری مدخل
+    if ($action === 'review') {
+        $review_entry_id = (int)($_POST['entry_id'] ?? 0);
+        $review_vote = (string)($_POST['review_vote'] ?? '');
+        $review_reason = trim((string)($_POST['review_reason'] ?? ''));
+        $review_error = false;
+
+        if (!in_array($review_vote, ['approve', 'reject', 'revise'], true) ||
+            mb_strlen($review_reason, 'UTF-8') < 5 ||
+            mb_strlen($review_reason, 'UTF-8') > 4000) {
+            $review_error = true;
+        } else {
+            $review_check = $conn->prepare('SELECT id, version_no, created_by, visibility, community_id FROM collective_knowledge_entries WHERE id=? LIMIT 1');
+            if (!$review_check) {
+                $review_error = true;
+            } else {
+                $review_check->bind_param('i', $review_entry_id);
+                $review_check->execute();
+                $review_entry = $review_check->get_result()->fetch_assoc();
+                $review_check->close();
+
+                if (!$review_entry ||
+                    (int)$review_entry['created_by'] === $user_id ||
+                    ($review_entry['visibility'] === 'community' && !kl_member($conn, (int)$review_entry['community_id'], $user_id))) {
+                    $review_error = true;
+                } elseif (!$conn->begin_transaction()) {
+                    $review_error = true;
+                } else {
+                    $version_no = (int)$review_entry['version_no'];
+                    $save_review = $conn->prepare('INSERT INTO collective_knowledge_reviews (entry_id, version_no, reviewer_user_id, vote, reason) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE vote=VALUES(vote), reason=VALUES(reason), updated_at=CURRENT_TIMESTAMP');
+                    if (!$save_review) {
+                        $conn->rollback();
+                        $review_error = true;
+                    } else {
+                        $save_review->bind_param('iiiss', $review_entry_id, $version_no, $user_id, $review_vote, $review_reason);
+                        if (!$save_review->execute()) {
+                            $conn->rollback();
+                            $review_error = true;
+                        }
+                        $save_review->close();
+                    }
+
+                    if (!$review_error) {
+                        $count_review = $conn->prepare('SELECT vote, COUNT(*) AS total FROM collective_knowledge_reviews WHERE entry_id=? AND version_no=? GROUP BY vote');
+                        if (!$count_review) {
+                            $conn->rollback();
+                            $review_error = true;
+                        } else {
+                            $count_review->bind_param('ii', $review_entry_id, $version_no);
+                            $count_review->execute();
+                            $count_result = $count_review->get_result();
+                            $counts = ['approve'=>0, 'reject'=>0, 'revise'=>0];
+                            while ($count_row = $count_result->fetch_assoc()) {
+                                $counts[$count_row['vote']] = (int)$count_row['total'];
+                            }
+                            $count_review->close();
+                            $total_reviews = array_sum($counts);
+                            $new_status = 'unreviewed';
+                            if ($total_reviews > 0) {
+                                $new_status = 'under_review';
+                                $threshold = (int)ceil($total_reviews * 2 / 3);
+                                if ($total_reviews >= 3) {
+                                    if ($counts['approve'] >= $threshold) $new_status = 'verified';
+                                    elseif ($counts['reject'] >= $threshold) $new_status = 'rejected';
+                                    elseif ($counts['revise'] >= $threshold) $new_status = 'needs_update';
+                                }
+                            }
+                            $update_status = $conn->prepare('UPDATE collective_knowledge_entries SET status=? WHERE id=? AND version_no=?');
+                            if (!$update_status) {
+                                $conn->rollback();
+                                $review_error = true;
+                            } else {
+                                $update_status->bind_param('sii', $new_status, $review_entry_id, $version_no);
+                                if (!$update_status->execute() || !$conn->commit()) {
+                                    $conn->rollback();
+                                    $review_error = true;
+                                }
+                                $update_status->close();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if ($review_error) {
+            header('Location: knowledge_library.php?id=' . $review_entry_id . '&review_error=1');
+        } else {
+            header('Location: knowledge_library.php?id=' . $review_entry_id . '&reviewed=1');
+        }
+        exit;
+    }
     $title = trim((string)($_POST['title'] ?? ''));
     $type = (string)($_POST['entry_type'] ?? '');
     $summary = trim((string)($_POST['summary'] ?? ''));
@@ -133,7 +226,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $rev->close();
             }
             if ($error === '') {
-                $update = $conn->prepare("UPDATE collective_knowledge_entries SET title=?, entry_type=?, summary=?, content=?, evidence=?, visibility=?, community_id=?, source_topic_id=?, source_idea_id=?, updated_by=?, status='unreviewed' WHERE id=? AND created_by=?");
+                $update = $conn->prepare("UPDATE collective_knowledge_entries SET title=?, entry_type=?, summary=?, content=?, evidence=?, visibility=?, community_id=?, source_topic_id=?, source_idea_id=?, updated_by=?, version_no=version_no+1, status='unreviewed' WHERE id=? AND created_by=?");
                 if (!$update) {
                     $conn->rollback();
                     $error = 'آماده‌سازی ویرایش ناموفق بود؛ متن قبلی حفظ شد.';
@@ -159,7 +252,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 if (isset($_GET['saved'])) $message = 'مدخل دانش با موفقیت ثبت شد.';
-if (isset($_GET['updated'])) $message = 'مدخل به‌روزرسانی شد؛ وضعیت آن برای بررسی دوباره به «بررسی‌نشده» برگشت.';
+if (isset($_GET['updated'])) $message = 'مدخل به‌روزرسانی شد؛ ارزیابی‌های نسخهٔ قبلی برای نسخهٔ تازه محاسبه نمی‌شوند.';
+if (isset($_GET['reviewed'])) $message = 'ارزیابی شما ثبت شد؛ با رسیدن تعداد ارزیابی‌ها به حد نصاب، وضعیت اعتبار به‌روزرسانی می‌شود.';
+if (isset($_GET['review_error'])) $error = 'ارزیابی ثبت نشد؛ مطمئن شوید که نویسندهٔ مدخل نیستید، عضو جامعهٔ مربوط هستید و دلیل کافی نوشته‌اید.';
 
 $communities = [];
 $cs = $conn->prepare('SELECT c.id, c.name FROM communities c JOIN community_members m ON m.community_id=c.id WHERE m.user_id=? ORDER BY c.name');
@@ -177,6 +272,8 @@ $entry_id = (int)($_GET['id'] ?? 0);
 $edit_mode = isset($_GET['edit']) && $_GET['edit'] === '1';
 $entry = null;
 $revisions = [];
+$review_counts = ['approve'=>0, 'reject'=>0, 'revise'=>0];
+$my_review = null;
 
 if ($entry_id > 0) {
     $stmt = $conn->prepare("SELECT k.*, u.username, c.name AS community_name, t.title AS source_topic_title, t.community_id AS source_topic_community_id,
@@ -195,6 +292,23 @@ if ($entry_id > 0) {
     if ($entry && $entry['visibility'] === 'community' && !kl_member($conn, (int)$entry['community_id'], $user_id)) {
         http_response_code(403);
         exit('این مدخل فقط برای اعضای جامعهٔ مربوط قابل مشاهده است.');
+    }
+    if ($entry) {
+        $review_count_stmt = $conn->prepare('SELECT vote, COUNT(*) AS total FROM collective_knowledge_reviews WHERE entry_id=? AND version_no=? GROUP BY vote');
+        $current_version = (int)$entry['version_no'];
+        $review_count_stmt->bind_param('ii', $entry_id, $current_version);
+        $review_count_stmt->execute();
+        $review_count_result = $review_count_stmt->get_result();
+        while ($review_count_row = $review_count_result->fetch_assoc()) {
+            $review_counts[$review_count_row['vote']] = (int)$review_count_row['total'];
+        }
+        $review_count_stmt->close();
+
+        $my_review_stmt = $conn->prepare('SELECT vote, reason FROM collective_knowledge_reviews WHERE entry_id=? AND version_no=? AND reviewer_user_id=? LIMIT 1');
+        $my_review_stmt->bind_param('iii', $entry_id, $current_version, $user_id);
+        $my_review_stmt->execute();
+        $my_review = $my_review_stmt->get_result()->fetch_assoc();
+        $my_review_stmt->close();
     }
     if ($entry && $edit_mode && (int)$entry['created_by'] === $user_id) {
         $rs = $conn->prepare('SELECT r.*, u.username FROM collective_knowledge_revisions r JOIN users u ON u.id=r.editor_user_id WHERE r.entry_id=? ORDER BY r.id DESC LIMIT 20');
@@ -289,11 +403,32 @@ textarea{resize:vertical}button,.button{display:inline-block;border:0;border-rad
 <section class="panel">
 <div class="top"><h2><?= kl_h($entry['title']) ?></h2><span class="tag"><?= kl_h(kl_type_label($entry['entry_type'])) ?></span></div>
 <p class="muted">ثبت‌کننده: <?= kl_h($entry['username']) ?> · <?= $entry['visibility']==='public'?'دانش عمومی':'ویژهٔ جامعهٔ '.kl_h($entry['community_name'] ?? '') ?> · وضعیت: <?= kl_h(kl_status_label($entry['status'])) ?></p>
+<p class="muted">نسخهٔ جاری: <?= (int)$entry['version_no'] ?> · ارزیابی‌ها: تأیید <?= (int)$review_counts['approve'] ?>، مخالفت <?= (int)$review_counts['reject'] ?>، نیازمند اصلاح <?= (int)$review_counts['revise'] ?></p>
 <h3>خلاصه</h3><p><?= nl2br(kl_h($entry['summary'])) ?></p>
 <h3>شرح و جزئیات</h3><div class="content"><?= kl_h($entry['content']) ?></div>
 <?php if (!empty($entry['evidence'])): ?><h3>شواهد و منابع</h3><div class="content"><?= kl_h($entry['evidence']) ?></div><?php endif; ?>
 <?php if (!empty($entry['source_topic_id'])): ?><p>موضوع مرتبط: <a href="community.php?id=<?= (int)($entry['source_topic_community_id'] ?? 0) ?>#topic-<?= (int)$entry['source_topic_id'] ?>">موضوع شمارهٔ <?= (int)$entry['source_topic_id'] ?></a> — <?= kl_h($entry['source_topic_title'] ?? '') ?></p><?php endif; ?>
 <?php if (!empty($entry['source_idea_id'])): ?><p>ایدهٔ مرتبط: <a href="community.php?id=<?= (int)($entry['source_idea_community_id'] ?? 0) ?>#topic-<?= (int)($entry['source_idea_topic_id'] ?? 0) ?>">مشاهدهٔ موضوع و ایدهٔ مرتبط</a> — <?= kl_h(mb_substr(strip_tags((string)($entry['source_idea_content'] ?? '')),0,180,'UTF-8')) ?></p><?php endif; ?>
+<?php if ((int)$entry['created_by'] !== $user_id): ?>
+<section class="panel">
+<h3>ارزیابی جمعی این نسخه</h3>
+<p class="muted">ارزیابی باید همراه با دلیل باشد. هر عضو برای هر نسخه یک رأی دارد و می‌تواند آن را اصلاح کند. نتیجهٔ اعتبار فقط با دست‌کم ۳ ارزیابی و موافقت دوسوم ارزیابان تعیین می‌شود.</p>
+<form method="post" class="entry-form">
+<input type="hidden" name="csrf_token" value="<?= kl_h($csrf) ?>">
+<input type="hidden" name="action" value="review">
+<input type="hidden" name="entry_id" value="<?= (int)$entry['id'] ?>">
+<label>نظر شما</label>
+<select name="review_vote" required>
+<option value="approve" <?= (($my_review['vote'] ?? '')==='approve'?'selected':'') ?>>تأیید؛ با دلیل</option>
+<option value="reject" <?= (($my_review['vote'] ?? '')==='reject'?'selected':'') ?>>مخالفت؛ با دلیل</option>
+<option value="revise" <?= (($my_review['vote'] ?? '')==='revise'?'selected':'') ?>>نیازمند اصلاح؛ با دلیل</option>
+</select>
+<label>دلیل و شواهد ارزیابی (حداقل ۵ نویسه)</label>
+<textarea name="review_reason" rows="3" maxlength="4000" required><?= kl_h($my_review['reason'] ?? '') ?></textarea>
+<button type="submit">ثبت ارزیابی</button>
+</form>
+</section>
+<?php endif; ?>
 <div class="entry-actions"><a class="button secondary" href="knowledge_library.php">بازگشت به فهرست</a><?php if ((int)$entry['created_by']===$user_id): ?><a class="button" href="knowledge_library.php?id=<?= (int)$entry['id'] ?>&edit=1">ویرایش و تکمیل</a><?php endif; ?></div>
 </section>
 <?php endif; ?>
