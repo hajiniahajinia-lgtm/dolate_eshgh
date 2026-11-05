@@ -206,6 +206,37 @@ if($_SERVER['REQUEST_METHOD'] === 'POST'){
             exit;
         }
 
+        // فقط عضو همان جامعه و فقط برای موضوعِ واردشده به مرحلهٔ رأی‌گیری نهایی می‌تواند فوریت پیشنهاد کند.
+        $valid_topic_stmt = $conn->prepare("
+            SELECT t.id
+            FROM topics t
+            JOIN topic_final_votes tfv ON tfv.topic_id=t.id
+            LEFT JOIN topic_voting_meta m ON m.topic_id=t.id
+            WHERE t.id=? AND t.community_id=? AND t.closed=1
+              AND (m.finalized IS NULL OR m.finalized=0)
+            LIMIT 1
+        ");
+        $valid_topic_stmt->bind_param("ii", $topic_id, $community_id);
+        $valid_topic_stmt->execute();
+        $valid_topic = (bool)$valid_topic_stmt->get_result()->fetch_row();
+        $valid_topic_stmt->close();
+        if (!$valid_topic) {
+            http_response_code(400);
+            echo json_encode(['success'=>false,'message'=>'این موضوع در مرحلهٔ رأی‌گیری فوریت نیست.']);
+            exit;
+        }
+
+        $member_stmt = $conn->prepare("SELECT 1 FROM community_members WHERE community_id=? AND user_id=? LIMIT 1");
+        $member_stmt->bind_param("ii", $community_id, $user_id);
+        $member_stmt->execute();
+        $is_member = (bool)$member_stmt->get_result()->fetch_row();
+        $member_stmt->close();
+        if (!$is_member) {
+            http_response_code(403);
+            echo json_encode(['success'=>false,'message'=>'فقط اعضای جامعه می‌توانند دربارهٔ فوریت رأی بدهند.']);
+            exit;
+        }
+
         $urgency_table_check = $conn->prepare("SELECT 1 FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='topic_voting_urgency_votes' LIMIT 1");
         $urgency_table_check->execute();
         $urgency_table_ready = $urgency_table_check->get_result()->num_rows > 0;
