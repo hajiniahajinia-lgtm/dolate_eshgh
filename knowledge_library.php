@@ -27,25 +27,45 @@ function kl_status_label($status) {
     $labels = ['unreviewed'=>'بررسی‌نشده','under_review'=>'در حال بررسی','verified'=>'تأییدشده با شواهد','rejected'=>'ردشده با دلیل','needs_update'=>'نیازمند به‌روزرسانی'];
     return $labels[$status] ?? 'وضعیت نامشخص';
 }
+$GLOBALS['kl_db_read_error'] = false;
 function kl_fetch_one($stmt) {
-    if (!$stmt || !$stmt->execute()) return null;
+    if (!$stmt || !$stmt->execute()) {
+        $GLOBALS['kl_db_read_error'] = true;
+        return null;
+    }
     $result = $stmt->get_result();
-    return $result ? $result->fetch_assoc() : null;
+    if (!$result) {
+        $GLOBALS['kl_db_read_error'] = true;
+        return null;
+    }
+    return $result->fetch_assoc();
 }
 function kl_fetch_all($stmt) {
-    if (!$stmt || !$stmt->execute()) return null;
+    if (!$stmt || !$stmt->execute()) {
+        $GLOBALS['kl_db_read_error'] = true;
+        return null;
+    }
     $result = $stmt->get_result();
-    return $result ? $result->fetch_all(MYSQLI_ASSOC) : null;
+    if (!$result) {
+        $GLOBALS['kl_db_read_error'] = true;
+        return null;
+    }
+    return $result->fetch_all(MYSQLI_ASSOC);
 }
 function kl_member($conn, $community_id, $user_id) {
     $stmt = $conn->prepare('SELECT 1 FROM community_members WHERE community_id=? AND user_id=? LIMIT 1');
-    if (!$stmt) return false;
+    if (!$stmt) {
+        $GLOBALS['kl_db_read_error'] = true;
+        return false;
+    }
     $stmt->bind_param('ii', $community_id, $user_id);
     if (!$stmt->execute()) {
+        $GLOBALS['kl_db_read_error'] = true;
         $stmt->close();
         return false;
     }
     $result = $stmt->get_result();
+    if (!$result) $GLOBALS['kl_db_read_error'] = true;
     $ok = $result ? (bool)$result->fetch_row() : false;
     $stmt->close();
     return $ok;
@@ -293,6 +313,9 @@ if (isset($_GET['saved'])) $message = 'مدخل دانش با موفقیت ثب�
 if (isset($_GET['updated'])) $message = 'مدخل به‌روزرسانی شد؛ ارزیابی‌های نسخهٔ قبلی برای نسخهٔ تازه محاسبه نمی‌شوند.';
 if (isset($_GET['reviewed'])) $message = 'ارزیابی شما ثبت شد؛ با رسیدن تعداد ارزیابی‌ها به حد نصاب، وضعیت اعتبار به‌روزرسانی می‌شود.';
 if (isset($_GET['review_error'])) $error = 'ارزیابی ثبت نشد؛ مطمئن شوید که نویسندهٔ مدخل نیستید، عضو جامعهٔ مربوط هستید و دلیل کافی نوشته‌اید.';
+if (!empty($GLOBALS['kl_db_read_error'])) {
+    $error = 'خواندن اطلاعات از پایگاه داده ناموفق بود. لطفاً صفحه را تازه‌سازی کنید؛ اگر مشکل ادامه داشت، گزارش خطای سامانه باید بررسی شود.';
+}
 
 $communities = [];
 $cs = $conn->prepare('SELECT c.id, c.name FROM communities c JOIN community_members m ON m.community_id=c.id WHERE m.user_id=? ORDER BY c.name');
@@ -459,7 +482,7 @@ textarea{resize:vertical}button,.button{display:inline-block;border:0;border-rad
 
 <?php if ($entry_id > 0): ?>
 <?php if (!$entry): ?>
-<section class="panel">مدخل موردنظر پیدا نشد. <a href="knowledge_library.php">بازگشت به کتابخانه</a></section>
+<section class="panel"><?= !empty($GLOBALS['kl_db_read_error']) ? 'به‌دلیل خطا در خواندن پایگاه داده، امکان بررسی مدخل وجود ندارد.' : 'مدخل موردنظر پیدا نشد.' ?> <a href="knowledge_library.php">بازگشت به کتابخانه</a></section>
 <?php elseif ($edit_mode && (int)$entry['created_by'] === $user_id): ?>
 <section class="panel"><h2>ویرایش مدخل دانش</h2>
 <?php kl_render_form($csrf, $communities, $entry); ?>
