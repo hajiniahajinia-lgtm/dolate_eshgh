@@ -51,18 +51,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($acquired !== null && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $acquired)) {
       $error = 'تاریخ ثبت‌شده معتبر نیست.';
     } else {
-      $ins = $conn->prepare("INSERT INTO community_assets (community_id,asset_name,category,description,quantity,unit,estimated_value,location,asset_condition,acquired_on,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)");
-      $types = 'isssdsdsssii';
-      $ins->bind_param($types, $community_id, $name, $category, $description, $quantity, $unit, $value, $location, $condition, $acquired, $user_id, $user_id);
-      if ($ins->execute()) {
+      try {
+        $conn->begin_transaction();
+        $ins = $conn->prepare("INSERT INTO community_assets (community_id,asset_name,category,description,quantity,unit,estimated_value,location,asset_condition,acquired_on,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)");
+        if (!$ins) throw new RuntimeException('Asset insert prepare failed: ' . $conn->error);
+        $types = 'isssdsdsssii';
+        $ins->bind_param($types, $community_id, $name, $category, $description, $quantity, $unit, $value, $location, $condition, $acquired, $user_id, $user_id);
+        if (!$ins->execute()) throw new RuntimeException('Asset insert failed: ' . $ins->error);
         $asset_id = (int)$conn->insert_id;
+        $ins->close();
+
         $move_type = 'registered'; $notes = 'ثبت اولیهٔ مال در دفتر جامعه';
         $mv = $conn->prepare("INSERT INTO community_asset_movements (asset_id,community_id,movement_type,quantity_change,to_location,notes,created_by) VALUES (?,?,?,?,?,?,?)");
+        if (!$mv) throw new RuntimeException('Asset movement prepare failed: ' . $conn->error);
         $mv->bind_param('iisdssi', $asset_id, $community_id, $move_type, $quantity, $location, $notes, $user_id);
-        $mv->execute(); $mv->close();
+        if (!$mv->execute()) throw new RuntimeException('Asset movement insert failed: ' . $mv->error);
+        $mv->close();
+        $conn->commit();
         $message = 'مال در فهرست اولیه ثبت شد. مالکیت و ارزش آن هنوز به‌صورت مستقل تأیید نشده است.';
-      } else { $error = 'ثبت مال انجام نشد؛ لطفاً دوباره تلاش کنید.'; }
-      $ins->close();
+      } catch (Throwable $e) {
+        $conn->rollback();
+        error_log('Community asset registration failed: ' . $e->getMessage());
+        $error = 'ثبت مال کامل نشد؛ هیچ ثبت ناقصی نگهداری نشد. لطفاً دوباره تلاش کنید.';
+      }
     }
   } elseif ($action === 'add_request') {
     $title = trim((string)($_POST['title'] ?? ''));
