@@ -137,6 +137,8 @@ $topics_check->close();
 // نهایی‌سازی رأی‌های منقضی و ساخت پروندهٔ دانش، با همان منطق صفحهٔ رأی‌گیری.
 require_once __DIR__ . "/collective_knowledge_finalizer.php";
 finalize_collective_knowledge_for_community($conn, $community_id, $user_id);
+// تکمیل تدریجی پرونده‌های تاریخی قدیمی؛ حداکثر ۱۰ پرونده در هر بازدید.
+backfill_collective_knowledge_for_community($conn, $community_id, $user_id, 10);
 ?>
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
