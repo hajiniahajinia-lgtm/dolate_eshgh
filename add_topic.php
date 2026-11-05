@@ -117,18 +117,32 @@ if ($stmt->execute()) {
     if ($expertise_domain_id > 0) {
         $proposal_stmt = $conn->prepare("INSERT INTO topic_expertise_proposals (topic_id, community_id, domain_id, proposed_by, status, expires_at) VALUES (?, ?, ?, ?, 'pending', DATE_ADD(NOW(), INTERVAL 7 DAY))");
         if (!$proposal_stmt) {
-            throw new RuntimeException("Topic expertise proposal prepare failed: " . $conn->error);
+            error_log("Topic expertise proposal prepare failed: " . $conn->error);
+            $conn->rollback();
+            $stmt->close();
+            http_response_code(500);
+            exit("ثبت پیشنهاد حوزهٔ تخصصی انجام نشد؛ موضوع نیز ذخیره نشد.");
         }
         $proposal_stmt->bind_param("iiii", $new_topic_id, $community_id, $expertise_domain_id, $user_id);
         if (!$proposal_stmt->execute()) {
-            $error = $proposal_stmt->error;
+            error_log("Topic expertise proposal insert failed: " . $proposal_stmt->error);
             $proposal_stmt->close();
-            throw new RuntimeException("Topic expertise proposal insert failed: " . $error);
+            $conn->rollback();
+            $stmt->close();
+            http_response_code(500);
+            exit("ثبت پیشنهاد حوزهٔ تخصصی انجام نشد؛ موضوع نیز ذخیره نشد.");
         }
         $proposal_stmt->close();
     }
     if ($initial_idea !== '') {
         $idea_stmt = $conn->prepare("INSERT INTO ideas (topic_id, user_id, content) VALUES (?, ?, ?)");
+        if (!$idea_stmt) {
+            error_log("Initial idea prepare failed: " . $conn->error);
+            $conn->rollback();
+            $stmt->close();
+            http_response_code(500);
+            exit("ذخیره ایده اولیه ممکن نشد؛ موضوع نیز ذخیره نشد.");
+        }
         $idea_stmt->bind_param("iis", $new_topic_id, $user_id, $initial_idea);
         if (!$idea_stmt->execute()) {
             error_log("Initial idea insert failed: " . $idea_stmt->error);
