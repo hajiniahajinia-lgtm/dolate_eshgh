@@ -37,6 +37,7 @@ jobs:
           php -l community.php
           php -l archived_topics.php
           php -l votes.php
+          php -l execution.php
           php -l add_topic.php
           php -l add_idea.php
           php -l update_topic.php
