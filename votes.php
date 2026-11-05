@@ -100,7 +100,16 @@ if($_SERVER['REQUEST_METHOD'] === 'POST'){
         $idea_id  = (int)($_POST['idea_id'] ?? 0);
         $vote_type = (isset($_POST['vote_type']) && $_POST['vote_type'] === 'no') ? 'no' : 'yes';
 
-        $valid = $conn->prepare("SELECT 1 FROM ideas i JOIN topics t ON t.id=i.topic_id WHERE i.id=? AND t.id=? AND t.community_id=? LIMIT 1");
+        $valid = $conn->prepare("
+            SELECT 1
+            FROM ideas i
+            JOIN topics t ON t.id=i.topic_id
+            JOIN topic_final_votes tfv ON tfv.topic_id=t.id AND tfv.idea_id=i.id
+            LEFT JOIN topic_voting_meta m ON m.topic_id=t.id
+            WHERE i.id=? AND t.id=? AND t.community_id=? AND t.closed=1
+              AND (m.finalized IS NULL OR m.finalized=0)
+            LIMIT 1
+        ");
         $valid->bind_param("iii", $idea_id, $topic_id, $community_id);
         $valid->execute();
         $valid_idea = (bool)$valid->get_result()->fetch_row();
@@ -174,9 +183,40 @@ if($_SERVER['REQUEST_METHOD'] === 'POST'){
 
     // ---------- رأی لازم‌الاجرا / غیر لازم‌الاجرا ----------
     if(isset($_POST['vote_enforceable'])){
-        $topic_id = (int)$_POST['topic_id'];
-        $idea_id  = (int)$_POST['idea_id'];
+        $topic_id = (int)($_POST['topic_id'] ?? 0);
+        $idea_id  = (int)($_POST['idea_id'] ?? 0);
         $enforceable = (isset($_POST['vote_enforceable']) && intval($_POST['vote_enforceable']) === 1) ? 1 : 0;
+
+        $valid = $conn->prepare("
+            SELECT 1
+            FROM ideas i
+            JOIN topics t ON t.id=i.topic_id
+            JOIN topic_final_votes tfv ON tfv.topic_id=t.id AND tfv.idea_id=i.id
+            LEFT JOIN topic_voting_meta m ON m.topic_id=t.id
+            WHERE i.id=? AND t.id=? AND t.community_id=? AND t.closed=1
+              AND (m.finalized IS NULL OR m.finalized=0)
+            LIMIT 1
+        ");
+        $valid->bind_param("iii", $idea_id, $topic_id, $community_id);
+        $valid->execute();
+        $valid_idea = (bool)$valid->get_result()->fetch_row();
+        $valid->close();
+        if (!$valid_idea) {
+            http_response_code(400);
+            echo json_encode(['success'=>false,'message'=>'این ایده در مرحلهٔ رأی‌گیری الزام‌آوری نیست.']);
+            exit;
+        }
+
+        $member = $conn->prepare("SELECT 1 FROM community_members WHERE community_id=? AND user_id=? LIMIT 1");
+        $member->bind_param("ii", $community_id, $user_id);
+        $member->execute();
+        $is_member = (bool)$member->get_result()->fetch_row();
+        $member->close();
+        if (!$is_member) {
+            http_response_code(403);
+            echo json_encode(['success'=>false,'message'=>'فقط اعضای جامعه می‌توانند رأی بدهند.']);
+            exit;
+        }
 
         // insert/update در جدول topic_enforce_votes (هر کاربر فقط یک رکورد دارد)
         $stmt = $conn->prepare("
@@ -199,7 +239,7 @@ if($_SERVER['REQUEST_METHOD'] === 'POST'){
     // ---------- ثبت فوریت کاربر، محاسبه میانگین و به‌روزرسانی مدت رأی‌گیری ----------
     if(isset($_POST['set_urgency'])){
         $topic_id = (int)($_POST['topic_id'] ?? 0);
-        $urg = max(1, min(365, (int)($_POST['urgency_days'] ?? 5)));
+        $urg = max(1, min(300, (int)($_POST['urgency_days'] ?? 5)));
 
         if($topic_id <= 0){
             echo json_encode(['success'=>false,'message'=>'موضوع نامعتبر است']);
