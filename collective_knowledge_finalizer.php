@@ -107,9 +107,9 @@ function create_collective_knowledge_decision($conn, $topic_id, $fallback_user_i
         if (trim((string)$topic['description']) === '') $quality_notes[] = 'شرح موضوع ثبت نشده است';
         if ($idea_content === null || trim($idea_content) === '') $quality_notes[] = 'ایدهٔ منتخب ثبت نشده است';
         if (!empty($quality_notes)) {
-            $content .= "وضعیت کفایت اطلاعات: نیازمند تکمیل — " . implode('؛ ', $quality_notes) . ".\\n\\n";
+            $content .= "وضعیت کفایت اطلاعات: نیازمند تکمیل — " . implode('؛ ', $quality_notes) . ".\n\n";
         } else {
-            $content .= "وضعیت کفایت اطلاعات اولیه: دارای عنوان، شرح و ایدهٔ منتخب؛ این موارد هنوز نیازمند بررسی و ارزیابی هستند.\\n\\n";
+            $content .= "وضعیت کفایت اطلاعات اولیه: دارای عنوان، شرح و ایدهٔ منتخب؛ این موارد هنوز نیازمند بررسی و ارزیابی هستند.\n\n";
         }
         $content .= "یادآوری: انتخاب جمعی یا برتری یک ایده به‌تنهایی به معنای اثبات علمی یا تجربی آن نیست. شواهد و نتایج اجرا باید جداگانه بررسی و تکمیل شوند.";
 
