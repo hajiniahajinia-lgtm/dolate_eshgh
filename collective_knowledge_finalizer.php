@@ -102,6 +102,15 @@ function create_collective_knowledge_decision($conn, $topic_id, $fallback_user_i
         $content .= "ایدهٔ منتخب بر اساس ارزیابی ثبت‌شده در سامانه:\n" . ($idea_content !== null && trim($idea_content) !== '' ? $idea_content : 'برای این موضوع ایده‌ای به‌عنوان منتخب ثبت نشده است.') . "\n\n";
         $content .= "نتیجهٔ رأی پذیرش جمعی: " . $acceptance_status . "؛ موافق: " . $yes_count . "، مخالف: " . $no_count . "، درصد موافق خام: " . $yes_percent . "٪، درصد موافق وزنی: " . $weighted_yes_percent . "٪.\n";
         $content .= "نتیجهٔ رأی لازم‌الاجرا بودن: " . $enforceability_status . "؛ موافق اجرا: " . $enforce_yes . "، مخالف اجرا: " . $enforce_no . ".\n\n";
+        $quality_notes = [];
+        if (mb_strlen(trim($topic_title), 'UTF-8') < 10) $quality_notes[] = 'عنوان موضوع کوتاه است';
+        if (trim((string)$topic['description']) === '') $quality_notes[] = 'شرح موضوع ثبت نشده است';
+        if ($idea_content === null || trim($idea_content) === '') $quality_notes[] = 'ایدهٔ منتخب ثبت نشده است';
+        if (!empty($quality_notes)) {
+            $content .= "وضعیت کفایت اطلاعات: نیازمند تکمیل — " . implode('؛ ', $quality_notes) . ".\\n\\n";
+        } else {
+            $content .= "وضعیت کفایت اطلاعات اولیه: دارای عنوان، شرح و ایدهٔ منتخب؛ این موارد هنوز نیازمند بررسی و ارزیابی هستند.\\n\\n";
+        }
         $content .= "یادآوری: انتخاب جمعی یا برتری یک ایده به‌تنهایی به معنای اثبات علمی یا تجربی آن نیست. شواهد و نتایج اجرا باید جداگانه بررسی و تکمیل شوند.";
 
         $creator_id = (int)$topic['user_id'] > 0 ? (int)$topic['user_id'] : (int)$fallback_user_id;
@@ -303,4 +312,65 @@ function finalize_collective_knowledge_for_community($conn, $community_id, $user
     
     $finalize_q->close();
     return true;
+}
+
+
+// تکمیل تدریجی پرونده‌های تاریخی؛ فقط برای موضوعات نهایی‌شده و بدون پرونده.
+// این تابع برنده یا رأی‌ها را تغییر نمی‌دهد و در هر بار اجرا حداکثر ۱۰ پرونده می‌سازد.
+function backfill_collective_knowledge_for_community($conn, $community_id, $user_id, $limit = 10) {
+    $community_id = (int)$community_id;
+    $user_id = (int)$user_id;
+    $limit = max(1, min(10, (int)$limit));
+    if ($community_id <= 0 || $user_id <= 0) return 0;
+
+    $member_stmt = $conn->prepare("SELECT 1 FROM community_members WHERE community_id=? AND user_id=? LIMIT 1");
+    if (!$member_stmt) return 0;
+    $member_stmt->bind_param("ii", $community_id, $user_id);
+    if (!$member_stmt->execute()) {
+        $member_stmt->close();
+        return 0;
+    }
+    $is_member = (bool)$member_stmt->get_result()->fetch_row();
+    $member_stmt->close();
+    if (!$is_member) return 0;
+
+    $sql = "
+        SELECT t.id
+        FROM topics t
+        JOIN topic_voting_meta m ON m.topic_id=t.id
+        LEFT JOIN collective_knowledge_decisions d ON d.topic_id=t.id
+        WHERE t.community_id=?
+          AND t.closed=2
+          AND m.finalized=1
+          AND d.topic_id IS NULL
+          AND NOT EXISTS (
+              SELECT 1
+              FROM collective_knowledge_entries e
+              WHERE e.source_topic_id=t.id
+          )
+        ORDER BY t.id ASC
+        LIMIT " . $limit;
+    $stmt = $conn->prepare($sql);
+    if (!$stmt) {
+        error_log("Knowledge backfill prepare failed: " . $conn->error);
+        return 0;
+    }
+    $stmt->bind_param("i", $community_id);
+    if (!$stmt->execute()) {
+        error_log("Knowledge backfill execute failed: " . $stmt->error);
+        $stmt->close();
+        return 0;
+    }
+    $result = $stmt->get_result();
+    $topic_ids = [];
+    while ($row = $result->fetch_assoc()) $topic_ids[] = (int)$row['id'];
+    $stmt->close();
+
+    $created = 0;
+    foreach ($topic_ids as $topic_id) {
+        if (create_collective_knowledge_decision($conn, $topic_id, $user_id)) {
+            $created++;
+        }
+    }
+    return $created;
 }
