@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS collective_knowledge_publication_proposals (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     decided_at TIMESTAMP NULL DEFAULT NULL,
     PRIMARY KEY (id),
-    UNIQUE KEY uq_knowledge_publication_entry_status (entry_id, status),
+    KEY idx_knowledge_publication_entry_status (entry_id, status, id),
     KEY idx_knowledge_publication_community_status (community_id, status, created_at),
     KEY idx_knowledge_publication_proposer (proposed_by, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
