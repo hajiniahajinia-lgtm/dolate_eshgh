@@ -61,12 +61,12 @@ def check(label, url):
             parser.feed(body)
             title = re.search(r"<title[^>]*>(.*?)</title>", body, re.I | re.S)
             title_text = re.sub(r"\\s+", " ", title.group(1)).strip()[:70] if title else "(none)"
+            has_form = bool(re.search(r"<form\\b", body, re.I))
             print(
                 f"DIAG {label}: HTTP {response.status}; final={final.scheme}://{final.netloc}{final.path or '/'}; "
                 f"type={response.headers.get('Content-Type', 'unknown')}; "
                 f"server={response.headers.get('Server', 'unknown')}; "
-                f"title={title_text!r}; login_form={bool(re.search(r'<form\\b', body, re.I))}; "
-                f"csrf={parser.csrf}"
+                f"title={title_text!r}; login_form={has_form}; csrf={parser.csrf}"
             )
             if recorder.chain:
                 print(f"REDIRECTS {label}: {recorder.chain}")
