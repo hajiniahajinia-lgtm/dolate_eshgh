@@ -41,7 +41,7 @@ class FormParser(HTMLParser):
             self.csrf = True
 
     def handle_data(self, data):
-        cleaned = re.sub(r"\\s+", " ", data).strip()
+        cleaned = re.sub(r"\s+", " ", data).strip()
         if cleaned:
             self.text_parts.append(cleaned)
 
@@ -68,11 +68,13 @@ def check(label, url):
             title = re.search(r"<title[^>]*>(.*?)</title>", body, re.I | re.S)
             title_text = re.sub(r"\s+", " ", title.group(1)).strip()[:70] if title else "(none)"
             has_form = bool(re.search(r"<form\b", body, re.I))
+            preview = re.sub(r"\s+", " ", " ".join(parser.text_parts)).strip()[:240]
             print(
                 f"DIAG {label}: HTTP {response.status}; final={final.scheme}://{final.netloc}{final.path or '/'}; "
                 f"type={response.headers.get('Content-Type', 'unknown')}; "
                 f"server={response.headers.get('Server', 'unknown')}; "
-                f"title={title_text!r}; login_form={has_form}; csrf={parser.csrf}"
+                f"bytes={len(body.encode('utf-8'))}; title={title_text!r}; "
+                f"login_form={has_form}; csrf={parser.csrf}; text_preview={preview!r}"
             )
             if recorder.chain:
                 print(f"REDIRECTS {label}: {recorder.chain}")
