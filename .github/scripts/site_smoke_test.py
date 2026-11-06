@@ -60,8 +60,8 @@ def check(label, url):
             parser = FormParser()
             parser.feed(body)
             title = re.search(r"<title[^>]*>(.*?)</title>", body, re.I | re.S)
-            title_text = re.sub(r"\\s+", " ", title.group(1)).strip()[:70] if title else "(none)"
-            has_form = bool(re.search(r"<form\\b", body, re.I))
+            title_text = re.sub(r"\s+", " ", title.group(1)).strip()[:70] if title else "(none)"
+            has_form = bool(re.search(r"<form\b", body, re.I))
             print(
                 f"DIAG {label}: HTTP {response.status}; final={final.scheme}://{final.netloc}{final.path or '/'}; "
                 f"type={response.headers.get('Content-Type', 'unknown')}; "
