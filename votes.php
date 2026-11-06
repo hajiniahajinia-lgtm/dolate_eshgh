@@ -25,6 +25,10 @@ $user_id = (int)$_SESSION['user_id'];
 $community_id = isset($_GET['community_id']) ? (int)$_GET['community_id'] : 0;
 if($community_id <= 0) die("Community not specified.");
 
+// هر بار ورود به رأی‌گیری، موضوعات منقضی‌شدهٔ همهٔ جوامع را نیز پردازش کن.
+require_once __DIR__ . "/process_expired_topics.php";
+process_expired_topics($conn);
+
 // ----- create helper table for enforce votes (one row per user/idea) -----
 $conn->query("
 CREATE TABLE IF NOT EXISTS topic_enforce_votes (
