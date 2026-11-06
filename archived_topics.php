@@ -231,7 +231,7 @@ function get_winner_idea($conn, $topic_id) {
 // گرفتن موضوعات نهایی شده
 // =====================
 $sql = "
-    SELECT t.id, t.title, t.description, t.created_at, t.user_id, m.finalized_at, t.community_id
+    SELECT t.id, t.title, t.description, t.created_at, t.user_id, m.finalized_at, t.community_id, COALESCE(t.topic_purpose, 'mixed') AS topic_purpose
     FROM topics t
     JOIN topic_voting_meta m ON m.topic_id=t.id
     WHERE t.community_id=? AND m.finalized=1 AND m.finalized_at IS NOT NULL
@@ -313,6 +313,7 @@ while($row=$result->fetch_assoc()){
         'id'=>$topic_id,
         'title'=>$row['title'],
         'description'=>$row['description'],
+        'topic_purpose'=>in_array((string)($row['topic_purpose'] ?? 'mixed'), ['knowledge','execution','mixed'], true) ? (string)$row['topic_purpose'] : 'mixed',
         'finalized_at'=>$row['finalized_at'],
         'creator'=>$creator_name,
         'votes'=>$votes,
@@ -329,10 +330,17 @@ while($row=$result->fetch_assoc()){
     else $losers[]=$data;
 }
 
-$winner_groups = [
-    ['title'=>'موضوعات لازم‌الاجرا', 'items'=>array_values(array_filter($winners, static function($item){ return !empty($item['winner_enforceable']); }))],
-    ['title'=>'موضوعات غیرلازم‌الاجرا', 'items'=>array_values(array_filter($winners, static function($item){ return empty($item['winner_enforceable']); }))]
-];
+$purpose_labels = ['knowledge'=>'دانش‌محور', 'execution'=>'اجرایی', 'mixed'=>'ترکیبی'];
+$winner_groups = [];
+foreach ($purpose_labels as $purpose => $purpose_label) {
+    $purpose_items = array_values(array_filter($winners, static function($item) use ($purpose) { return $item['topic_purpose'] === $purpose; }));
+    $winner_groups[] = ['title'=>$purpose_label, 'items'=>$purpose_items];
+}
+$loser_groups = [];
+foreach ($purpose_labels as $purpose => $purpose_label) {
+    $purpose_items = array_values(array_filter($losers, static function($item) use ($purpose) { return $item['topic_purpose'] === $purpose; }));
+    $loser_groups[] = ['title'=>$purpose_label, 'items'=>$purpose_items];
+}
 ?>
 
 <!doctype html>
@@ -993,7 +1001,11 @@ document.addEventListener('DOMContentLoaded',function(){
       <details class="archive-group">
         <summary>📝 موضوعات تأییدنشده (<?= count($losers) ?>)</summary>
         <div class="archive-group-body">
-        <?php if(!empty($losers)): foreach($losers as $row): ?>
+        <?php foreach($loser_groups as $loser_group): ?>
+          <details class="archive-subgroup">
+            <summary><?= htmlspecialchars($loser_group['title'],ENT_QUOTES,'UTF-8') ?> (<?= count($loser_group['items']) ?>)</summary>
+            <div class="archive-subgroup-body">
+            <?php if(!empty($loser_group['items'])): foreach($loser_group['items'] as $row): ?>
         <div class="card">
             <div class="title-wrap">
               <div class="title" tabindex="0"><?= htmlspecialchars($row['title'], ENT_QUOTES, 'UTF-8') ?></div>
@@ -1022,9 +1034,12 @@ document.addEventListener('DOMContentLoaded',function(){
                 <div class="meta">نهایی‌شده در: <strong><?= htmlspecialchars(archived_jalali_datetime($row['finalized_at']), ENT_QUOTES, 'UTF-8') ?></strong></div>
             </div>
         </div>
-        <?php endforeach; else: ?>
-        <p>موضوع تأییدنشده‌ای در آرشیو وجود ندارد.</p>
-        <?php endif; ?>
+            <?php endforeach; else: ?>
+            <p>در این دسته موضوع تأییدنشده‌ای وجود ندارد.</p>
+            <?php endif; ?>
+            </div>
+          </details>
+        <?php endforeach; ?>
         </div>
       </details>
     </div>
