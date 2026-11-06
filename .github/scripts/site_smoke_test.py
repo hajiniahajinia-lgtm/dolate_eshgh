@@ -83,10 +83,10 @@ def main():
         token_parser.feed(login_html)
         if not token_parser.csrf:
             title_match = re.search(r"<title[^>]*>(.*?)</title>", login_html, re.I | re.S)
-            page_title = re.sub(r"\\s+", " ", title_match.group(1)).strip()[:80] if title_match else "not found"
+            page_title = re.sub(r"\s+", " ", title_match.group(1)).strip()[:80] if title_match else "not found"
             has_login_heading = "ورود به سامانه" in login_html
-            has_login_form = bool(re.search(r"<form\\b", login_html, re.I))
-            has_csrf_name = bool(re.search(r'name\\s*=\\s*["\\']csrf_token["\\']', login_html, re.I))
+            has_login_form = bool(re.search(r"<form\b", login_html, re.I))
+            has_csrf_name = bool(re.search(r'name\s*=\s*["\']csrf_token["\']', login_html, re.I))
             has_cloudflare_marker = any(marker in login_html.lower() for marker in ("cloudflare", "cf-challenge", "just a moment"))
             print("FAIL login page: CSRF token not found; no login POST was sent.")
             print(f"DIAG login GET: HTTP {login_status}; final path={urllib.parse.urlparse(login_url).path or '/'}; content-type={login_content_type}")
