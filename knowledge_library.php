@@ -413,6 +413,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 exit('مدخل پیدا نشد یا فقط ثبت‌کنندهٔ آن می‌تواند ویرایش کند.');
             }
 
+            // تا پایان رأی عمومی‌شدن، متن پرونده ثابت می‌ماند تا رأی‌ها دربارهٔ همان نسخه باشند.
+            $pending_publication_check = $conn->prepare("SELECT id FROM collective_knowledge_publication_proposals WHERE entry_id=? AND status='pending' LIMIT 1 FOR UPDATE");
+            if (!$pending_publication_check) {
+                $conn->rollback();
+                http_response_code(500);
+                exit('بررسی وضعیت پیشنهاد عمومی‌شدن ناموفق بود؛ تغییری اعمال نشد.');
+            }
+            $pending_publication_check->bind_param('i', $entry_id);
+            if (!$pending_publication_check->execute()) {
+                $pending_publication_check->close();
+                $conn->rollback();
+                http_response_code(500);
+                exit('بررسی وضعیت پیشنهاد عمومی‌شدن ناموفق بود؛ تغییری اعمال نشد.');
+            }
+            $pending_publication_result = $pending_publication_check->get_result();
+            $has_pending_publication = $pending_publication_result ? (bool)$pending_publication_result->fetch_assoc() : false;
+            $pending_publication_check->close();
+            if ($has_pending_publication) {
+                $conn->rollback();
+                header('Location: knowledge_library.php?id=' . $entry_id . '&publication_pending=1');
+                exit;
+            }
+
             // ویرایش محتوا مجاز است، اما منشأ اولیه و دامنهٔ دسترسی پرونده تغییر نمی‌کند.
             $visibility = (string)$old['visibility'];
             $scope_community = $old['community_id'] !== null ? (int)$old['community_id'] : null;
