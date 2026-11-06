@@ -24,7 +24,7 @@ function process_expired_topics($conn) {
             }
 
             $topic_stmt = $conn->prepare(
-                "SELECT urgency, created_at FROM topics WHERE id=? AND closed=0 LIMIT 1 FOR UPDATE"
+                "SELECT urgency, urgency_minutes, created_at FROM topics WHERE id=? AND closed=0 LIMIT 1 FOR UPDATE"
             );
             if (!$topic_stmt) {
                 throw new Exception("Topic lock prepare failed: " . $conn->error);
@@ -46,9 +46,16 @@ function process_expired_topics($conn) {
                 $conn->commit();
                 continue;
             }
-            $urgency = (int)$topic['urgency'];
-            $days = $urgency > 0 ? $urgency : 3;
-            if (time() < ($created + ($days * 86400))) {
+            $urgency_minutes = (int)($topic['urgency_minutes'] ?? 0);
+            if ($urgency_minutes > 0) {
+                $deadline = $created + ($urgency_minutes * 60);
+            } else {
+                // سازگاری با موضوعات قدیمی فاقد مقدار دقیقه‌ای: urgency هنوز روز محسوب می‌شود.
+                $urgency = (int)$topic['urgency'];
+                $legacy_days = $urgency > 0 ? $urgency : 3;
+                $deadline = $created + ($legacy_days * 86400);
+            }
+            if (time() < $deadline) {
                 $conn->commit();
                 continue;
             }
