@@ -21,7 +21,4 @@ jobs:
       - name: Run read-only site checks
         env:
           SITE_BASE_URL: https://dolateeshgh.kesug.com
-          TEST_PHONE: ${{ secrets.TEST_PHONE }}
-          TEST_NATIONAL_ID: ${{ secrets.TEST_NATIONAL_ID }}
-          TEST_PASSWORD: ${{ secrets.TEST_PASSWORD }}
         run: python3 .github/scripts/site_smoke_test.py
