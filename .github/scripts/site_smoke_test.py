@@ -30,7 +30,7 @@ class FormTokenParser(HTMLParser):
         if tag == "input" and attrs.get("name") == "csrf_token":
             self.csrf = attrs.get("value")
         href = attrs.get("href", "")
-        if tag == "a" and re.search(r"guest_community\\.php\\?id=\\d+", href):
+        if tag == "a" and re.search(r"guest_community\.php\?id=\d+", href):
             self.community_path = href
 
 
@@ -59,11 +59,11 @@ def diagnose_login(user_agent_name, user_agent):
     parser.feed(body)
     title_match = re.search(r"<title[^>]*>(.*?)</title>", body, re.I | re.S)
     page_title = (
-        re.sub(r"\\s+", " ", title_match.group(1)).strip()[:80]
+        re.sub(r"\s+", " ", title_match.group(1)).strip()[:80]
         if title_match else "not found"
     )
     has_login_heading = "ورود به سامانه" in body
-    has_form = bool(re.search(r"<form\\b", body, re.I))
+    has_form = bool(re.search(r"<form\b", body, re.I))
     has_csrf = bool(parser.csrf)
     path = urllib.parse.urlparse(final_url).path or "/"
 
