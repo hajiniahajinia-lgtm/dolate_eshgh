@@ -129,7 +129,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                 }
             }
-            if ($proposal_ok) $proposal_ok = $conn->commit(); else $conn->rollback();
+            if ($proposal_ok) {
+                $proposal_ok = $conn->commit();
+                if (!$proposal_ok) $conn->rollback();
+            } else {
+                $conn->rollback();
+            }
         }
         header('Location: knowledge_library.php?id=' . $proposal_entry_id . ($proposal_ok ? '&publication_proposed=1' : '&publication_error=1'));
         exit;
@@ -213,7 +218,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $publication_ok = false;
                 }
             }
-            if ($publication_ok) $publication_ok = $conn->commit(); else $conn->rollback();
+            if ($publication_ok) {
+                $publication_ok = $conn->commit();
+                if (!$publication_ok) $conn->rollback();
+            } else {
+                $conn->rollback();
+            }
         }
         $redirect_entry_id = 0;
         if ($proposal_id > 0) {
