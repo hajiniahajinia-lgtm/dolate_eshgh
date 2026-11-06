@@ -628,7 +628,7 @@ textarea{resize:vertical}button,.button{display:inline-block;border:0;border-rad
 </article>
 <?php endforeach; ?>
 </section>
-<div class="entry-actions"><a class="button secondary" href="knowledge_library.php">بازگشت به فهرست</a><?php if ((int)$entry['created_by']===$user_id && strpos((string)$entry['title'], 'پروندهٔ در حال شکل‌گیری:') !== 0): ?><a class="button" href="knowledge_library.php?id=<?= (int)$entry['id'] ?>&edit=1">ویرایش و تکمیل</a><?php endif; ?></div>
+<div class="entry-actions"><a class="button secondary" href="knowledge_library.php<?= $selected_community_id > 0 ? '?community_id=' . (int)$selected_community_id : '' ?>">بازگشت به فهرست</a><?php if ((int)$entry['created_by']===$user_id && strpos((string)$entry['title'], 'پروندهٔ در حال شکل‌گیری:') !== 0): ?><a class="button" href="knowledge_library.php?id=<?= (int)$entry['id'] ?>&edit=1">ویرایش و تکمیل</a><?php endif; ?></div>
 </section>
 <?php endif; ?>
 <?php else: ?>
@@ -652,7 +652,7 @@ textarea{resize:vertical}button,.button{display:inline-block;border:0;border-rad
 <section class="panel"><h2><?= $selected_community_id > 0 ? 'دانش‌های جامعهٔ ' . kl_h($selected_community_name) . ' و دانش‌های عمومی' : 'مدخل‌های همهٔ جوامع' ?> (<?= count($entries) ?>)</h2>
 <?php if (!$entries): ?><p class="muted">هنوز مدخلی ثبت نشده یا نتیجه‌ای با این عبارت پیدا نشد.</p><?php endif; ?>
 <?php foreach ($entries as $item): ?><article class="entry">
-<div class="top"><a class="entry-title" href="knowledge_library.php?id=<?= (int)$item['id'] ?>"><?= kl_h($item['title']) ?></a><span class="tag"><?= kl_h(kl_type_label($item['entry_type'])) ?></span></div>
+<div class="top"><a class="entry-title" href="knowledge_library.php?id=<?= (int)$item['id'] ?><?= $selected_community_id > 0 ? '&amp;community_id=' . (int)$selected_community_id : '' ?>"><?= kl_h($item['title']) ?></a><span class="tag"><?= kl_h(kl_type_label($item['entry_type'])) ?></span></div>
 <p class="summary"><?= nl2br(kl_h($item['summary'])) ?></p>
 <div class="muted">ثبت‌کننده: <?= kl_h($item['username']) ?> · <?= $item['visibility']==='public'?'عمومی':'ویژهٔ '.kl_h($item['community_name'] ?? 'جامعه') ?> · <?= kl_h(kl_status_label($item['status'])) ?></div>
 </article><?php endforeach; ?>
