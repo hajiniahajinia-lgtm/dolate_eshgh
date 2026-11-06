@@ -89,18 +89,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $proposal_entry_id = (int)($_POST['entry_id'] ?? 0);
         $proposal_ok = false;
         if ($proposal_entry_id > 0 && $conn->begin_transaction()) {
-            $lock_entry = $conn->prepare("SELECT e.id, e.visibility, e.community_id, e.source_topic_id, t.community_id AS source_community_id
-                FROM collective_knowledge_entries e
-                LEFT JOIN topics t ON t.id=e.source_topic_id
-                WHERE e.id=? LIMIT 1 FOR UPDATE");
+            $lock_entry = $conn->prepare("SELECT id, visibility, community_id, source_topic_id
+                FROM collective_knowledge_entries WHERE id=? LIMIT 1 FOR UPDATE");
             if ($lock_entry) {
                 $lock_entry->bind_param('i', $proposal_entry_id);
                 $proposal_entry = kl_fetch_one($lock_entry);
                 $lock_entry->close();
+                $source_community_id = 0;
+                if ($proposal_entry && (int)$proposal_entry['source_topic_id'] > 0) {
+                    $source_check = $conn->prepare("SELECT community_id FROM topics WHERE id=? LIMIT 1");
+                    if ($source_check) {
+                        $source_topic_id_for_proposal = (int)$proposal_entry['source_topic_id'];
+                        $source_check->bind_param('i', $source_topic_id_for_proposal);
+                        $source_community = kl_fetch_one($source_check);
+                        $source_check->close();
+                        $source_community_id = (int)($source_community['community_id'] ?? 0);
+                    }
+                }
                 if ($proposal_entry && $proposal_entry['visibility'] === 'community' &&
                     (int)$proposal_entry['community_id'] > 0 &&
-                    (int)$proposal_entry['source_topic_id'] > 0 &&
-                    (int)$proposal_entry['source_community_id'] === (int)$proposal_entry['community_id'] &&
+                    $source_community_id === (int)$proposal_entry['community_id'] &&
                     kl_member($conn, (int)$proposal_entry['community_id'], $user_id)) {
                     $pending_check = $conn->prepare("SELECT id FROM collective_knowledge_publication_proposals WHERE entry_id=? AND status='pending' LIMIT 1");
                     if ($pending_check) {
@@ -121,7 +129,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                 }
             }
-            if ($proposal_ok) $conn->commit(); else $conn->rollback();
+            if ($proposal_ok) $proposal_ok = $conn->commit(); else $conn->rollback();
         }
         header('Location: knowledge_library.php?id=' . $proposal_entry_id . ($proposal_ok ? '&publication_proposed=1' : '&publication_error=1'));
         exit;
@@ -157,10 +165,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $count_publication_votes->bind_param('i', $proposal_id);
                             $vote_totals = kl_fetch_one($count_publication_votes);
                             $count_publication_votes->close();
+                            if ($vote_totals === null) {
+                                $publication_ok = false;
+                            }
                             $total_votes = (int)($vote_totals['total'] ?? 0);
                             $approval_count = (int)($vote_totals['approvals'] ?? 0);
                             $rejection_count = (int)($vote_totals['rejections'] ?? 0);
-                            if ($total_votes >= 3) {
+                            if ($publication_ok && $total_votes >= 3) {
                                 $threshold = (int)ceil($total_votes * 2 / 3);
                                 if ($approval_count >= $threshold) {
                                     $publish_entry = $conn->prepare("UPDATE collective_knowledge_entries SET visibility='public' WHERE id=? AND visibility='community' AND community_id=?");
@@ -202,7 +213,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $publication_ok = false;
                 }
             }
-            if ($publication_ok) $conn->commit(); else $conn->rollback();
+            if ($publication_ok) $publication_ok = $conn->commit(); else $conn->rollback();
         }
         $redirect_entry_id = 0;
         if ($proposal_id > 0) {
