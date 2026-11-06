@@ -33,11 +33,17 @@ class FormParser(HTMLParser):
     def __init__(self):
         super().__init__()
         self.csrf = False
+        self.text_parts = []
 
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
         if tag == "input" and attrs.get("name") == "csrf_token" and attrs.get("value"):
             self.csrf = True
+
+    def handle_data(self, data):
+        cleaned = re.sub(r"\\s+", " ", data).strip()
+        if cleaned:
+            self.text_parts.append(cleaned)
 
 
 def check(label, url):
