@@ -1,0 +1,27 @@
+name: Manual read-only site smoke test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dolate-eshgh-read-only-smoke-test
+  cancel-in-progress: false
+
+jobs:
+  smoke-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Run read-only site checks
+        env:
+          SITE_BASE_URL: https://dolateeshgh.kesug.com
+          TEST_PHONE: \${{ secrets.TEST_PHONE }}
+          TEST_NATIONAL_ID: \${{ secrets.TEST_NATIONAL_ID }}
+          TEST_PASSWORD: \${{ secrets.TEST_PASSWORD }}
+        run: python3 .github/scripts/site_smoke_test.py
