@@ -15,7 +15,7 @@ $votes_csrf_token = $_SESSION['votes_csrf_token'];
 
 include "db.php"; // اتصال شما به دیتابیسzzz
 
-if(!defined('X')) define('X', 5); // پیش‌فرض روز
+if(!defined('X')) define('X', 120); // پیش‌فرض پنج‌روزهٔ قبلی، اکنون بر حسب ساعت
 
 if (!isset($_SESSION['user_id'])) {
     header("Location: login.php");
@@ -233,7 +233,7 @@ if($_SERVER['REQUEST_METHOD'] === 'POST'){
     // ---------- ثبت فوریت کاربر، محاسبه میانگین و به‌روزرسانی مدت رأی‌گیری ----------
     if(isset($_POST['set_urgency'])){
         $topic_id = (int)($_POST['topic_id'] ?? 0);
-        $urg = max(1, min(365, (int)($_POST['urgency_days'] ?? 5)));
+        $urg = max(1, min(1000, (int)($_POST['urgency_hours'] ?? X)));
 
         if($topic_id <= 0){
             echo json_encode(['success'=>false,'message'=>'موضوع نامعتبر است']);
@@ -265,7 +265,7 @@ if($_SERVER['REQUEST_METHOD'] === 'POST'){
 
         // میانگین فوریت‌های ثبت‌شده توسط کاربران برای همین موضوع.
         $avg_sql = $conn->prepare("
-            SELECT AVG(urgency_days) AS avg_days, COUNT(*) AS vote_count
+            SELECT AVG(urgency_days) AS avg_hours, COUNT(*) AS vote_count
             FROM topic_voting_urgency_votes
             WHERE topic_id = ?
         ");
@@ -274,7 +274,7 @@ if($_SERVER['REQUEST_METHOD'] === 'POST'){
         $avg_result = $avg_sql->get_result()->fetch_assoc();
         $avg_sql->close();
 
-        $avg_days = max(1, min(365, (int)ceil((float)($avg_result['avg_days'] ?? $urg))));
+        $avg_hours = max(1, min(1000, (int)ceil((float)($avg_result['avg_hours'] ?? $urg))));
 
         // ثبت مدت نهایی در جدول مخصوص رأی‌گیری نهایی؛ زمان شروع رأی‌گیری تغییر نمی‌کند.
         $check = $conn->prepare("SELECT topic_id FROM topic_voting_meta WHERE topic_id=? LIMIT 1");
@@ -285,19 +285,19 @@ if($_SERVER['REQUEST_METHOD'] === 'POST'){
 
         if($exists){
             $upd = $conn->prepare("UPDATE topic_voting_meta SET urgency_days=? WHERE topic_id=?");
-            $upd->bind_param("ii", $avg_days, $topic_id);
+            $upd->bind_param("ii", $avg_hours, $topic_id);
             $upd->execute();
             $upd->close();
         } else {
             $ins = $conn->prepare("INSERT INTO topic_voting_meta (topic_id, urgency_days, voting_started, finalized) VALUES (?, ?, NOW(), 0)");
-            $ins->bind_param("ii", $topic_id, $avg_days);
+            $ins->bind_param("ii", $topic_id, $avg_hours);
             $ins->execute();
             $ins->close();
         }
 
         echo json_encode([
             'success'=>true,
-            'urgency'=>$avg_days,
+            'urgency'=>$avg_hours,
             'vote_count'=>(int)($avg_result['vote_count'] ?? 1)
         ]);
         exit;
@@ -327,7 +327,7 @@ function participation_percent($conn,$topic_id){
 }
 $conn->query("
     INSERT INTO topic_voting_meta (topic_id, urgency_days, voting_started, finalized)
-    SELECT t.id, 5, t.created_at, 0
+    SELECT t.id, 120, t.created_at, 0
     FROM topics t
     LEFT JOIN topic_voting_meta m ON m.topic_id = t.id
     WHERE t.closed=1 AND m.topic_id IS NULL
@@ -339,7 +339,7 @@ $conn->query("
 // ساخت meta برای تمام موضوعات بسته شده که meta ندارند
 $conn->query("
     INSERT INTO topic_voting_meta (topic_id, urgency_days, voting_started, finalized)
-    SELECT t.id, 5, t.created_at, 0
+    SELECT t.id, 120, t.created_at, 0
     FROM topics t
     LEFT JOIN topic_voting_meta m ON m.topic_id = t.id
     WHERE t.community_id=$community_id AND t.closed=1 AND m.topic_id IS NULL
@@ -1152,10 +1152,10 @@ body{
     $mstmt = $conn->prepare("SELECT urgency_days, voting_started, finalized, finalized_at FROM topic_voting_meta WHERE topic_id=? LIMIT 1");
     $mstmt->bind_param("i",$tid); $mstmt->execute();
     $meta = $mstmt->get_result()->fetch_assoc(); $mstmt->close();
-    $urg_days = ($meta && $meta['urgency_days']) ? (int)$meta['urgency_days'] : X;
+    $urg_hours = ($meta && $meta['urgency_days']) ? (int)$meta['urgency_days'] : X;
 
     // نمایش انتخاب شخصی کاربر جدا از میانگین جمعی فوریت.
-    $my_urgency_days = X;
+    $my_urgency_hours = X;
     $has_urgency_vote = false;
     $urgency_vote_count = 0;
 
@@ -1165,7 +1165,7 @@ body{
     $my_urgency_row = $my_urgency_stmt->get_result()->fetch_assoc();
     $my_urgency_stmt->close();
     if ($my_urgency_row) {
-        $my_urgency_days = (int)$my_urgency_row['urgency_days'];
+        $my_urgency_hours = (int)$my_urgency_row['urgency_days'];
         $has_urgency_vote = true;
     }
 
@@ -1179,7 +1179,7 @@ body{
         $vs_unix = sql_date_to_unix($meta['voting_started']);
         if($vs_unix) $voting_started_unix = $vs_unix;
     }
-    $deadline_unix = $voting_started_unix + ($urg_days*24*3600);
+    $deadline_unix = $voting_started_unix + ($urg_hours*3600);
     $remaining_seconds = max(0, $deadline_unix - time());
     $is_finalized = ($meta && (int)($meta['finalized'] ?? 0) === 1 && time() >= $deadline_unix);
 
@@ -1216,7 +1216,7 @@ body{
         </div>
         <div class="meta">
           آغاز رأی‌گیری: <?= date('Y-m-d H:i', $voting_started_unix) ?> —
-          میانگین فعلی فوریت: <strong class="urgency-average"><?= $urg_days ?></strong> روز
+          میانگین فعلی فوریت: <strong class="urgency-average"><?= $urg_hours ?></strong> ساعت
           (<span class="urgency-vote-count"><?= $urgency_vote_count ?></span> رأی فوریت)
         </div>
       </div>
@@ -1230,13 +1230,13 @@ body{
           <summary>⏱ تنظیم فوریت</summary>
           <form class="form-inline" method="post" data-topic="<?= $tid ?>">
             <input type="hidden" name="topic_id" value="<?= $tid ?>">
-            <label for="urgency-days-<?= $tid ?>">فوریت انتخابی شما (روز):</label>
-            <input id="urgency-days-<?= $tid ?>" type="number" name="urgency_days" min="1" max="365" value="<?= $my_urgency_days ?>" title="فوریت انتخابی شما بر حسب روز">
+            <label for="urgency-days-<?= $tid ?>">فوریت انتخابی شما (ساعت):</label>
+            <input id="urgency-hours-<?= $tid ?>" type="number" name="urgency_hours" min="1" max="1000" value="<?= $my_urgency_hours ?>" title="فوریت انتخابی شما بر حسب ساعت">
             <span class="urgency-help-wrap">
               <button type="submit" name="set_urgency" aria-describedby="urgency-help-<?= $tid ?>">ثبت فوریت</button>
               <span class="urgency-tooltip" id="urgency-help-<?= $tid ?>" role="tooltip">
                 <strong>چرا فوریت را ثبت می‌کنیم؟</strong>
-                در «دولت عشق»، مدت رأی‌گیری با مشارکت اعضا تعیین می‌شود. هر عضو زمان مورد نیاز خود را انتخاب می‌کند و همهٔ رأی‌ها وزن یکسان دارند. سامانه میانگین انتخاب‌ها را محاسبه می‌کند و آن را به روز کامل بالاتر گرد می‌کند. اگر انتخابتان را تغییر دهید، رأی قبلی شما جایگزین می‌شود. با تغییر میانگین، زمان باقی‌مانده دوباره محاسبه می‌شود؛ شمارش از ابتدا آغاز نمی‌شود.
+                در «دولت عشق»، مدت رأی‌گیری با مشارکت اعضا تعیین می‌شود. هر عضو زمان مورد نیاز خود را انتخاب می‌کند و همهٔ رأی‌ها وزن یکسان دارند. سامانه میانگین انتخاب‌ها را محاسبه می‌کند و آن را به ساعت کامل بالاتر گرد می‌کند. اگر انتخابتان را تغییر دهید، رأی قبلی شما جایگزین می‌شود. با تغییر میانگین، زمان باقی‌مانده دوباره محاسبه می‌شود؛ شمارش از ابتدا آغاز نمی‌شود.
               </span>
             </span>
             <div class="small urgency-own-status"><?= $has_urgency_vote ? 'انتخاب قبلی شما ثبت شده است.' : 'هنوز انتخابی ثبت نکرده‌اید؛ با ثبت فرم، مقدار این کادر به‌عنوان رأی شما ذخیره می‌شود.' ?></div>
@@ -1551,16 +1551,16 @@ document.addEventListener('DOMContentLoaded', function(){
                     if(voteCountLabel) voteCountLabel.textContent = resp.vote_count;
                     if(ownStatus) ownStatus.textContent = 'انتخاب شما ثبت شد.';
 
-                    const chosenInput = this.querySelector('[name="urgency_days"]');
-                    const chosenDays = chosenInput ? chosenInput.value : '';
-                    alert("انتخاب شما: " + chosenDays + " روز؛ میانگین فعلی: " + resp.urgency + " روز (" + resp.vote_count + " رأی فوریت)");
+                    const chosenInput = this.querySelector('[name="urgency_hours"]');
+                    const chosenHours = chosenInput ? chosenInput.value : '';
+                    alert("انتخاب شما: " + chosenHours + " ساعت؛ میانگین فعلی: " + resp.urgency + " ساعت (" + resp.vote_count + " رأی فوریت)");
 
                     // اعمال مدت میانگین جدید بدون تغییر زمان شروع رأی‌گیری
                     const countdown = topicCard ? topicCard.querySelector('.countdown') : null;
                     if(countdown){
                         const votingStartedUnix = parseInt(countdown.dataset.start, 10) || Math.floor(Date.now()/1000);
                         const elapsed = Math.max(0, Math.floor(Date.now()/1000) - votingStartedUnix);
-                        countdown.dataset.remaining = Math.max(0, resp.urgency*24*3600 - elapsed);
+                        countdown.dataset.remaining = Math.max(0, resp.urgency*3600 - elapsed);
                         if(countdown._countdownTimer) clearTimeout(countdown._countdownTimer);
                         countdown.textContent = '';
                         countdown.style.color = '';
