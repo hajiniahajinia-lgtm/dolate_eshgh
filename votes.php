@@ -1215,7 +1215,8 @@ body{
           <?php endif; ?>
         </div>
         <div class="meta">
-          آغاز رأی‌گیری: <?= date('Y-m-d H:i', $voting_started_unix) ?> —
+          <?php $voting_started_jalali = community_gregorian_to_jalali((int)date('Y', $voting_started_unix), (int)date('n', $voting_started_unix), (int)date('j', $voting_started_unix)); ?>
+          آغاز رأی‌گیری: <?= community_persian_digits(sprintf('%04d/%02d/%02d', $voting_started_jalali[0], $voting_started_jalali[1], $voting_started_jalali[2]) . ' ' . date('H:i', $voting_started_unix)) ?> —
           میانگین فعلی فوریت: <strong class="urgency-average"><?= $urg_hours ?></strong> ساعت
           (<span class="urgency-vote-count"><?= $urgency_vote_count ?></span> رأی فوریت)
         </div>
