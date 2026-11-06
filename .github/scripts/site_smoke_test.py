@@ -73,12 +73,24 @@ def main():
 
         with request(opener, BASE_URL + "/login.php") as response:
             login_html = response.read().decode("utf-8", errors="replace")
-            if response.status != 200:
-                raise RuntimeError("login page unavailable")
+            login_status = response.status
+            login_url = response.geturl()
+            login_content_type = response.headers.get("Content-Type", "unknown")
+        if login_status != 200:
+            print(f"FAIL login page: HTTP {login_status}; final URL: {urllib.parse.urlparse(login_url).path or '/'}")
+            return 1
         token_parser = FormTokenParser()
         token_parser.feed(login_html)
         if not token_parser.csrf:
-            print("FAIL login page: CSRF token not found.")
+            title_match = re.search(r"<title[^>]*>(.*?)</title>", login_html, re.I | re.S)
+            page_title = re.sub(r"\\s+", " ", title_match.group(1)).strip()[:80] if title_match else "not found"
+            has_login_heading = "ورود به سامانه" in login_html
+            has_login_form = bool(re.search(r"<form\\b", login_html, re.I))
+            has_csrf_name = bool(re.search(r'name\\s*=\\s*["\\']csrf_token["\\']', login_html, re.I))
+            has_cloudflare_marker = any(marker in login_html.lower() for marker in ("cloudflare", "cf-challenge", "just a moment"))
+            print("FAIL login page: CSRF token not found; no login POST was sent.")
+            print(f"DIAG login GET: HTTP {login_status}; final path={urllib.parse.urlparse(login_url).path or '/'}; content-type={login_content_type}")
+            print(f"DIAG page title={page_title!r}; login heading={has_login_heading}; form={has_login_form}; csrf field name={has_csrf_name}; challenge marker={has_cloudflare_marker}")
             return 1
 
         form = urllib.parse.urlencode({
