@@ -84,6 +84,140 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $action = (string)($_POST['action'] ?? '');
 
+    // پیشنهاد عمومی‌کردن دانش؛ منشأ و جامعهٔ اولیه در پرونده حفظ می‌شوند.
+    if ($action === 'propose_public') {
+        $proposal_entry_id = (int)($_POST['entry_id'] ?? 0);
+        $proposal_ok = false;
+        if ($proposal_entry_id > 0 && $conn->begin_transaction()) {
+            $lock_entry = $conn->prepare("SELECT e.id, e.visibility, e.community_id, e.source_topic_id, t.community_id AS source_community_id
+                FROM collective_knowledge_entries e
+                LEFT JOIN topics t ON t.id=e.source_topic_id
+                WHERE e.id=? LIMIT 1 FOR UPDATE");
+            if ($lock_entry) {
+                $lock_entry->bind_param('i', $proposal_entry_id);
+                $proposal_entry = kl_fetch_one($lock_entry);
+                $lock_entry->close();
+                if ($proposal_entry && $proposal_entry['visibility'] === 'community' &&
+                    (int)$proposal_entry['community_id'] > 0 &&
+                    (int)$proposal_entry['source_topic_id'] > 0 &&
+                    (int)$proposal_entry['source_community_id'] === (int)$proposal_entry['community_id'] &&
+                    kl_member($conn, (int)$proposal_entry['community_id'], $user_id)) {
+                    $pending_check = $conn->prepare("SELECT id FROM collective_knowledge_publication_proposals WHERE entry_id=? AND status='pending' LIMIT 1");
+                    if ($pending_check) {
+                        $pending_check->bind_param('i', $proposal_entry_id);
+                        $pending = kl_fetch_one($pending_check);
+                        $pending_check->close();
+                        if ($pending) {
+                            $proposal_ok = true;
+                        } else {
+                            $insert_proposal = $conn->prepare("INSERT INTO collective_knowledge_publication_proposals (entry_id, community_id, proposed_by, status) VALUES (?, ?, ?, 'pending')");
+                            if ($insert_proposal) {
+                                $community_value = (int)$proposal_entry['community_id'];
+                                $insert_proposal->bind_param('iii', $proposal_entry_id, $community_value, $user_id);
+                                $proposal_ok = $insert_proposal->execute();
+                                $insert_proposal->close();
+                            }
+                        }
+                    }
+                }
+            }
+            if ($proposal_ok) $conn->commit(); else $conn->rollback();
+        }
+        header('Location: knowledge_library.php?id=' . $proposal_entry_id . ($proposal_ok ? '&publication_proposed=1' : '&publication_error=1'));
+        exit;
+    }
+
+    // رأی اعضای جامعه دربارهٔ عمومی‌شدن پرونده.
+    if ($action === 'vote_public') {
+        $proposal_id = (int)($_POST['proposal_id'] ?? 0);
+        $publication_vote = (string)($_POST['publication_vote'] ?? '');
+        $publication_ok = false;
+        if ($proposal_id > 0 && in_array($publication_vote, ['approve', 'reject'], true) && $conn->begin_transaction()) {
+            $proposal_lock = $conn->prepare("SELECT p.id, p.entry_id, p.community_id, p.status, e.visibility, e.community_id AS entry_community_id
+                FROM collective_knowledge_publication_proposals p
+                JOIN collective_knowledge_entries e ON e.id=p.entry_id
+                WHERE p.id=? LIMIT 1 FOR UPDATE");
+            if ($proposal_lock) {
+                $proposal_lock->bind_param('i', $proposal_id);
+                $proposal_row = kl_fetch_one($proposal_lock);
+                $proposal_lock->close();
+                if ($proposal_row && $proposal_row['status'] === 'pending' &&
+                    $proposal_row['visibility'] === 'community' &&
+                    (int)$proposal_row['community_id'] === (int)$proposal_row['entry_community_id'] &&
+                    kl_member($conn, (int)$proposal_row['community_id'], $user_id)) {
+                    $save_publication_vote = $conn->prepare("INSERT INTO collective_knowledge_publication_votes (proposal_id, user_id, vote) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE vote=VALUES(vote), updated_at=CURRENT_TIMESTAMP");
+                    if ($save_publication_vote) {
+                        $save_publication_vote->bind_param('iis', $proposal_id, $user_id, $publication_vote);
+                        $publication_ok = $save_publication_vote->execute();
+                        $save_publication_vote->close();
+                    }
+                    if ($publication_ok) {
+                        $count_publication_votes = $conn->prepare("SELECT COUNT(*) AS total, SUM(vote='approve') AS approvals, SUM(vote='reject') AS rejections FROM collective_knowledge_publication_votes WHERE proposal_id=?");
+                        if ($count_publication_votes) {
+                            $count_publication_votes->bind_param('i', $proposal_id);
+                            $vote_totals = kl_fetch_one($count_publication_votes);
+                            $count_publication_votes->close();
+                            $total_votes = (int)($vote_totals['total'] ?? 0);
+                            $approval_count = (int)($vote_totals['approvals'] ?? 0);
+                            $rejection_count = (int)($vote_totals['rejections'] ?? 0);
+                            if ($total_votes >= 3) {
+                                $threshold = (int)ceil($total_votes * 2 / 3);
+                                if ($approval_count >= $threshold) {
+                                    $publish_entry = $conn->prepare("UPDATE collective_knowledge_entries SET visibility='public' WHERE id=? AND visibility='community' AND community_id=?");
+                                    if ($publish_entry) {
+                                        $entry_id_to_publish = (int)$proposal_row['entry_id'];
+                                        $community_to_preserve = (int)$proposal_row['community_id'];
+                                        $publish_entry->bind_param('ii', $entry_id_to_publish, $community_to_preserve);
+                                        $publication_ok = $publish_entry->execute() && $publish_entry->affected_rows === 1;
+                                        $publish_entry->close();
+                                    } else {
+                                        $publication_ok = false;
+                                    }
+                                    if ($publication_ok) {
+                                        $finish_proposal = $conn->prepare("UPDATE collective_knowledge_publication_proposals SET status='approved', decided_at=NOW() WHERE id=? AND status='pending'");
+                                        if ($finish_proposal) {
+                                            $finish_proposal->bind_param('i', $proposal_id);
+                                            $publication_ok = $finish_proposal->execute();
+                                            $finish_proposal->close();
+                                        } else {
+                                            $publication_ok = false;
+                                        }
+                                    }
+                                } elseif ($rejection_count >= $threshold) {
+                                    $finish_proposal = $conn->prepare("UPDATE collective_knowledge_publication_proposals SET status='rejected', decided_at=NOW() WHERE id=? AND status='pending'");
+                                    if ($finish_proposal) {
+                                        $finish_proposal->bind_param('i', $proposal_id);
+                                        $publication_ok = $finish_proposal->execute();
+                                        $finish_proposal->close();
+                                    } else {
+                                        $publication_ok = false;
+                                    }
+                                }
+                            }
+                        } else {
+                            $publication_ok = false;
+                        }
+                    }
+                } else {
+                    $publication_ok = false;
+                }
+            }
+            if ($publication_ok) $conn->commit(); else $conn->rollback();
+        }
+        $redirect_entry_id = 0;
+        if ($proposal_id > 0) {
+            $lookup_entry = $conn->prepare("SELECT entry_id FROM collective_knowledge_publication_proposals WHERE id=? LIMIT 1");
+            if ($lookup_entry) {
+                $lookup_entry->bind_param('i', $proposal_id);
+                $lookup_row = kl_fetch_one($lookup_entry);
+                if ($lookup_row) $redirect_entry_id = (int)$lookup_row['entry_id'];
+                $lookup_entry->close();
+            }
+        }
+        header('Location: knowledge_library.php?id=' . $redirect_entry_id . ($publication_ok ? '&publication_voted=1' : '&publication_error=1'));
+        exit;
+    }
+
     // ارزیابی مستقل اعضا برای نسخهٔ جاری مدخل
     if ($action === 'review') {
         $review_entry_id = (int)($_POST['entry_id'] ?? 0);
@@ -258,9 +392,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 exit('مدخل پیدا نشد یا فقط ثبت‌کنندهٔ آن می‌تواند ویرایش کند.');
             }
 
-            $scope_community = $visibility === 'community' ? $community_id : null;
-            $topic_value = $source_topic_id > 0 ? $source_topic_id : null;
-            $idea_value = $source_idea_id > 0 ? $source_idea_id : null;
+            // ویرایش محتوا مجاز است، اما منشأ اولیه و دامنهٔ دسترسی پرونده تغییر نمی‌کند.
+            $visibility = (string)$old['visibility'];
+            $scope_community = $old['community_id'] !== null ? (int)$old['community_id'] : null;
+            $topic_value = $old['source_topic_id'] !== null ? (int)$old['source_topic_id'] : null;
+            $idea_value = $old['source_idea_id'] !== null ? (int)$old['source_idea_id'] : null;
             $rev = $conn->prepare('INSERT INTO collective_knowledge_revisions (entry_id, editor_user_id, previous_title, previous_entry_type, previous_summary, previous_content, previous_evidence, previous_visibility, previous_community_id, previous_source_topic_id, previous_source_idea_id, previous_status, revision_note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
             if (!$rev) {
                 $conn->rollback();
@@ -301,6 +437,9 @@ if (isset($_GET['saved'])) $message = 'مدخل دانش با موفقیت ثب�
 if (isset($_GET['updated'])) $message = 'مدخل به‌روزرسانی شد؛ ارزیابی‌های نسخهٔ قبلی برای نسخهٔ تازه محاسبه نمی‌شوند.';
 if (isset($_GET['reviewed'])) $message = 'ارزیابی شما ثبت شد؛ با رسیدن تعداد ارزیابی‌ها به حد نصاب، وضعیت اعتبار به‌روزرسانی می‌شود.';
 if (isset($_GET['review_error'])) $error = 'ارزیابی ثبت نشد؛ مطمئن شوید که نویسندهٔ مدخل نیستید، عضو جامعهٔ مربوط هستید و دلیل کافی نوشته‌اید.';
+if (isset($_GET['publication_proposed'])) $message = 'پیشنهاد عمومی‌شدن برای رأی اعضای جامعه ثبت شد.';
+if (isset($_GET['publication_voted'])) $message = 'رأی شما ثبت شد؛ نتیجه با حداقل ۳ رأی و موافقت دوسوم مشخص می‌شود.';
+if (isset($_GET['publication_error'])) $error = 'ثبت پیشنهاد یا رأی انجام نشد؛ عضویت در جامعه و وضعیت پرونده را بررسی کنید.';
 if (!empty($GLOBALS['kl_db_read_error'])) {
     $error = 'خواندن اطلاعات از پایگاه داده ناموفق بود. لطفاً صفحه را تازه‌سازی کنید؛ اگر مشکل ادامه داشت، گزارش خطای سامانه باید بررسی شود.';
 }
@@ -339,6 +478,9 @@ $revisions = [];
 $review_counts = ['approve'=>0, 'reject'=>0, 'revise'=>0];
 $my_review = null;
 $review_details = [];
+$publication_proposal = null;
+$publication_vote_counts = ['approve'=>0, 'reject'=>0];
+$my_publication_vote = null;
 
 if ($entry_id > 0) {
     $stmt = $conn->prepare("SELECT k.*, u.username, c.name AS community_name, t.title AS source_topic_title, t.community_id AS source_topic_community_id,
@@ -440,6 +582,38 @@ if ($entry_id > 0) {
             if ($review_rows !== null) $review_details = $review_rows;
             $review_details_stmt->close();
         }
+
+        $publication_stmt = $conn->prepare("SELECT p.id, p.community_id, p.proposed_by, p.status, p.created_at, c.name AS community_name, u.username AS proposer_name
+            FROM collective_knowledge_publication_proposals p
+            LEFT JOIN communities c ON c.id=p.community_id
+            LEFT JOIN users u ON u.id=p.proposed_by
+            WHERE p.entry_id=? ORDER BY p.id DESC LIMIT 1");
+        if ($publication_stmt) {
+            $publication_stmt->bind_param('i', $entry_id);
+            $publication_proposal = kl_fetch_one($publication_stmt);
+            $publication_stmt->close();
+        }
+        if ($publication_proposal) {
+            $publication_id_for_view = (int)$publication_proposal['id'];
+            $publication_count_stmt = $conn->prepare("SELECT vote, COUNT(*) AS total FROM collective_knowledge_publication_votes WHERE proposal_id=? GROUP BY vote");
+            if ($publication_count_stmt) {
+                $publication_count_stmt->bind_param('i', $publication_id_for_view);
+                $publication_count_rows = kl_fetch_all($publication_count_stmt);
+                if ($publication_count_rows !== null) {
+                    foreach ($publication_count_rows as $publication_count_row) {
+                        if (isset($publication_vote_counts[$publication_count_row['vote']])) $publication_vote_counts[$publication_count_row['vote']] = (int)$publication_count_row['total'];
+                    }
+                }
+                $publication_count_stmt->close();
+            }
+            $my_publication_stmt = $conn->prepare("SELECT vote FROM collective_knowledge_publication_votes WHERE proposal_id=? AND user_id=? LIMIT 1");
+            if ($my_publication_stmt) {
+                $my_publication_stmt->bind_param('ii', $publication_id_for_view, $user_id);
+                $my_publication_row = kl_fetch_one($my_publication_stmt);
+                if ($my_publication_row) $my_publication_vote = $my_publication_row['vote'];
+                $my_publication_stmt->close();
+            }
+        }
     }
     if ($entry && $edit_mode && (int)$entry['created_by'] === $user_id) {
         $rs = $conn->prepare('SELECT r.*, u.username FROM collective_knowledge_revisions r JOIN users u ON u.id=r.editor_user_id WHERE r.entry_id=? ORDER BY r.id DESC LIMIT 20');
@@ -523,12 +697,7 @@ function kl_render_form($csrf, $communities, $entry = null, $source_topic_id = 0
     echo '<label>خلاصهٔ کوتاه</label><textarea name="summary" rows="2" maxlength="1000" required>' . kl_h($entry['summary'] ?? '') . '</textarea>';
     echo '<label>شرح کامل و جزئیات</label><textarea name="content" rows="8" maxlength="60000" required>' . kl_h($entry['content'] ?? '') . '</textarea>';
     echo '<label>شواهد و منابع (نشانی اینترنتی یا مشخصات منبع؛ اختیاری)</label><textarea name="evidence" rows="3" maxlength="12000">' . kl_h($entry['evidence'] ?? '') . '</textarea>';
-    echo '<label>دامنهٔ دسترسی</label><select name="visibility"><option value="public"' . ($visibility==='public'?' selected':'') . '>عمومی؛ قابل استفاده در همهٔ جوامع</option><option value="community"' . ($visibility==='community'?' selected':'') . '>فقط اعضای یک جامعه</option></select>';
-    echo '<label>جامعهٔ مربوط (برای مدخل اختصاصی)</label><select name="community_id"><option value="0">انتخاب نشده</option>';
-    foreach ($communities as $c) echo '<option value="' . (int)$c['id'] . '"' . ($community_id===(int)$c['id']?' selected':'') . '>' . kl_h($c['name']) . '</option>';
-    echo '</select>';
-    echo '<label>شناسهٔ موضوع مرتبط (اختیاری)</label><input type="number" min="0" name="source_topic_id" value="' . (int)($entry['source_topic_id'] ?? $source_topic_id) . '">';
-    echo '<label>شناسهٔ ایدهٔ مرتبط (اختیاری)</label><input type="number" min="0" name="source_idea_id" value="' . (int)($entry['source_idea_id'] ?? $source_idea_id) . '">';
+    echo '<p class="muted">منشأ و دامنهٔ دسترسی این پرونده ثابت می‌ماند: ' . ($visibility==='public'?'عمومی':'اختصاصی جامعهٔ مربوط') . '؛ جامعه و موضوع مبدأ از پروندهٔ اصلی حفظ می‌شوند.</p>';
     if ($editing) echo '<label>دلیل یا توضیح ویرایش (اختیاری)</label><input name="revision_note" maxlength="1000">';
     echo '<button type="submit">' . ($editing ? 'ذخیرهٔ نسخهٔ جدید' : 'ثبت در کتابخانه') . '</button></form>';
 }
@@ -581,6 +750,40 @@ textarea{resize:vertical}button,.button{display:inline-block;border:0;border-rad
 <?php if (!empty($entry['evidence'])): ?><h3>شواهد و منابع</h3><div class="content"><?= kl_h($entry['evidence']) ?></div><?php endif; ?>
 <?php if (!empty($entry['source_topic_id']) && $can_view_source_topic): ?><p>موضوع مرتبط: <a href="community.php?id=<?= (int)($entry['source_topic_community_id'] ?? 0) ?>#topic-<?= (int)$entry['source_topic_id'] ?>">موضوع شمارهٔ <?= (int)$entry['source_topic_id'] ?></a> — <?= kl_h($entry['source_topic_title'] ?? '') ?></p><?php elseif (!empty($entry['source_topic_id'])): ?><p class="muted">موضوع مرجع در جامعهٔ دیگری است؛ برای مشاهده باید عضو آن جامعه باشید.</p><?php endif; ?>
 <?php if (!empty($entry['source_idea_id']) && $can_view_source_idea): ?><p>ایدهٔ مرتبط: <a href="community.php?id=<?= (int)($entry['source_idea_community_id'] ?? 0) ?>#topic-<?= (int)($entry['source_idea_topic_id'] ?? 0) ?>">مشاهدهٔ موضوع و ایدهٔ مرتبط</a> — <?= kl_h(mb_substr(strip_tags((string)($entry['source_idea_content'] ?? '')),0,180,'UTF-8')) ?></p><?php elseif (!empty($entry['source_idea_id'])): ?><p class="muted">ایدهٔ مرجع در جامعهٔ دیگری است؛ برای مشاهده باید عضو آن جامعه باشید.</p><?php endif; ?>
+
+<?php if ($entry['visibility'] === 'public' && (int)($entry['community_id'] ?? 0) > 0): ?>
+<section class="panel"><h3>منشأ دانش</h3><p class="muted">این دانش اکنون عمومی است؛ منشأ اولیهٔ آن جامعهٔ <?= kl_h($entry['community_name'] ?? 'مبدأ') ?> است و این سابقه حفظ شده است.</p></section>
+<?php elseif ($entry['visibility'] === 'community' && (int)($entry['community_id'] ?? 0) > 0): ?>
+<section class="panel">
+<h3>پیشنهاد عمومی‌شدن دانش</h3>
+<p class="muted">این پرونده از جامعهٔ <?= kl_h($entry['community_name'] ?? '') ?> تولید شده و فعلاً فقط برای اعضای همان جامعه قابل مشاهده است. عمومی‌شدن فقط با رأی اعضای همین جامعه انجام می‌شود.</p>
+<?php if ($publication_proposal && $publication_proposal['status'] === 'pending'): ?>
+<p>پیشنهاد ثبت‌شده توسط <?= kl_h($publication_proposal['proposer_name'] ?? 'یکی از اعضا') ?> · موافق: <?= (int)$publication_vote_counts['approve'] ?> · مخالف: <?= (int)$publication_vote_counts['reject'] ?></p>
+<p class="muted">برای نتیجه، دست‌کم ۳ رأی و موافقت دوسوم رأی‌دهندگان لازم است. هر عضو می‌تواند رأی خود را تغییر دهد.</p>
+<form method="post" class="entry-form">
+<input type="hidden" name="csrf_token" value="<?= kl_h($csrf) ?>">
+<input type="hidden" name="action" value="vote_public">
+<input type="hidden" name="proposal_id" value="<?= (int)$publication_proposal['id'] ?>">
+<label>رأی شما</label>
+<select name="publication_vote" required>
+<option value="approve" <?= $my_publication_vote==='approve'?'selected':'' ?>>موافق عمومی‌شدن</option>
+<option value="reject" <?= $my_publication_vote==='reject'?'selected':'' ?>>مخالف عمومی‌شدن</option>
+</select>
+<button type="submit">ثبت یا تغییر رأی</button>
+</form>
+<?php elseif ($publication_proposal && $publication_proposal['status'] === 'approved'): ?>
+<p>این دانش با رأی اعضای جامعه عمومی شده است.</p>
+<?php else: ?>
+<?php if ($publication_proposal && $publication_proposal['status'] === 'rejected'): ?><p class="muted">پیشنهاد قبلی پذیرفته نشد؛ اعضا می‌توانند پیشنهاد تازه‌ای ثبت کنند.</p><?php endif; ?>
+<form method="post" class="entry-form">
+<input type="hidden" name="csrf_token" value="<?= kl_h($csrf) ?>">
+<input type="hidden" name="action" value="propose_public">
+<input type="hidden" name="entry_id" value="<?= (int)$entry['id'] ?>">
+<button type="submit">پیشنهاد عمومی‌شدن</button>
+</form>
+<?php endif; ?>
+</section>
+<?php endif; ?>
 
 <?php if (!empty($entry['source_topic_id']) && $can_view_source_topic): ?>
 <section class="panel">
