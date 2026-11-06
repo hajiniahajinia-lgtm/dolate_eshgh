@@ -3,7 +3,14 @@ name: PHP syntax check - knowledge library
 on:
   push:
     branches:
+      - main
       - feature/collective-knowledge-library
+    paths:
+      - 'knowledge_library.php'
+      - 'profile.php'
+      - 'community.php'
+      - 'migrations/20261106_knowledge_publication_community_vote.sql'
+      - '.github/workflows/php-knowledge-library-check.yml'
   pull_request:
     paths:
       - 'knowledge_library.php'
