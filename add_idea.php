@@ -22,6 +22,21 @@ $topic_id = (int)$_POST['topic_id'];
 $community_id = (int)$_POST['community_id'];
 $content = trim($_POST['idea_text']);
 
+// جلوگیری از ثبت ایده برای موضوع بسته یا با شناسهٔ جامعهٔ نامرتبط.
+$topic_check = $conn->prepare("SELECT id FROM topics WHERE id=? AND community_id=? AND closed=0 LIMIT 1");
+if (!$topic_check) {
+    http_response_code(500);
+    exit('بررسی وضعیت موضوع ممکن نشد.');
+}
+$topic_check->bind_param("ii", $topic_id, $community_id);
+$topic_check->execute();
+$topic_is_open = (bool)$topic_check->get_result()->fetch_assoc();
+$topic_check->close();
+if (!$topic_is_open) {
+    http_response_code(400);
+    exit('این موضوع بسته شده یا به این جامعه تعلق ندارد؛ امکان ثبت ایده وجود ندارد.');
+}
+
 // سقف متن ایده: ۲۵٬۰۰۰ نویسه (تقریباً معادل ۱۰ صفحه کتاب).
 // کنترل سمت سرور نیز لازم است تا محدودیت مرورگر دور زده نشود.
 if (function_exists('mb_strlen')) {
