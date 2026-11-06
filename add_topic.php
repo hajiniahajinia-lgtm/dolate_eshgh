@@ -78,16 +78,16 @@ if ($expertise_domain_id > 0) {
     }
 }
 
-// مقدار فوریت اصلی (دقیقه)
-$urgency_minutes = 10;
+// مقدار اولیهٔ فوریت: یک ساعت.
+$urgency_minutes = 60;
 
-// فوریت قدیمی برای سازگاری
-$urgency = $urgency_minutes;
+// مقدار فوریت اصلی بر حسب ساعت.
+$urgency = 1;
 
-$deadline = date("Y-m-d H:i:s", time() + ($urgency_minutes * 60));
 $created_at = date("Y-m-d H:i:s");
+$deadline = date("Y-m-d H:i:s", time() + 3600);
 $priority = 0;
-$urgency_default_minutes = 3;
+$urgency_default_minutes = 60;
 $urgency_updated_at = date("Y-m-d H:i:s");
 
 // دسته‌بندی موضوع؛ دستهٔ نامعتبر پذیرفته نمی‌شود.
