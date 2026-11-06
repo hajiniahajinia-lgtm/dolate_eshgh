@@ -453,16 +453,13 @@ if ($entry_id > 0) {
 }
 
 $category_options = [];
-$category_sql = "SELECT DISTINCT tc.id, tc.name FROM topic_categories tc WHERE tc.is_active=1";
-if ($selected_community_id > 0) {
-    $category_sql .= " AND (tc.community_id IS NULL OR tc.community_id=?)";
-} else {
-    $category_sql .= " AND tc.community_id IS NULL";
-}
+$category_sql = "SELECT DISTINCT tc.id, tc.name FROM topic_categories tc WHERE tc.is_active=1 AND (tc.community_id IS NULL OR EXISTS (SELECT 1 FROM community_members cm WHERE cm.community_id=tc.community_id AND cm.user_id=?))";
+if ($selected_community_id > 0) $category_sql .= " AND (tc.community_id IS NULL OR tc.community_id=?)";
 $category_sql .= " ORDER BY tc.name ASC";
 $category_stmt = $conn->prepare($category_sql);
 if ($category_stmt) {
-    if ($selected_community_id > 0) $category_stmt->bind_param('i', $selected_community_id);
+    if ($selected_community_id > 0) $category_stmt->bind_param('ii', $user_id, $selected_community_id);
+    else $category_stmt->bind_param('i', $user_id);
     $category_rows = kl_fetch_all($category_stmt);
     if ($category_rows !== null) $category_options = $category_rows;
     $category_stmt->close();
@@ -472,14 +469,14 @@ if ($selected_category_id > 0 && !array_filter($category_options, static functio
 $entries = [];
 if ($entry_id === 0) {
     if ($selected_community_id > 0) {
-        // هر کلید جامعه فقط مدخل‌های اختصاصی همان جامعه را نشان می‌دهد.
+        // در نمای یک جامعه، دانش اختصاصی همان جامعه به‌همراه دانش‌های عمومی نمایش داده می‌شود.
         $stmt = $conn->prepare("SELECT k.id, k.title, k.entry_type, k.summary, k.visibility, k.community_id, k.status, k.created_at, u.username, c.name AS community_name, tc.name AS topic_category_name
             FROM collective_knowledge_entries k
             JOIN users u ON u.id=k.created_by
             LEFT JOIN communities c ON c.id=k.community_id
             LEFT JOIN topics st ON st.id=k.source_topic_id
             LEFT JOIN topic_categories tc ON tc.id=st.category_id
-            WHERE k.visibility='community' AND k.community_id=?
+            WHERE (k.visibility='public' OR (k.visibility='community' AND k.community_id=?))
               AND (?=0 OR st.category_id=?)
               AND (?='' OR k.title LIKE ? OR k.summary LIKE ? OR k.content LIKE ?)
             ORDER BY k.updated_at DESC, k.id DESC LIMIT 100");
@@ -490,19 +487,19 @@ if ($entry_id === 0) {
             $stmt->close();
         }
     } else {
-        // کلید دانش عمومی فقط مدخل‌های عمومی را نشان می‌دهد.
+        // نمای همهٔ جوامع: دانش عمومی و دانش جوامعی که کاربر عضو آن‌هاست.
         $stmt = $conn->prepare("SELECT k.id, k.title, k.entry_type, k.summary, k.visibility, k.community_id, k.status, k.created_at, u.username, c.name AS community_name, tc.name AS topic_category_name
             FROM collective_knowledge_entries k
             JOIN users u ON u.id=k.created_by
             LEFT JOIN communities c ON c.id=k.community_id
             LEFT JOIN topics st ON st.id=k.source_topic_id
             LEFT JOIN topic_categories tc ON tc.id=st.category_id
-            WHERE k.visibility='public'
-              AND (?=0 OR st.category_id=?)
-              AND (?='' OR k.title LIKE ? OR k.summary LIKE ? OR k.content LIKE ?)
+            WHERE (k.visibility='public' OR (k.visibility='community' AND EXISTS (
+                SELECT 1 FROM community_members m WHERE m.community_id=k.community_id AND m.user_id=?
+            ))) AND (?=0 OR st.category_id=?) AND (?='' OR k.title LIKE ? OR k.summary LIKE ? OR k.content LIKE ?)
             ORDER BY k.updated_at DESC, k.id DESC LIMIT 100");
         if ($stmt) {
-            $stmt->bind_param('iissss', $selected_category_id, $selected_category_id, $q, $like, $like, $like);
+            $stmt->bind_param('iiissss', $user_id, $selected_category_id, $selected_category_id, $q, $like, $like, $like);
             $entry_rows = kl_fetch_all($stmt);
             if ($entry_rows !== null) $entries = $entry_rows;
             $stmt->close();
@@ -656,13 +653,19 @@ textarea{resize:vertical}button,.button{display:inline-block;border:0;border-rad
 <?php endif; ?>
 <?php else: ?>
 <section class="panel">
-<h2>انتخاب بخش کتابخانه</h2>
-<div class="entry-actions">
-<a class="button <?= $selected_community_id===0?'':'secondary' ?>" href="knowledge_library.php">📚 دانش عمومی</a>
+<h2>انتخاب جامعه</h2>
+<form method="get" class="entry-form">
+<label for="knowledge-community">دانش‌های کدام جامعه نمایش داده شود؟</label>
+<select id="knowledge-community" name="community_id" onchange="this.form.submit()">
+<option value="0" <?= $selected_community_id===0?'selected':'' ?>>همهٔ جوامع و دانش‌های عمومی</option>
 <?php foreach ($communities as $community_option): ?>
-<a class="button <?= $selected_community_id===(int)$community_option['id']?'':'secondary' ?>" href="knowledge_library.php?community_id=<?= (int)$community_option['id'] ?>"><?= kl_h($community_option['name']) ?></a>
+<option value="<?= (int)$community_option['id'] ?>" <?= $selected_community_id===(int)$community_option['id']?'selected':'' ?>><?= kl_h($community_option['name']) ?></option>
 <?php endforeach; ?>
-</div>
+</select>
+<?php if ($q !== ''): ?><input type="hidden" name="q" value="<?= kl_h($q) ?>"><?php endif; ?>
+<?php if ($selected_category_id > 0): ?><input type="hidden" name="category_id" value="<?= (int)$selected_category_id ?>"><?php endif; ?>
+<noscript><button type="submit">نمایش دانش‌های جامعه</button></noscript>
+</form>
 </section>
 <section class="panel"><h2>جست‌وجو در کتابخانه</h2><form method="get">
 <?php if ($selected_community_id > 0): ?><input type="hidden" name="community_id" value="<?= (int)$selected_community_id ?>"><?php endif; ?>
@@ -674,7 +677,7 @@ textarea{resize:vertical}button,.button{display:inline-block;border:0;border-rad
 <option value="<?= (int)$category_option['id'] ?>" <?= $selected_category_id===(int)$category_option['id']?'selected':'' ?>><?= kl_h($category_option['name']) ?></option>
 <?php endforeach; ?>
 </select><button type="submit">جست‌وجو</button></form></section>
-<section class="panel"><h2><?= $selected_community_id > 0 ? 'مدخل‌های جامعهٔ ' . kl_h($selected_community_name) : 'مدخل‌های دانش عمومی' ?> (<?= count($entries) ?>)</h2>
+<section class="panel"><h2><?= $selected_community_id > 0 ? 'دانش‌های جامعهٔ ' . kl_h($selected_community_name) . ' و دانش‌های عمومی' : 'مدخل‌های همهٔ جوامع' ?> (<?= count($entries) ?>)</h2>
 <?php if (!$entries): ?><p class="muted">هنوز مدخلی ثبت نشده یا نتیجه‌ای با این عبارت پیدا نشد.</p><?php endif; ?>
 <?php foreach ($entries as $item): ?><article class="entry">
 <div class="top"><a class="entry-title" href="knowledge_library.php?id=<?= (int)$item['id'] ?><?= $selected_community_id > 0 ? '&amp;community_id=' . (int)$selected_community_id : '' ?>"><?= kl_h($item['title']) ?></a><span class="tag"><?= kl_h(kl_type_label($item['entry_type'])) ?></span></div>
