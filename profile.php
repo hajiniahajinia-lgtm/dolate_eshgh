@@ -18,12 +18,53 @@ if (empty($_SESSION['community_hierarchy_csrf'])) {
 }
 $community_hierarchy_csrf = $_SESSION['community_hierarchy_csrf'];
 
-// دریافت مشخصات کاربر
-$ust = $conn->prepare("SELECT username, phone, national_id, gender, education, job, age, city, resume FROM users WHERE id=?");
+// دریافت مشخصات کاربر و تاریخ ایجاد حساب، در صورت وجود ستون
+$user_has_created_at = false;
+$created_at_check = $conn->query("SHOW COLUMNS FROM users LIKE 'created_at'");
+if ($created_at_check) {
+    $user_has_created_at = ($created_at_check->num_rows > 0);
+    $created_at_check->close();
+}
+$user_fields = "username, phone, national_id, gender, education, job, age, city, resume";
+if ($user_has_created_at) {
+    $user_fields .= ", created_at";
+}
+$ust = $conn->prepare("SELECT $user_fields FROM users WHERE id=?");
 $ust->bind_param("i", $user_id);
 $ust->execute();
 $user = $ust->get_result()->fetch_assoc();
 $ust->close();
+
+// تبدیل تاریخ میلادی به شمسی
+function profile_gregorian_to_jalali($gy, $gm, $gd) {
+    $g_days_in_month = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    $jy = ($gy > 1600) ? 979 : 0;
+    $gy -= ($gy > 1600) ? 1600 : 621;
+    $gy2 = ($gm > 2) ? ($gy + 1) : $gy;
+    $days = 365 * $gy + (int)(($gy2 + 3) / 4) - (int)(($gy2 + 99) / 100)
+        + (int)(($gy2 + 399) / 400) - 80 + $gd;
+    for ($i = 0; $i < $gm - 1; $i++) $days += $g_days_in_month[$i];
+    $jy += 33 * (int)($days / 12053);
+    $days %= 12053;
+    $jy += 4 * (int)($days / 1461);
+    $days %= 1461;
+    if ($days > 365) {
+        $jy += (int)(($days - 1) / 365);
+        $days = ($days - 1) % 365;
+    }
+    if ($days < 186) {
+        $jm = 1 + (int)($days / 31);
+        $jd = 1 + ($days % 31);
+    } else {
+        $days -= 186;
+        $jm = 7 + (int)($days / 30);
+        $jd = 1 + ($days % 30);
+    }
+    return [$jy, $jm, $jd];
+}
+function profile_persian_digits($value) {
+    return strtr((string)$value, ['0'=>'۰','1'=>'۱','2'=>'۲','3'=>'۳','4'=>'۴','5'=>'۵','6'=>'۶','7'=>'۷','8'=>'۸','9'=>'۹']);
+}
 
 // بروزرسانی پروفایل
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
@@ -249,6 +290,10 @@ document.addEventListener("DOMContentLoaded", function() {
 </form>
 </div>
 
+<?php if (!empty($user['created_at']) && ($profile_created_timestamp = strtotime($user['created_at'])) !== false): ?>
+<?php [$profile_jy, $profile_jm, $profile_jd] = profile_gregorian_to_jalali((int)date('Y', $profile_created_timestamp), (int)date('n', $profile_created_timestamp), (int)date('j', $profile_created_timestamp)); ?>
+<p><strong>تاریخ ایجاد پروفایل:</strong> <?= profile_persian_digits(sprintf('%04d/%02d/%02d', $profile_jy, $profile_jm, $profile_jd)) ?></p>
+<?php endif; ?>
 <p><strong>نام کاربری:</strong> <?= htmlspecialchars($user['username']) ?></p>
 <p><strong>شماره همراه:</strong> <?= htmlspecialchars($user['phone']) ?></p>
 <p><strong>شماره ملی:</strong> <?= htmlspecialchars($user['national_id']) ?></p>
