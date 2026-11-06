@@ -1589,7 +1589,7 @@ foreach ($topic_sections as $topic_section):
   $tid = $t2['id'];
   $created = strtotime($t2['created_at']);
   $urgency = intval($t2['urgency']); 
- $deadline = $created + ($urgency * 24 * 60 * 60); // روز تبدیل به ثانیه
+ $deadline = $created + ($urgency * 60 * 60); // فوریت بر حسب ساعت
 $remaining_seconds = $deadline - time();
 if ($remaining_seconds < 0) $remaining_seconds = 0;
   $is_closed = (int)$t2['closed'];
@@ -1619,7 +1619,7 @@ if ($remaining_seconds < 0) $remaining_seconds = 0;
     <div class="countdown" data-remaining="<?= $remaining_seconds ?>" style="font-size:13px;color:#555;margin-top:6px;">در حال محاسبه...</div>
     <div class="topic-summary" style="text-align:left;font-size:13px;">
       <div>✅ مجموع اولویت: <?= (int)$t2['total_priority'] ?></div>
-      <div>⏱ فوریت: <?= $urgency ?>روز</div>
+      <div>⏱ فوریت: <?= $urgency ?> ساعت</div>
     </div>
     <div class="topic-actions">
       <form action="toggle_priority.php" method="POST" style="display:inline;">
@@ -1639,9 +1639,9 @@ if ($remaining_seconds < 0) $remaining_seconds = 0;
           <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($community_duty_csrf, ENT_QUOTES, 'UTF-8') ?>">
           <input type="hidden" name="topic_id" value="<?= $tid ?>">
           <input type="hidden" name="community_id" value="<?= $community['id'] ?>">
-          <label class="community-urgency-label">مدت فوریت (روز)</label>
-          <input class="urgency-input" type="number" name="urgency_days" min="1" max="360" value="<?= $urgency ?>" required>
-          <button class="urgency-btn" type="submit" title="فوریت را بر حسب روز ثبت می‌کند؛ میانگین پیشنهادهای اعضا زمان موضوع را تعیین می‌کند.">ثبت فوریت</button>
+          <label class="community-urgency-label">مدت فوریت (ساعت)</label>
+          <input class="urgency-input" type="number" name="urgency_hours" min="1" max="1000" value="<?= $urgency ?>" required>
+          <button class="urgency-btn" type="submit" title="فوریت را بر حسب ساعت ثبت می‌کند؛ میانگین پیشنهادهای اعضا زمان موضوع را تعیین می‌کند.">ثبت فوریت</button>
           <small class="community-urgency-help">زمان فوریت موضوع بر اساس میانگین پیشنهادهای ثبت‌شدهٔ اعضا محاسبه می‌شود.</small>
           <small class="community-urgency-status" role="status" aria-live="polite"></small>
         </form>
@@ -2018,20 +2018,20 @@ document.addEventListener("DOMContentLoaded", function() {
                     const result = await response.json();
                     if (!result.success) throw new Error("ثبت فوریت انجام نشد");
 
-                    const urgency = Math.max(1, Math.min(360, Number(result.urgency_units) || 1));
+                    const urgency = Math.max(1, Math.min(1000, Number(result.urgency_units) || 1));
                     // انتخاب شخصی عضو را نگه دار؛ میانگین جامعه جداگانه نمایش داده می‌شود.
                     const chosenInput = form.querySelector(".urgency-input");
-                    const chosenDays = chosenInput ? chosenInput.value : "";
+                    const chosenHours = chosenInput ? chosenInput.value : "";
                     const currentSummary = currentTopic.querySelector(".topic-summary");
                     const summaryLines = currentSummary ? currentSummary.querySelectorAll("div") : [];
                     if (summaryLines.length > 1) {
-                        summaryLines[1].textContent = "⏱ فوریت: " + urgency + " روز (میانگین اعضا)";
+                        summaryLines[1].textContent = "⏱ فوریت: " + urgency + " ساعت (میانگین اعضا)";
                     }
 
                     const status = form.querySelector(".community-urgency-status");
                     const voteCount = Number(result.vote_count) || 0;
                     if (status) {
-                        status.textContent = "✓ انتخاب شما: " + chosenDays + " روز ثبت شد؛ میانگین جامعه: " + urgency + " روز (" + voteCount + " رأی فوریت).";
+                        status.textContent = "✓ انتخاب شما: " + chosenHours + " ساعت ثبت شد؛ میانگین جامعه: " + urgency + " ساعت (" + voteCount + " رأی فوریت).";
                     }
 
                     const currentCountdown = currentTopic.querySelector(".countdown");
