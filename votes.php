@@ -1230,7 +1230,7 @@ body{
           <summary>⏱ تنظیم فوریت</summary>
           <form class="form-inline" method="post" data-topic="<?= $tid ?>">
             <input type="hidden" name="topic_id" value="<?= $tid ?>">
-            <label for="urgency-days-<?= $tid ?>">فوریت انتخابی شما (ساعت):</label>
+            <label for="urgency-hours-<?= $tid ?>">فوریت انتخابی شما (ساعت):</label>
             <input id="urgency-hours-<?= $tid ?>" type="number" name="urgency_hours" min="1" max="1000" value="<?= $my_urgency_hours ?>" title="فوریت انتخابی شما بر حسب ساعت">
             <span class="urgency-help-wrap">
               <button type="submit" name="set_urgency" aria-describedby="urgency-help-<?= $tid ?>">ثبت فوریت</button>
