@@ -185,6 +185,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         exit;
     }
+    // ثبت دستی دانش غیرفعال است؛ مدخل‌ها باید از فرایندهای جمعی سامانه شکل بگیرند.
+    if ($action !== 'edit') {
+        http_response_code(403);
+        exit('ثبت مستقیم دانش غیرفعال است؛ دانش جمعی از مباحثه‌ها و رأی‌گیری‌ها شکل می‌گیرد.');
+    }
+
     $title = trim((string)($_POST['title'] ?? ''));
     $type = (string)($_POST['entry_type'] ?? '');
     $summary = trim((string)($_POST['summary'] ?? ''));
@@ -233,25 +239,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    if ($error === '' && $action === 'create') {
-        $scope_community = $visibility === 'community' ? $community_id : null;
-        $topic_value = $source_topic_id > 0 ? $source_topic_id : null;
-        $idea_value = $source_idea_id > 0 ? $source_idea_id : null;
-        $stmt = $conn->prepare('INSERT INTO collective_knowledge_entries (title, entry_type, summary, content, evidence, visibility, community_id, source_topic_id, source_idea_id, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-        if (!$stmt) {
-            $error = 'آماده‌سازی ذخیرهٔ دانش ناموفق بود؛ لطفاً دوباره تلاش کنید.';
-        } else {
-            $stmt->bind_param('ssssssiiii', $title, $type, $summary, $content, $evidence, $visibility, $scope_community, $topic_value, $idea_value, $user_id);
-            if ($stmt->execute()) {
-                $new_id = (int)$conn->insert_id;
-                $stmt->close();
-                header('Location: knowledge_library.php?id=' . $new_id . '&saved=1');
-                exit;
-            }
-            $error = 'ذخیرهٔ مدخل انجام نشد. لطفاً دوباره تلاش کنید.';
-            $stmt->close();
-        }
-    } elseif ($error === '' && $action === 'edit') {
+    if ($error === '' && $action === 'edit') {
         $entry_id = (int)($_POST['entry_id'] ?? 0);
         if ($entry_id <= 0 || !$conn->begin_transaction()) {
             $error = 'شروع ثبت امن ویرایش ناموفق بود؛ تغییری اعمال نشد.';
@@ -614,7 +602,6 @@ textarea{resize:vertical}button,.button{display:inline-block;border:0;border-rad
 </section>
 <?php endif; ?>
 <?php else: ?>
-<section class="panel"><h2>ثبت دانش تازه</h2><?php kl_render_form($csrf, $communities, null, $default_source_topic_id, $default_source_idea_id); ?></section>
 <section class="panel"><h2>جست‌وجو در کتابخانه</h2><form method="get"><input type="search" name="q" maxlength="120" value="<?= kl_h($q) ?>" placeholder="عنوان، خلاصه یا متن دانش را جست‌وجو کنید"><button type="submit">جست‌وجو</button></form></section>
 <section class="panel"><h2>مدخل‌های کتابخانه (<?= count($entries) ?>)</h2>
 <?php if (!$entries): ?><p class="muted">هنوز مدخلی ثبت نشده یا نتیجه‌ای با این عبارت پیدا نشد.</p><?php endif; ?>
