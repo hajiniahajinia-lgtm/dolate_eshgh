@@ -314,6 +314,18 @@ if ($cs) {
     $cs->close();
 }
 
+$selected_community_id = max(0, (int)($_GET['community_id'] ?? 0));
+$selected_community_name = '';
+if ($selected_community_id > 0) {
+    foreach ($communities as $community_option) {
+        if ((int)$community_option['id'] === $selected_community_id) {
+            $selected_community_name = (string)$community_option['name'];
+            break;
+        }
+    }
+    // فقط جامعه‌ای که کاربر عضو آن است قابل انتخاب است.
+    if ($selected_community_name === '') $selected_community_id = 0;
+}
 $default_source_topic_id = max(0, (int)($_GET['source_topic_id'] ?? 0));
 $default_source_idea_id = max(0, (int)($_GET['source_idea_id'] ?? 0));
 $q = trim((string)($_GET['q'] ?? ''));
@@ -441,19 +453,37 @@ if ($entry_id > 0) {
 
 $entries = [];
 if ($entry_id === 0) {
-    $stmt = $conn->prepare("SELECT k.id, k.title, k.entry_type, k.summary, k.visibility, k.community_id, k.status, k.created_at, u.username, c.name AS community_name
-        FROM collective_knowledge_entries k
-        JOIN users u ON u.id=k.created_by
-        LEFT JOIN communities c ON c.id=k.community_id
-        WHERE (k.visibility='public' OR (k.visibility='community' AND EXISTS (
-            SELECT 1 FROM community_members m WHERE m.community_id=k.community_id AND m.user_id=?
-        ))) AND (?='' OR k.title LIKE ? OR k.summary LIKE ? OR k.content LIKE ?)
-        ORDER BY k.updated_at DESC, k.id DESC LIMIT 100");
-    if ($stmt) {
-        $stmt->bind_param('issss', $user_id, $q, $like, $like, $like);
-        $entry_rows = kl_fetch_all($stmt);
-        if ($entry_rows !== null) $entries = $entry_rows;
-        $stmt->close();
+    if ($selected_community_id > 0) {
+        // در نمای یک جامعه، دانش اختصاصی همان جامعه به‌همراه دانش‌های عمومی نمایش داده می‌شود.
+        $stmt = $conn->prepare("SELECT k.id, k.title, k.entry_type, k.summary, k.visibility, k.community_id, k.status, k.created_at, u.username, c.name AS community_name
+            FROM collective_knowledge_entries k
+            JOIN users u ON u.id=k.created_by
+            LEFT JOIN communities c ON c.id=k.community_id
+            WHERE (k.visibility='public' OR (k.visibility='community' AND k.community_id=?))
+              AND (?='' OR k.title LIKE ? OR k.summary LIKE ? OR k.content LIKE ?)
+            ORDER BY k.updated_at DESC, k.id DESC LIMIT 100");
+        if ($stmt) {
+            $stmt->bind_param('issss', $selected_community_id, $q, $like, $like, $like);
+            $entry_rows = kl_fetch_all($stmt);
+            if ($entry_rows !== null) $entries = $entry_rows;
+            $stmt->close();
+        }
+    } else {
+        // نمای همهٔ جوامع: دانش عمومی و دانش جوامعی که کاربر عضو آن‌هاست.
+        $stmt = $conn->prepare("SELECT k.id, k.title, k.entry_type, k.summary, k.visibility, k.community_id, k.status, k.created_at, u.username, c.name AS community_name
+            FROM collective_knowledge_entries k
+            JOIN users u ON u.id=k.created_by
+            LEFT JOIN communities c ON c.id=k.community_id
+            WHERE (k.visibility='public' OR (k.visibility='community' AND EXISTS (
+                SELECT 1 FROM community_members m WHERE m.community_id=k.community_id AND m.user_id=?
+            ))) AND (?='' OR k.title LIKE ? OR k.summary LIKE ? OR k.content LIKE ?)
+            ORDER BY k.updated_at DESC, k.id DESC LIMIT 100");
+        if ($stmt) {
+            $stmt->bind_param('issss', $user_id, $q, $like, $like, $like);
+            $entry_rows = kl_fetch_all($stmt);
+            if ($entry_rows !== null) $entries = $entry_rows;
+            $stmt->close();
+        }
     }
 }
 
@@ -602,8 +632,24 @@ textarea{resize:vertical}button,.button{display:inline-block;border:0;border-rad
 </section>
 <?php endif; ?>
 <?php else: ?>
-<section class="panel"><h2>جست‌وجو در کتابخانه</h2><form method="get"><input type="search" name="q" maxlength="120" value="<?= kl_h($q) ?>" placeholder="عنوان، خلاصه یا متن دانش را جست‌وجو کنید"><button type="submit">جست‌وجو</button></form></section>
-<section class="panel"><h2>مدخل‌های کتابخانه (<?= count($entries) ?>)</h2>
+<section class="panel">
+<h2>انتخاب جامعه</h2>
+<form method="get" class="entry-form">
+<label for="knowledge-community">دانش‌های کدام جامعه نمایش داده شود؟</label>
+<select id="knowledge-community" name="community_id" onchange="this.form.submit()">
+<option value="0" <?= $selected_community_id===0?'selected':'' ?>>همهٔ جوامع و دانش‌های عمومی</option>
+<?php foreach ($communities as $community_option): ?>
+<option value="<?= (int)$community_option['id'] ?>" <?= $selected_community_id===(int)$community_option['id']?'selected':'' ?>><?= kl_h($community_option['name']) ?></option>
+<?php endforeach; ?>
+</select>
+<?php if ($q !== ''): ?><input type="hidden" name="q" value="<?= kl_h($q) ?>"><?php endif; ?>
+<noscript><button type="submit">نمایش دانش‌های جامعه</button></noscript>
+</form>
+</section>
+<section class="panel"><h2>جست‌وجو در کتابخانه</h2><form method="get">
+<?php if ($selected_community_id > 0): ?><input type="hidden" name="community_id" value="<?= (int)$selected_community_id ?>"><?php endif; ?>
+<input type="search" name="q" maxlength="120" value="<?= kl_h($q) ?>" placeholder="عنوان، خلاصه یا متن دانش را جست‌وجو کنید"><button type="submit">جست‌وجو</button></form></section>
+<section class="panel"><h2><?= $selected_community_id > 0 ? 'دانش‌های جامعهٔ ' . kl_h($selected_community_name) . ' و دانش‌های عمومی' : 'مدخل‌های همهٔ جوامع' ?> (<?= count($entries) ?>)</h2>
 <?php if (!$entries): ?><p class="muted">هنوز مدخلی ثبت نشده یا نتیجه‌ای با این عبارت پیدا نشد.</p><?php endif; ?>
 <?php foreach ($entries as $item): ?><article class="entry">
 <div class="top"><a class="entry-title" href="knowledge_library.php?id=<?= (int)$item['id'] ?>"><?= kl_h($item['title']) ?></a><span class="tag"><?= kl_h(kl_type_label($item['entry_type'])) ?></span></div>
