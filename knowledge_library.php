@@ -428,7 +428,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 exit('بررسی وضعیت پیشنهاد عمومی‌شدن ناموفق بود؛ تغییری اعمال نشد.');
             }
             $pending_publication_result = $pending_publication_check->get_result();
-            $has_pending_publication = $pending_publication_result ? (bool)$pending_publication_result->fetch_assoc() : false;
+            if (!$pending_publication_result) {
+                $pending_publication_check->close();
+                $conn->rollback();
+                http_response_code(500);
+                exit('خواندن وضعیت پیشنهاد عمومی‌شدن ناموفق بود؛ تغییری اعمال نشد.');
+            }
+            $has_pending_publication = (bool)$pending_publication_result->fetch_assoc();
             $pending_publication_check->close();
             if ($has_pending_publication) {
                 $conn->rollback();
@@ -484,6 +490,7 @@ if (isset($_GET['review_error'])) $error = 'ارزیابی ثبت نشد؛ مط�
 if (isset($_GET['publication_proposed'])) $message = 'پیشنهاد عمومی‌شدن برای رأی اعضای جامعه ثبت شد.';
 if (isset($_GET['publication_voted'])) $message = 'رأی شما ثبت شد؛ نتیجه با حداقل ۳ رأی و موافقت دوسوم مشخص می‌شود.';
 if (isset($_GET['publication_error'])) $error = 'ثبت پیشنهاد یا رأی انجام نشد؛ عضویت در جامعه و وضعیت پرونده را بررسی کنید.';
+if (isset($_GET['publication_pending'])) $error = 'تا پایان رأی‌گیری عمومی‌شدن، ویرایش متن پرونده موقتاً متوقف است تا رأی‌ها دربارهٔ یک نسخه باشند.';
 if (!empty($GLOBALS['kl_db_read_error'])) {
     $error = 'خواندن اطلاعات از پایگاه داده ناموفق بود. لطفاً صفحه را تازه‌سازی کنید؛ اگر مشکل ادامه داشت، گزارش خطای سامانه باید بررسی شود.';
 }
