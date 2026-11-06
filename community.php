@@ -94,45 +94,9 @@ if ($community_removal_ready && $community_id > 0 && $community) {
     community_removal_finalize_expired($conn, $community_id);
 }
 
-// بررسی بسته شدن خودکار موضوعات و انتقال ایده برتر
-$topics_check = $conn->prepare("SELECT id, urgency, created_at FROM topics WHERE community_id=? AND closed=0");
-$topics_check->bind_param("i", $community_id);
-$topics_check->execute();
-$topics_result = $topics_check->get_result();
-
-while ($topic = $topics_result->fetch_assoc()) {
-    $created = strtotime($topic['created_at']);
-    $urgency = intval($topic['urgency']);
-   $urgency = intval($topic['urgency']);
-$deadline = ($urgency > 0) ? $created + ($urgency * 24 * 60 * 60) : $created + (3 * 24 * 60 * 60);
-
-    if (time() >= $deadline) {
-        $up = $conn->prepare("UPDATE topics SET closed=1 WHERE id=?");
-        $up->bind_param("i", $topic['id']);
-        $up->execute();
-        $up->close();
-
-        $best_idea_q = $conn->prepare("
-            SELECT id
-            FROM ideas
-            WHERE topic_id=?
-            ORDER BY idea_rationality_weighted DESC, idea_rationality DESC, id ASC
-            LIMIT 1
-        ");
-        $best_idea_q->bind_param("i", $topic['id']);
-        $best_idea_q->execute();
-        $best_idea = $best_idea_q->get_result()->fetch_assoc();
-        $best_idea_q->close();
-
-        if ($best_idea) {
-            $ins = $conn->prepare("INSERT IGNORE INTO topic_final_votes (topic_id, idea_id) VALUES (?, ?)");
-            $ins->bind_param("ii", $topic['id'], $best_idea['id']);
-            $ins->execute();
-            $ins->close();
-        }
-    }
-}
-$topics_check->close();
+// پردازش مشترک موضوعات منقضی‌شده در همهٔ جوامع؛ مستقل از جامعهٔ بازشده.
+require_once __DIR__ . "/process_expired_topics.php";
+process_expired_topics($conn);
 
 // نهایی‌سازی رأی‌های منقضی و ساخت پروندهٔ دانش، با همان منطق صفحهٔ رأی‌گیری.
 require_once __DIR__ . "/collective_knowledge_finalizer.php";
