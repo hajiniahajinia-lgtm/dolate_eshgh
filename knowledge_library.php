@@ -146,17 +146,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $publication_vote = (string)($_POST['publication_vote'] ?? '');
         $publication_ok = false;
         if ($proposal_id > 0 && in_array($publication_vote, ['approve', 'reject'], true) && $conn->begin_transaction()) {
-            $proposal_lock = $conn->prepare("SELECT p.id, p.entry_id, p.community_id, p.status, e.visibility, e.community_id AS entry_community_id
-                FROM collective_knowledge_publication_proposals p
-                JOIN collective_knowledge_entries e ON e.id=p.entry_id
-                WHERE p.id=? LIMIT 1 FOR UPDATE");
-            if ($proposal_lock) {
-                $proposal_lock->bind_param('i', $proposal_id);
+            // ترتیب قفل‌ها در همهٔ عملیات یکسان است: ابتدا پرونده، سپس پیشنهاد.
+            $proposal_ref_stmt = $conn->prepare("SELECT entry_id FROM collective_knowledge_publication_proposals WHERE id=? LIMIT 1");
+            $proposal_entry_id = 0;
+            if ($proposal_ref_stmt) {
+                $proposal_ref_stmt->bind_param('i', $proposal_id);
+                $proposal_ref = kl_fetch_one($proposal_ref_stmt);
+                $proposal_entry_id = (int)($proposal_ref['entry_id'] ?? 0);
+                $proposal_ref_stmt->close();
+            }
+            $entry_lock = $proposal_entry_id > 0 ? $conn->prepare("SELECT visibility, community_id FROM collective_knowledge_entries WHERE id=? LIMIT 1 FOR UPDATE") : false;
+            $locked_entry = null;
+            if ($entry_lock) {
+                $entry_lock->bind_param('i', $proposal_entry_id);
+                $locked_entry = kl_fetch_one($entry_lock);
+                $entry_lock->close();
+            }
+            $proposal_lock = $proposal_entry_id > 0 ? $conn->prepare("SELECT id, entry_id, community_id, status FROM collective_knowledge_publication_proposals WHERE id=? AND entry_id=? LIMIT 1 FOR UPDATE") : false;
+            if ($proposal_lock && $locked_entry) {
+                $proposal_lock->bind_param('ii', $proposal_id, $proposal_entry_id);
                 $proposal_row = kl_fetch_one($proposal_lock);
                 $proposal_lock->close();
                 if ($proposal_row && $proposal_row['status'] === 'pending' &&
-                    $proposal_row['visibility'] === 'community' &&
-                    (int)$proposal_row['community_id'] === (int)$proposal_row['entry_community_id'] &&
+                    $locked_entry['visibility'] === 'community' &&
+                    (int)$proposal_row['community_id'] === (int)$locked_entry['community_id'] &&
                     kl_member($conn, (int)$proposal_row['community_id'], $user_id)) {
                     $save_publication_vote = $conn->prepare("INSERT INTO collective_knowledge_publication_votes (proposal_id, user_id, vote) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE vote=VALUES(vote), updated_at=CURRENT_TIMESTAMP");
                     if ($save_publication_vote) {
