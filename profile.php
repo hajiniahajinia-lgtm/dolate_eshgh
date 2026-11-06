@@ -473,7 +473,7 @@ if($user_comms->num_rows>0):
 </div>
 
 <details class="community-management" id="join-community" <?= isset($_GET['join_community']) ? 'open' : '' ?>>
-<summary>➕ عضویت در جامعه یا ایجاد جامعه جدید</summary>
+<summary>➕ عضویت در جامعه</summary>
 
 <!-- عضویت در جوامع موجود -->
 <div class="box">
@@ -517,6 +517,11 @@ $is_child = !empty($nc['parent_community_id']);
 <button type="submit">عضویت</button>
 </form>
 </div>
+
+</details>
+
+<details class="community-management" id="create-community" <?= isset($_GET['create_community']) ? 'open' : '' ?>>
+<summary>➕ ایجاد جامعه</summary>
 
 <!-- ایجاد جامعه جدید -->
 <div class="box">
