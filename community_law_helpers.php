@@ -99,7 +99,7 @@ if (!function_exists('community_law_scope_matches')) {
         );
         if (!$scope_stmt) return false;
 
-        $scope_stmt->bind_param('i', $law_version_id);
+        $scope_stmt->bind_param('s', $law_version_id);
         if (!$scope_stmt->execute()) {
             $scope_stmt->close();
             return false;
@@ -157,7 +157,7 @@ if (!function_exists('community_law_version_is_effective')) {
         );
         if (!$stmt) return false;
 
-        $stmt->bind_param('i', $law_version_id);
+        $stmt->bind_param('s', $law_version_id);
         if (!$stmt->execute()) {
             $stmt->close();
             return false;
@@ -196,7 +196,7 @@ if (!function_exists('community_law_record_history')) {
         if (!$stmt) return false;
 
         $stmt->bind_param(
-            'iiiiss',
+            'ssiiss',
             $law_id,
             $law_version_id,
             $community_id,
