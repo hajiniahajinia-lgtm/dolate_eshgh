@@ -1561,20 +1561,27 @@ if ($schema_ready) {
         "SELECT l.id AS law_id, l.law_code, l.originating_community_id,
                 v.id AS version_id, v.title, v.created_at, v.proposed_by,
                 rc.status AS review_status, rc.reviewer_quorum,
+                ac.status AS authority_status, ac.derived_jurisdiction_level,
+                ac.reviewer_quorum AS authority_reviewer_quorum,
                 (SELECT COUNT(*) FROM community_law_review_assessments ra
                  WHERE ra.law_version_id=v.id) AS reviewer_count,
                 (SELECT COUNT(*) FROM community_law_review_electorate re
                  WHERE re.law_version_id=v.id AND re.user_id=?) AS is_review_elector,
                 (SELECT COUNT(*) FROM community_law_review_assessments mine
-                 WHERE mine.law_version_id=v.id AND mine.reviewer_user_id=?) AS has_assessed
+                 WHERE mine.law_version_id=v.id AND mine.reviewer_user_id=?) AS has_assessed,
+                (SELECT COUNT(*) FROM community_law_authority_assessments aa
+                 WHERE aa.law_version_id=v.id) AS authority_reviewer_count,
+                (SELECT COUNT(*) FROM community_law_authority_assessments am
+                 WHERE am.law_version_id=v.id AND am.reviewer_user_id=?) AS has_authority_assessed
          FROM community_laws l
          JOIN community_law_versions v ON v.id=l.current_version_id
          LEFT JOIN community_law_review_cases rc ON rc.law_version_id=v.id
+         LEFT JOIN community_law_authority_cases ac ON ac.law_version_id=v.id
          WHERE l.status='proposed' AND v.status='proposed'
          ORDER BY v.created_at DESC LIMIT 100"
     );
     if ($proposed_stmt) {
-        $proposed_stmt->bind_param('ii', $user_id, $user_id);
+        $proposed_stmt->bind_param('iii', $user_id, $user_id, $user_id);
         if ($proposed_stmt->execute()) {
             $proposed_result = $proposed_stmt->get_result();
             while ($row = $proposed_result->fetch_assoc()) {
@@ -1604,6 +1611,53 @@ if ($schema_ready) {
             $legal_assessments_by_version[(int)$assessment_row['law_version_id']][] = $assessment_row;
         }
         $legal_assessment_stmt->free();
+    }
+
+    $authority_references_by_version = [];
+    $authority_reference_result = $conn->query(
+        "SELECT ar.id, ar.law_version_id, ar.reference_law_id,
+                ar.reference_law_version_id, ar.reference_origin_community_id,
+                ar.relation_type, rl.law_code, rv.title AS reference_title,
+                c.name AS reference_community_name
+         FROM community_law_authority_references ar
+         JOIN community_laws rl ON rl.id=ar.reference_law_id
+         JOIN community_law_versions rv ON rv.id=ar.reference_law_version_id
+         JOIN communities c ON c.id=ar.reference_origin_community_id
+         ORDER BY ar.relation_type, rl.law_code LIMIT 500"
+    );
+    if ($authority_reference_result) {
+        while ($reference_row = $authority_reference_result->fetch_assoc()) {
+            $authority_references_by_version[(int)$reference_row['law_version_id']][] = $reference_row;
+        }
+        $authority_reference_result->free();
+    }
+
+    $authority_assessments_by_version = [];
+    $authority_assessment_result = $conn->query(
+        "SELECT law_version_id, reviewer_user_id, authority_verdict,
+                reasoning, evidence, submitted_at
+         FROM community_law_authority_assessments
+         ORDER BY submitted_at ASC LIMIT 300"
+    );
+    if ($authority_assessment_result) {
+        while ($authority_assessment_row = $authority_assessment_result->fetch_assoc()) {
+            $authority_assessments_by_version[(int)$authority_assessment_row['law_version_id']][] = $authority_assessment_row;
+        }
+        $authority_assessment_result->free();
+    }
+
+    $precedent_assessments_by_reference = [];
+    $precedent_assessment_result = $conn->query(
+        "SELECT reference_id, reviewer_user_id, compatibility_verdict,
+                reasoning, evidence, submitted_at
+         FROM community_law_precedent_assessments
+         ORDER BY submitted_at ASC LIMIT 500"
+    );
+    if ($precedent_assessment_result) {
+        while ($precedent_assessment_row = $precedent_assessment_result->fetch_assoc()) {
+            $precedent_assessments_by_reference[(int)$precedent_assessment_row['reference_id']][] = $precedent_assessment_row;
+        }
+        $precedent_assessment_result->free();
     }
 
     $voting_stmt = $conn->prepare(
