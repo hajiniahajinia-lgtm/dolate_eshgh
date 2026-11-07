@@ -63,41 +63,67 @@ function normalize_community_name($value) {
     return $value;
 }
 
-// بررسی نام‌های موجود؛ این کار بدون تغییر ساختار پایگاه داده انجام می‌شود.
-$existing_names = $conn->query("SELECT name FROM communities");
-if (!$existing_names) {
-    die("بررسی نام جامعه انجام نشد. لطفاً دوباره تلاش کنید. <a href='profile.php'>بازگشت</a>");
-}
-
-$normalized_name = normalize_community_name($name);
-$name_exists = false;
-while ($existing = $existing_names->fetch_assoc()) {
-    if (normalize_community_name($existing['name']) === $normalized_name) {
-        $name_exists = true;
-        break;
+// ایجاد جامعه باید با تغییر سلسله‌مراتب سریالی شود؛ هر دو مسیر قفل ردیف‌های موجود را به ترتیب یکسان می‌گیرند.
+try {
+    if (!$conn->begin_transaction()) {
+        throw new RuntimeException('begin community creation transaction failed');
     }
-}
-$existing_names->free();
 
-if ($name_exists) {
-    http_response_code(409);
-    die("<!DOCTYPE html>
+    $hierarchy_lock = $conn->query("SELECT id FROM communities ORDER BY id FOR UPDATE");
+    if (!$hierarchy_lock) {
+        throw new RuntimeException('lock community hierarchy failed');
+    }
+    $hierarchy_lock->free();
+
+    // بررسی نام‌های موجود در همان تراکنش، تا دو درخواست هم‌زمان نام یکسان نسازند.
+    $existing_names = $conn->query("SELECT name FROM communities");
+    if (!$existing_names) {
+        throw new RuntimeException('community name check failed');
+    }
+
+    $normalized_name = normalize_community_name($name);
+    $name_exists = false;
+    while ($existing = $existing_names->fetch_assoc()) {
+        if (normalize_community_name($existing['name']) === $normalized_name) {
+            $name_exists = true;
+            break;
+        }
+    }
+    $existing_names->free();
+
+    if ($name_exists) {
+        $conn->rollback();
+        http_response_code(409);
+        die("<!DOCTYPE html>
 <html lang='fa' dir='rtl'>
 <head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'>
 <title>نام جامعه تکراری است</title>
 <style>body{font-family:tahoma,Arial,sans-serif;background:#eef3f8;margin:0;padding:20px}.message{max-width:560px;margin:40px auto;background:#fff;border:1px solid #e5b8b8;border-radius:10px;padding:22px;text-align:center;line-height:2;color:#8a2525}a{display:inline-block;margin-top:12px;background:#2065d1;color:#fff;text-decoration:none;padding:8px 16px;border-radius:6px}</style></head>
 <body><div class='message'><strong>جامعه‌ای با این نام از قبل وجود دارد.</strong><br>لطفاً نام دیگری انتخاب کنید.<br><a href='profile.php'>بازگشت به پروفایل</a></div></body></html>");
-}
+    }
 
-// درج جامعه در جدول communities با creator_id
-$stmt = $conn->prepare("INSERT INTO communities (name, approach, members_count, creator_id, community_type) VALUES (?, ?, 0, ?, ?)");
-if (!$stmt) die("خطا در آماده‌سازی کوئری: " . $conn->error);
+    // جامعه تازه به‌صورت مستقل ایجاد می‌شود؛ تعیین والد فقط از مسیر رأی‌گیری سلسله‌مراتب انجام می‌شود.
+    $stmt = $conn->prepare("INSERT INTO communities (name, approach, members_count, creator_id, community_type) VALUES (?, ?, 0, ?, ?)");
+    if (!$stmt) {
+        throw new RuntimeException('prepare community insert failed');
+    }
 
-$stmt->bind_param("ssis", $name, $approach, $user_id, $community_type);
-
-if ($stmt->execute()) {
-    $community_id = $stmt->insert_id;
+    $stmt->bind_param("ssis", $name, $approach, $user_id, $community_type);
+    if (!$stmt->execute()) {
+        throw new RuntimeException('insert community failed: ' . $stmt->error);
+    }
+    $community_id = (int)$stmt->insert_id;
     $stmt->close();
+
+    if (!$conn->commit()) {
+        throw new RuntimeException('commit community creation failed');
+    }
+} catch (Throwable $e) {
+    $conn->rollback();
+    error_log('Community creation failed: ' . $e->getMessage());
+    http_response_code(500);
+    exit("ایجاد جامعه انجام نشد. لطفاً دوباره تلاش کنید. <a href='profile.php'>بازگشت</a>");
+}
 
     // ثبت متن اولیه به‌عنوان پیشنهاد پایه، تا اعضا بتوانند آن را با پیشنهادهای بعدی مقایسه و رأی‌گیری کنند.
     $duties_table_check = $conn->query("SHOW TABLES LIKE 'community_duties'");
