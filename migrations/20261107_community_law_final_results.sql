@@ -13,6 +13,8 @@ CREATE TABLE IF NOT EXISTS community_law_final_results (
     individual_approval_percent DECIMAL(7,3) NOT NULL DEFAULT 0,
     require_community_approval TINYINT(1) NOT NULL DEFAULT 0,
     community_vote_basis ENUM('one_community_one_vote','population_weighted') NULL,
+    community_aggregate_quorum_percent DECIMAL(5,2) NULL,
+    community_aggregate_approval_percent DECIMAL(5,2) NULL,
     community_eligible DECIMAL(18,4) NOT NULL DEFAULT 0,
     community_participating DECIMAL(18,4) NOT NULL DEFAULT 0,
     community_yes DECIMAL(18,4) NOT NULL DEFAULT 0,
