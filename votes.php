@@ -156,6 +156,8 @@ if($_SERVER['REQUEST_METHOD'] === 'POST'){
             exit;
         }
 
+        $conn->begin_transaction();
+        try {
         $weight = 1.00;
         $profile_tables = $conn->query(
             "SELECT COUNT(*) AS total FROM information_schema.tables
@@ -259,7 +261,7 @@ if($_SERVER['REQUEST_METHOD'] === 'POST'){
 
         $weight_snapshot_read = $conn->prepare(
             "SELECT vote_weight FROM topic_expertise_voter_weight_snapshots
-             WHERE topic_id=? AND user_id=? LIMIT 1"
+             WHERE topic_id=? AND user_id=? LIMIT 1 FOR UPDATE"
         );
         if(!$weight_snapshot_read) throw new RuntimeException("خواندن snapshot وزن رأی ممکن نیست.");
         $weight_snapshot_read->bind_param("ii",$topic_id,$user_id);
@@ -289,9 +291,12 @@ if($_SERVER['REQUEST_METHOD'] === 'POST'){
             FROM topic_voting_ballots WHERE topic_id=? AND idea_id=?
         ");
         $counts->bind_param("ii", $topic_id, $idea_id);
-        $counts->execute();
+        if(!$counts->execute()) throw new RuntimeException("محاسبهٔ نتیجهٔ رأی‌ها انجام نشد.");
         $result = $counts->get_result()->fetch_assoc();
         $counts->close();
+
+        if(!$result) throw new RuntimeException("نتیجهٔ رأی‌ها قابل خواندن نیست.");
+        $conn->commit();
 
         echo json_encode([
             'success'=>true,
@@ -300,6 +305,13 @@ if($_SERVER['REQUEST_METHOD'] === 'POST'){
             'expertise_effect'=>['yes'=>(float)$result['yes_expertise_effect'],'no'=>(float)$result['no_expertise_effect']]
         ]);
         exit;
+        } catch(Throwable $voteError) {
+            try { $conn->rollback(); } catch(Throwable $ignored) {}
+            error_log("Topic weighted vote transaction: ".$voteError->getMessage());
+            http_response_code(500);
+            echo json_encode(['success'=>false,'message'=>'ثبت رأی به‌طور کامل انجام نشد؛ لطفاً دوباره تلاش کنید.']);
+            exit;
+        }
     }
 
     // ---------- رأی لازم‌الاجرا / غیر لازم‌الاجرا ----------
