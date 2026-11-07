@@ -561,7 +561,7 @@ if ($schema_ready) {
          ORDER BY v.vote_deadline ASC LIMIT 50"
     );
     if ($voting_stmt) {
-        $voting_stmt->bind_param('iii', $community_id, $community_id, $user_id);
+        $voting_stmt->bind_param('iiii', $community_id, $user_id, $community_id, $user_id);
         if ($voting_stmt->execute()) {
             $voting_result = $voting_stmt->get_result();
             while ($row = $voting_result->fetch_assoc()) $voting_laws[] = $row;
