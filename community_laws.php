@@ -2169,6 +2169,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $references->close();
             $reference_insert->close();
 
+            // منشور بنیادین و همه مواد نسخه لازم‌الاجرا پیش از بررسی نهایی snapshot می‌شوند.
+            if (!community_law_capture_charter_snapshot($conn, $version_id)) {
+                throw new RuntimeException('charter_snapshot_unavailable');
+            }
+
             $case_insert = $conn->prepare(
                 "INSERT INTO community_law_final_review_cases
                     (law_version_id, status, reviewer_quorum, appeal_period_days, opened_by)
@@ -2673,6 +2678,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 !in_array($law['final_status'], ['appeal_period','appeal_hold'], true) ||
                 empty($law['appeal_deadline']) || strtotime($law['appeal_deadline']) > time()
             ) throw new RuntimeException('enactment_not_ready');
+
+            // ابلاغ فقط وقتی مجاز است که snapshot منشور هنوز دقیقاً نسخه جاری و کامل باشد.
+            $charter_snapshot_current = community_law_charter_snapshot_is_current($conn, $version_id);
+            if ($charter_snapshot_current !== true) {
+                throw new RuntimeException('charter_snapshot_changed');
+            }
 
             $appeal_check = $conn->prepare(
                 "SELECT
