@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS community_parent_vote_rounds (
     deadline DATETIME NOT NULL,
     decided_at DATETIME NULL,
     winning_parent_id INT NULL,
-    yes_count INT UNSIGNED NOT NULL DEFAULT 0,
+    winning_vote_count INT UNSIGNED NOT NULL DEFAULT 0,
     PRIMARY KEY (id),
     UNIQUE KEY uq_parent_vote_round_number (community_id, round_number),
     KEY idx_parent_vote_round_status (community_id, status, deadline),
