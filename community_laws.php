@@ -432,14 +432,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (
             $law_id <= 0 || $version_id <= 0 ||
             !$percent_valid($individual_quorum, 1) ||
-            !$percent_valid($individual_approval, 50) ||
+            !$percent_valid($individual_approval, 50.01) ||
             !in_array($require_community, ['0','1'], true) ||
             mb_strlen($rationale) < 20 || mb_strlen($rationale) > 20000 ||
             ($require_community === '1' && (
                 !$percent_valid($community_quorum, 1) ||
-                !$percent_valid($community_approval, 50) ||
+                !$percent_valid($community_approval, 50.01) ||
                 !$percent_valid($aggregate_quorum, 1) ||
-                !$percent_valid($aggregate_approval, 50)
+                !$percent_valid($aggregate_approval, 50.01)
             ))
         ) community_laws_redirect($community_id, 'invalid_voting_rules');
 
@@ -4356,8 +4356,8 @@ details>summary{cursor:pointer;font-weight:bold}
                                         <input type="hidden" name="version_id" value="<?= (int)$proposal['version_id'] ?>">
                                         <label>حدنصاب مشارکت رأی مستقیم (درصد)</label>
                                         <input type="number" name="individual_quorum_percent" min="1" max="100" step="0.01" required>
-                                        <label>درصد موافقت لازم در رأی مستقیم (حداقل ۵۰)</label>
-                                        <input type="number" name="individual_approval_percent" min="50" max="100" step="0.01" required>
+                                        <label>درصد موافقت لازم در رأی مستقیم (بیش از ۵۰)</label>
+                                        <input type="number" name="individual_approval_percent" min="50.01" max="100" step="0.01" required>
                                         <label>آیا تأیید جداگانه جوامع نیز لازم است؟</label>
                                         <select name="require_community_approval" required>
                                             <option value="">انتخاب کنید</option>
@@ -4366,11 +4366,11 @@ details>summary{cursor:pointer;font-weight:bold}
                                         </select>
                                         <label>حدنصاب مشارکت در هر جامعه (در صورت انتخاب بله)</label>
                                         <input type="number" name="community_quorum_percent" min="1" max="100" step="0.01">
-                                        <label>درصد موافقت لازم در هر جامعه (در صورت انتخاب بله)</label>
+                                        <label>درصد موافقت لازم در هر جامعه، بیش از ۵۰٪ (در صورت انتخاب بله)</label>
                                         <input type="number" name="community_approval_percent" min="50" max="100" step="0.01">
                                         <label>حدنصاب مشارکت مجموع جوامع (در صورت انتخاب بله)</label>
                                         <input type="number" name="community_aggregate_quorum_percent" min="1" max="100" step="0.01">
-                                        <label>درصد موافقت لازم در مجموع جوامع (در صورت انتخاب بله)</label>
+                                        <label>درصد موافقت لازم در مجموع جوامع، بیش از ۵۰٪ (در صورت انتخاب بله)</label>
                                         <input type="number" name="community_aggregate_approval_percent" min="50" max="100" step="0.01">
                                         <label>توضیح و استدلال برای انتخاب این قواعد (الزامی)</label>
                                         <textarea name="rules_rationale" maxlength="20000" required></textarea>
