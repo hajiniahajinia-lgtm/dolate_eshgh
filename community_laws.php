@@ -230,7 +230,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!$review_scope_ids) throw new RuntimeException('invalid_law_scope');
 
             $authority_parent_map = community_law_load_parent_map($conn);
-            if ($authority_parent_map === null || !isset($authority_parent_map[$community_id])) {
+            if (
+                $authority_parent_map === null ||
+                !isset($authority_parent_map[$community_id]) ||
+                !community_law_parent_map_is_valid($authority_parent_map)
+            ) {
                 throw new RuntimeException('invalid_law_scope');
             }
             $has_unrelated_scope = false;
@@ -1616,6 +1620,7 @@ if ($schema_ready) {
     }
 
     $authority_references_by_version = [];
+    $authority_reference_scan_ok = false;
     $authority_reference_result = $conn->query(
         "SELECT ar.id, ar.law_version_id, ar.reference_law_id,
                 ar.reference_law_version_id, ar.reference_origin_community_id,
@@ -1629,6 +1634,7 @@ if ($schema_ready) {
          ORDER BY ar.relation_type, rl.law_code LIMIT 500"
     );
     if ($authority_reference_result) {
+        $authority_reference_scan_ok = true;
         while ($reference_row = $authority_reference_result->fetch_assoc()) {
             $authority_references_by_version[(int)$reference_row['law_version_id']][] = $reference_row;
         }
@@ -1834,6 +1840,7 @@ $status_messages = [
     'authority_assessment_saved' => 'ارزیابی صلاحیت و قوانین مرتبط ثبت شد.',
     'authority_assessment_not_allowed' => 'شما برای این ارزیابی واجد شرایط نیستید یا مرحله بررسی بسته شده است.',
     'invalid_authority_assessment' => 'اطلاعات ارزیابی صلاحیت یا تعارض قوانین معتبر نیست.',
+    'invalid_law_scope' => 'ساختار سلسله‌مراتب جوامع یا دامنه شمول معتبر نیست؛ بررسی صلاحیت متوقف شد.',
     'tally_saved' => 'نتیجه مرکب رأی‌گیری طبق قواعد تأییدشده ثبت شد؛ لازم‌الاجرا شدن قانون مرحله جداگانه‌ای است.',
     'tally_already_done' => 'نتیجه این رأی‌گیری قبلاً محاسبه شده است.',
     'tally_not_ready' => 'مهلت رأی‌گیری هنوز پایان نیافته یا وضعیت پیشنهاد برای شمارش نهایی معتبر نیست.',
@@ -2247,7 +2254,8 @@ details>summary{cursor:pointer;font-weight:bold}
                                 (int)$proposal['proposed_by'] !== $user_id &&
                                 (int)$proposal['is_review_elector'] === 1 &&
                                 (int)$proposal['has_authority_assessed'] === 0 &&
-                                ($proposal['authority_status'] ?? '') === 'pending'
+                                ($proposal['authority_status'] ?? '') === 'pending' &&
+                                $authority_reference_scan_ok
                             ): ?>
                             <details style="margin-top:10px">
                                 <summary>ثبت ارزیابی مستقل صلاحیت و قوانین مرتبط</summary>
