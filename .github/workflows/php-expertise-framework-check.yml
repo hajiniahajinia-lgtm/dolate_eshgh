@@ -19,6 +19,7 @@ on:
       - 'topic_expertise_profile_action.php'
       - 'community_member_removal_helpers.php'
       - 'request_member_removal.php'
+      - 'vote_member_removal.php'
       - '.github/workflows/php-expertise-framework-check.yml'
   pull_request:
     paths:
@@ -36,6 +37,7 @@ on:
       - 'profile.php'
       - 'topic_expertise_profile.php'
       - 'topic_expertise_profile_action.php'
+      - 'vote_member_removal.php'
       - '.github/workflows/php-expertise-framework-check.yml'
 
 jobs:
@@ -60,6 +62,7 @@ jobs:
           php -l create_community.php
           php -l leave_community.php
           php -l request_member_removal.php
+          php -l vote_member_removal.php
           php -l community_member_removal_helpers.php
           php -l join_community.php
           php -l topic_expertise_profile.php
