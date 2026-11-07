@@ -2263,6 +2263,152 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    if (isset($_POST['create_law_revision'])) {
+        if (!$is_member) community_laws_redirect($community_id, 'not_member');
+
+        $version_id = (int)($_POST['law_version_id'] ?? 0);
+        $title = trim((string)($_POST['revision_title'] ?? ''));
+        $law_text = trim((string)($_POST['revision_law_text'] ?? ''));
+        $implementation_plan = trim((string)($_POST['revision_implementation_plan'] ?? ''));
+        $change_summary = trim((string)($_POST['revision_change_summary'] ?? ''));
+
+        if (
+            $version_id <= 0 || $title === '' || mb_strlen($title) > 200 ||
+            $law_text === '' || mb_strlen($law_text) > 50000 ||
+            mb_strlen($implementation_plan) > 30000 ||
+            $change_summary === '' || mb_strlen($change_summary) > 10000
+        ) community_laws_redirect($community_id, 'invalid_law_revision');
+
+        if (!$conn->begin_transaction()) community_laws_redirect($community_id, 'save_error');
+        try {
+            $lock = $conn->prepare(
+                "SELECT l.id AS law_id, l.originating_community_id, l.status AS law_status,
+                        l.current_version_id, v.version_number, v.status AS version_status,
+                        v.source_topic_id, v.source_idea_id, fc.status AS final_status,
+                        rc.status AS screening_status, ac.status AS authority_status,
+                        (SELECT COUNT(*) FROM community_law_appeals ap
+                         WHERE ap.law_version_id=v.id
+                           AND ap.status IN ('submitted','under_review')) AS unresolved_appeals
+                 FROM community_law_versions v
+                 JOIN community_laws l ON l.id=v.law_id
+                 JOIN community_law_final_review_cases fc ON fc.law_version_id=v.id
+                 LEFT JOIN community_law_review_cases rc ON rc.law_version_id=v.id
+                 LEFT JOIN community_law_authority_cases ac ON ac.law_version_id=v.id
+                 WHERE v.id=? FOR UPDATE"
+            );
+            if (!$lock) throw new Exception('revision lock prepare failed');
+            $lock->bind_param('i', $version_id);
+            if (!$lock->execute()) throw new Exception('revision lock failed');
+            $previous = $lock->get_result()->fetch_assoc();
+            $lock->close();
+
+            if (
+                !$previous ||
+                (int)$previous['originating_community_id'] !== $community_id ||
+                (int)$previous['current_version_id'] !== $version_id ||
+                !in_array($previous['law_status'], ['pending_final_review','appeal_period','enactment_pending'], true) ||
+                !in_array($previous['version_status'], ['pending_final_review','appeal_period','enactment_pending'], true) ||
+                !in_array($previous['final_status'], ['conflict_found','needs_revision'], true) ||
+                (int)$previous['unresolved_appeals'] > 0
+            ) throw new RuntimeException('law_revision_not_allowed');
+
+            $scope_check = $conn->prepare(
+                "SELECT scope_community_id, include_descendants, scope_note
+                 FROM community_law_scopes WHERE law_version_id=?
+                 ORDER BY scope_community_id"
+            );
+            if (!$scope_check) throw new Exception('revision scope check prepare failed');
+            $scope_check->bind_param('i', $version_id);
+            if (!$scope_check->execute()) throw new Exception('revision scope check failed');
+            $scope_rows = [];
+            $scope_result = $scope_check->get_result();
+            while ($scope_row = $scope_result->fetch_assoc()) $scope_rows[] = $scope_row;
+            $scope_check->close();
+            if (!$scope_rows) throw new RuntimeException('law_revision_scope_missing');
+
+            $next_version = (int)$previous['version_number'] + 1;
+            $insert = $conn->prepare(
+                "INSERT INTO community_law_versions
+                    (law_id, version_number, title, law_text, implementation_plan,
+                     change_summary, source_topic_id, source_idea_id, proposed_by, status)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft')"
+            );
+            if (!$insert) throw new Exception('revision insert prepare failed');
+            $source_topic_id = $previous['source_topic_id'] !== null ? (int)$previous['source_topic_id'] : null;
+            $source_idea_id = $previous['source_idea_id'] !== null ? (int)$previous['source_idea_id'] : null;
+            $law_id = (int)$previous['law_id'];
+            $insert->bind_param(
+                'iissssiii',
+                $law_id, $next_version, $title, $law_text, $implementation_plan,
+                $change_summary, $source_topic_id, $source_idea_id, $user_id
+            );
+            if (!$insert->execute()) throw new Exception('revision insert failed');
+            $new_version_id = (int)$conn->insert_id;
+            $insert->close();
+
+            $scope_insert = $conn->prepare(
+                "INSERT INTO community_law_scopes
+                    (law_version_id, scope_community_id, include_descendants, scope_note)
+                 VALUES (?, ?, ?, ?)"
+            );
+            if (!$scope_insert) throw new Exception('revision scope insert prepare failed');
+            foreach ($scope_rows as $scope_row) {
+                $scope_community_id = (int)$scope_row['scope_community_id'];
+                $include_descendants = (int)$scope_row['include_descendants'];
+                $scope_note = $scope_row['scope_note'];
+                $scope_insert->bind_param(
+                    'iiis', $new_version_id, $scope_community_id,
+                    $include_descendants, $scope_note
+                );
+                if (!$scope_insert->execute()) throw new Exception('revision scope insert failed');
+            }
+            $scope_insert->close();
+
+            $old_version_update = $conn->prepare(
+                "UPDATE community_law_versions SET status='superseded'
+                 WHERE id=? AND status IN ('pending_final_review','appeal_period','enactment_pending')"
+            );
+            $law_update = $conn->prepare(
+                "UPDATE community_laws SET current_version_id=?, status='draft'
+                 WHERE id=? AND current_version_id=?
+                   AND status IN ('pending_final_review','appeal_period','enactment_pending')"
+            );
+            if (!$old_version_update || !$law_update) throw new Exception('revision state update prepare failed');
+            $old_version_update->bind_param('i', $version_id);
+            $law_update->bind_param('iii', $new_version_id, $law_id, $version_id);
+            if (!$old_version_update->execute() || $old_version_update->affected_rows !== 1) {
+                throw new Exception('revision previous version update failed');
+            }
+            if (!$law_update->execute() || $law_update->affected_rows !== 1) {
+                throw new Exception('revision current version update failed');
+            }
+            $old_version_update->close();
+            $law_update->close();
+
+            if (!community_law_record_history(
+                $conn, $law_id, $version_id, $community_id, $user_id,
+                'law_revision_created',
+                'نسخه ' . $next_version . ' به‌عنوان پیش‌نویس اصلاحی ایجاد شد؛ نسخه پیشین و ارزیابی‌ها و اعتراض‌های آن حفظ شدند. خلاصه اصلاحات: ' . $change_summary
+            )) throw new Exception('revision history previous failed');
+            if (!community_law_record_history(
+                $conn, $law_id, $new_version_id, $community_id, $user_id,
+                'law_revision_draft',
+                'پیش‌نویس نسخه اصلاحی ایجاد شد. قواعد رأی‌گیری و همه مراحل بررسی باید برای این نسخه جداگانه تکمیل شوند.'
+            )) throw new Exception('revision history new failed');
+
+            if (!$conn->commit()) throw new Exception('revision commit failed');
+            community_laws_redirect($community_id, 'law_revision_created');
+        } catch (Throwable $e) {
+            $conn->rollback();
+            if ($e instanceof RuntimeException) {
+                if ($e->getMessage() === 'law_revision_not_allowed') community_laws_redirect($community_id, 'law_revision_not_allowed');
+                if ($e->getMessage() === 'law_revision_scope_missing') community_laws_redirect($community_id, 'law_revision_scope_missing');
+            }
+            error_log('[Dolate Eshgh law revision] ' . $e->getMessage());
+            community_laws_redirect($community_id, 'save_error');
+        }
+    }
+
     if (isset($_POST['submit_law_objection'])) {
         if (!$is_member) community_laws_redirect($community_id, 'not_member');
 
@@ -2656,6 +2802,7 @@ if ($schema_ready) {
     $final_review_stmt = $conn->prepare(
         "SELECT l.id AS law_id, l.law_code, l.originating_community_id,
                 l.status AS law_status, v.id AS version_id, v.title,
+                v.law_text, v.implementation_plan, v.source_topic_id, v.source_idea_id,
                 v.status AS version_status, fc.status AS final_status,
                 fc.reviewer_quorum, fc.appeal_period_days, fc.appeal_deadline,
                 (SELECT COUNT(*) FROM community_law_final_review_assessments a
@@ -2893,6 +3040,10 @@ $status_messages = [
     'enactment_not_ready' => 'مهلت اعتراض هنوز پایان نیافته یا شرایط ابلاغ قانون کامل نیست.',
     'enactment_appeals_pending' => 'تا تعیین تکلیف همه اعتراض‌ها، قانون قابل ابلاغ نیست.',
     'law_enacted' => 'پس از تکمیل بررسی نهایی و مهلت اعتراض، قانون رسماً ابلاغ و لازم‌الاجرا شد.',
+    'law_revision_created' => 'پیش‌نویس نسخه اصلاح‌شده ایجاد شد؛ نسخه قبلی و تمام سوابق آن محفوظ‌اند. این نسخه باید همه مراحل را از ابتدا طی کند.',
+    'law_revision_not_allowed' => 'این نسخه در وضعیت مجاز برای اصلاح نیست یا هنوز اعتراض باز و تعیین‌تکلیف‌نشده دارد.',
+    'law_revision_scope_missing' => 'دامنه شمول نسخه قبلی ناقص است؛ برای جلوگیری از تغییر ناخواسته دامنه، نسخه اصلاحی ساخته نشد.',
+    'invalid_law_revision' => 'اطلاعات نسخه اصلاح‌شده معتبر نیست؛ عنوان، متن و خلاصه تغییرات الزامی هستند.',
     'final_review_opened' => 'بررسی نهایی مستقل آغاز شد؛ ارزیابان این مرحله از ارزیابان قبلی جدا هستند.',
     'final_review_not_ready' => 'نتیجه رأی‌گیری مثبت و وضعیت قانون برای آغاز بررسی نهایی آماده نیست.',
     'final_review_already_open' => 'پرونده بررسی نهایی این نسخه قبلاً ایجاد شده است.',
@@ -3147,6 +3298,30 @@ details>summary{cursor:pointer;font-weight:bold}
             <div class="notice">
                 <strong><?= community_laws_escape($final_law['title']) ?></strong>
                 <div class="meta"><?= community_laws_escape($final_law['law_code']) ?> — <?= community_laws_escape($final_status_labels[$final_law['final_status']] ?? $final_law['final_status']) ?></div>
+                <?php if (
+                    $is_member &&
+                    (int)$final_law['originating_community_id'] === $community_id &&
+                    in_array($final_law['final_status'], ['conflict_found','needs_revision'], true) &&
+                    (int)$final_law['unresolved_appeals'] === 0
+                ): ?>
+                    <details style="margin-top:10px">
+                        <summary>تهیه نسخه اصلاح‌شده و ارائه دوباره</summary>
+                        <p class="muted">نسخه قبلی، ارزیابی‌ها و اعتراض‌های آن حفظ می‌شوند. نسخه تازه فقط پیش‌نویس است و باید غربالگری، بررسی صلاحیت، قواعد رأی‌گیری، رأی‌گیری و بررسی نهایی را دوباره طی کند.</p>
+                        <form method="post">
+                            <input type="hidden" name="csrf_token" value="<?= community_laws_escape($csrf_token) ?>">
+                            <input type="hidden" name="law_version_id" value="<?= (int)$final_law['version_id'] ?>">
+                            <label>عنوان نسخه اصلاح‌شده</label>
+                            <input type="text" name="revision_title" maxlength="200" required value="<?= community_laws_escape($final_law['title']) ?>">
+                            <label>متن کامل قانون اصلاح‌شده</label>
+                            <textarea name="revision_law_text" maxlength="50000" required><?= community_laws_escape($final_law['law_text']) ?></textarea>
+                            <label>برنامه اجرا</label>
+                            <textarea name="revision_implementation_plan" maxlength="30000"><?= community_laws_escape($final_law['implementation_plan'] ?? '') ?></textarea>
+                            <label>خلاصه تغییرات و نحوه پاسخ به ایرادها (الزامی)</label>
+                            <textarea name="revision_change_summary" maxlength="10000" required></textarea>
+                            <button type="submit" name="create_law_revision" value="1">ایجاد پیش‌نویس نسخه اصلاح‌شده</button>
+                        </form>
+                    </details>
+                <?php endif; ?>
                 <?php if (!empty($final_assessments_by_version[(int)$final_law['version_id']])): ?>
                     <details style="margin-top:10px">
                         <summary>مشاهده ارزیابی‌ها و استدلال‌های نهایی</summary>
