@@ -15,6 +15,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 $user_id = (int)$_SESSION['user_id'];
 $community_id = isset($_POST['community_id']) ? (int)$_POST['community_id'] : 0;
 $parent_community_id = isset($_POST['parent_community_id']) ? (int)$_POST['parent_community_id'] : 0;
+$action = (string)($_POST['action'] ?? 'vote');
 $csrf_token = (string)($_POST['csrf_token'] ?? '');
 
 function return_to_community(int $community_id, string $status): void {
@@ -32,6 +33,9 @@ if ($community_id <= 0) return_to_community(0, 'invalid');
 if (empty($_SESSION['community_hierarchy_csrf']) || $csrf_token === '' ||
     !hash_equals($_SESSION['community_hierarchy_csrf'], $csrf_token)) {
     return_to_community($community_id, 'csrf');
+}
+if (!in_array($action, ['vote', 'finalize'], true)) {
+    return_to_community($community_id, 'invalid');
 }
 
 $required_tables = ['community_parent_vote_rounds', 'community_parent_vote_electorate', 'community_parent_round_votes', 'community_members'];
@@ -97,6 +101,10 @@ try {
     $round_stmt->close();
 
     if ($round && (int)$round['is_expired'] === 1) {
+        if ($action !== 'finalize') {
+            $conn->rollback();
+            return_to_community($community_id, 'round_expired');
+        }
         $round_id = (int)$round['id'];
         $vote_counts = $conn->prepare(
             "SELECT parent_community_id, COUNT(*) AS vote_count
@@ -192,6 +200,15 @@ try {
         $finalize->close();
         if (!$conn->commit()) throw new Exception('commit finalized round failed');
         return_to_community($community_id, $status === 'approved' ? 'approved' : $status);
+    }
+
+    if (!$round && $action === 'finalize') {
+        $conn->rollback();
+        return_to_community($community_id, 'already_finalized');
+    }
+    if ($round && (int)$round['is_expired'] === 0 && $action === 'finalize') {
+        $conn->rollback();
+        return_to_community($community_id, 'not_expired');
     }
 
     if (!$round) {
