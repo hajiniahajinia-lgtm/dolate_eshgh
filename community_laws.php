@@ -303,7 +303,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $reference_version = (int)$active_law['reference_version_id'];
                 $applies_to_scope = false;
                 foreach ($review_scope_ids as $scope_target_id) {
-                    if (community_law_scope_matches($conn, $reference_version, $scope_target_id)) {
+                    $reference_applies = community_law_scope_match_checked(
+                        $conn, $reference_version, $scope_target_id
+                    );
+                    if ($reference_applies === null) {
+                        $active_laws_result->free();
+                        throw new Exception('authority reference scope check failed');
+                    }
+                    if ($reference_applies) {
                         $applies_to_scope = true;
                         break;
                     }
@@ -392,6 +399,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             if ($e instanceof RuntimeException && $e->getMessage() === 'law_scope_exceeds_authority') {
                 community_laws_redirect($community_id, 'law_scope_exceeds_authority');
+            }
+            if ($e instanceof RuntimeException && $e->getMessage() === 'invalid_law_scope') {
+                community_laws_redirect($community_id, 'invalid_law_scope');
             }
             if ($e instanceof RuntimeException && $e->getMessage() === 'insufficient_reviewers') {
                 community_laws_redirect($community_id, 'insufficient_reviewers');
