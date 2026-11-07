@@ -2187,15 +2187,127 @@ details>summary{cursor:pointer;font-weight:bold}
                         </form>
                     </details>
                     <?php elseif (($proposal['review_status'] ?? '') === 'screening_clear'): ?>
-                        <p class="muted">این مرحله فقط غربالگری اولیه اعضاست؛ بررسی رسمی صلاحیت و انطباق نهایی هنوز لازم است.</p>
-                        <?php if ($is_member && (int)$proposal['originating_community_id'] === $community_id): ?>
-                        <form method="post">
-                            <input type="hidden" name="csrf_token" value="<?= community_laws_escape($csrf_token) ?>">
-                            <input type="hidden" name="law_id" value="<?= (int)$proposal['law_id'] ?>">
-                            <input type="hidden" name="version_id" value="<?= (int)$proposal['version_id'] ?>">
-                            <button type="submit" name="start_law_vote" value="1">ادامه به رأی‌گیری (مشروط به تأیید قواعد رأی‌گیری)</button>
-                        </form>
-                        <?php endif; ?>
+                        <p class="muted">غربالگری اولیه تکمیل شده است. اکنون صلاحیت جامعه و سازگاری با قوانین معتبر بررسی می‌شود.</p>
+                        <div class="notice">
+                            <strong>بررسی صلاحیت و قوانین بالادستی</strong>
+                            <?php
+                            $authority_labels = [
+                                'local' => 'محلی؛ فقط در محدوده همین جامعه',
+                                'parent_shared' => 'مشترک با زیرشاخه‌های این جامعه',
+                                'intercommunity' => 'بین‌جوامعی؛ شامل جوامع مستقل دیگر'
+                            ];
+                            $authority_status_labels = [
+                                'pending' => 'در انتظار بررسی مستقل',
+                                'confirmed' => 'صلاحیت و انطباق در بررسی مستقل تأیید شده',
+                                'conflict_found' => 'تعارض با قانون یا صلاحیت شناسایی شده؛ رأی‌گیری متوقف است',
+                                'needs_revision' => 'ابهام یا اطلاعات ناکافی؛ نیازمند بازنگری'
+                            ];
+                            ?>
+                            <p>سطح صلاحیت تشخیص‌داده‌شده: <strong><?= community_laws_escape($authority_labels[$proposal['derived_jurisdiction_level'] ?? ''] ?? 'نامشخص') ?></strong></p>
+                            <p>وضعیت: <?= community_laws_escape($authority_status_labels[$proposal['authority_status'] ?? ''] ?? 'پرونده بررسی صلاحیت موجود نیست') ?></p>
+                            <div class="meta">ارزیابی‌های مستقل ثبت‌شده: <?= (int)$proposal['authority_reviewer_count'] ?> از <?= (int)($proposal['authority_reviewer_quorum'] ?? 3) ?></div>
+
+                            <?php $proposal_references = $authority_references_by_version[(int)$proposal['version_id']] ?? []; ?>
+                            <?php if (!$proposal_references): ?>
+                                <p class="muted">در زمان ثبت پیشنهاد، قانون معتبر دیگری که بر دامنه آن اثر داشته باشد پیدا نشد. این موضوع به‌معنای تأیید خودکار منشور یا صلاحیت نیست.</p>
+                            <?php else: ?>
+                                <p class="muted">قوانین معتبر مرتبط که در زمان ارسال پیشنهاد شناسایی شده‌اند:</p>
+                                <?php foreach ($proposal_references as $reference): ?>
+                                    <?php
+                                    $relation_labels = [
+                                        'higher' => 'بالادستی',
+                                        'same_level' => 'هم‌سطح',
+                                        'lower_level' => 'پایین‌دستی',
+                                        'peer' => 'جامعه مستقل / هم‌سطح بین‌جوامعی'
+                                    ];
+                                    ?>
+                                    <div class="notice">
+                                        <strong><?= community_laws_escape($reference['reference_title']) ?></strong>
+                                        <div class="meta"><?= community_laws_escape($reference['law_code']) ?> — <?= community_laws_escape($reference['reference_community_name']) ?> — <?= community_laws_escape($relation_labels[$reference['relation_type']] ?? 'مرتبط') ?></div>
+                                        <?php if (!empty($precedent_assessments_by_reference[(int)$reference['id']])): ?>
+                                            <?php foreach ($precedent_assessments_by_reference[(int)$reference['id']] as $precedent_assessment): ?>
+                                                <p class="muted">ارزیاب #<?= (int)$precedent_assessment['reviewer_user_id'] ?>:
+                                                    <?= community_laws_escape($precedent_assessment['compatibility_verdict']) ?> —
+                                                    <?= nl2br(community_laws_escape($precedent_assessment['reasoning'])) ?></p>
+                                            <?php endforeach; ?>
+                                        <?php endif; ?>
+                                    </div>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
+
+                            <?php if (
+                                $is_member &&
+                                (int)$proposal['proposed_by'] !== $user_id &&
+                                (int)$proposal['is_review_elector'] === 1 &&
+                                (int)$proposal['has_authority_assessed'] === 0 &&
+                                ($proposal['authority_status'] ?? '') === 'pending'
+                            ): ?>
+                            <details style="margin-top:10px">
+                                <summary>ثبت ارزیابی مستقل صلاحیت و قوانین مرتبط</summary>
+                                <form method="post">
+                                    <input type="hidden" name="csrf_token" value="<?= community_laws_escape($csrf_token) ?>">
+                                    <input type="hidden" name="law_version_id" value="<?= (int)$proposal['version_id'] ?>">
+                                    <label>آیا سطح صلاحیت تشخیص‌داده‌شده و دامنه شمول درست است؟</label>
+                                    <select name="authority_verdict" required>
+                                        <option value="">انتخاب ارزیابی</option>
+                                        <option value="confirm">بله، با ساختار و دامنه اختیار سازگار است</option>
+                                        <option value="dispute">خیر، از حدود اختیار فراتر می‌رود</option>
+                                        <option value="unclear">برای تشخیص صلاحیت اطلاعات کافی نیست</option>
+                                    </select>
+                                    <label>استدلال درباره صلاحیت و دامنه اختیار (الزامی)</label>
+                                    <textarea name="authority_reasoning" maxlength="30000" required></textarea>
+                                    <label>شواهد و مستندات (اختیاری)</label>
+                                    <textarea name="authority_evidence" maxlength="30000"></textarea>
+                                    <?php foreach ($proposal_references as $reference): ?>
+                                        <div class="notice">
+                                            <strong>سازگاری با قانون: <?= community_laws_escape($reference['reference_title']) ?></strong>
+                                            <div class="meta"><?= community_laws_escape($reference['law_code']) ?> — <?= community_laws_escape($relation_labels[$reference['relation_type']] ?? 'مرتبط') ?></div>
+                                            <label>نتیجه بررسی</label>
+                                            <select name="precedent_assessment[<?= (int)$reference['id'] ?>]" required>
+                                                <option value="">انتخاب ارزیابی</option>
+                                                <option value="compatible">با این قانون تعارضی ندارد</option>
+                                                <option value="conflict">با این قانون تعارض دارد</option>
+                                                <option value="unclear">برای تشخیص تعارض اطلاعات کافی نیست</option>
+                                            </select>
+                                            <label>دلیل و مستندات بررسی این قانون (الزامی)</label>
+                                            <textarea name="precedent_reasoning[<?= (int)$reference['id'] ?>]" maxlength="30000" required></textarea>
+                                            <label>شواهد تکمیلی (اختیاری)</label>
+                                            <textarea name="precedent_evidence[<?= (int)$reference['id'] ?>]" maxlength="30000"></textarea>
+                                        </div>
+                                    <?php endforeach; ?>
+                                    <button type="submit" name="submit_law_authority_assessment" value="1">ثبت ارزیابی صلاحیت و تعارض قوانین</button>
+                                </form>
+                            </details>
+                            <?php endif; ?>
+
+                            <?php if (!empty($authority_assessments_by_version[(int)$proposal['version_id']])): ?>
+                                <details style="margin-top:10px">
+                                    <summary>مشاهده استدلال‌های ارزیابی صلاحیت</summary>
+                                    <?php foreach ($authority_assessments_by_version[(int)$proposal['version_id']] as $authority_assessment): ?>
+                                        <div class="notice">
+                                            <div class="meta">ارزیاب #<?= (int)$authority_assessment['reviewer_user_id'] ?> — <?= community_laws_escape($authority_assessment['authority_verdict']) ?> — <?= community_laws_escape($authority_assessment['submitted_at']) ?></div>
+                                            <p><?= nl2br(community_laws_escape($authority_assessment['reasoning'])) ?></p>
+                                            <?php if (!empty($authority_assessment['evidence'])): ?>
+                                                <p class="muted">شواهد: <?= nl2br(community_laws_escape($authority_assessment['evidence'])) ?></p>
+                                            <?php endif; ?>
+                                        </div>
+                                    <?php endforeach; ?>
+                                </details>
+                            <?php endif; ?>
+
+                            <?php if (
+                                $is_member &&
+                                (int)$proposal['originating_community_id'] === $community_id &&
+                                ($proposal['authority_status'] ?? '') === 'confirmed'
+                            ): ?>
+                                <form method="post">
+                                    <input type="hidden" name="csrf_token" value="<?= community_laws_escape($csrf_token) ?>">
+                                    <input type="hidden" name="law_id" value="<?= (int)$proposal['law_id'] ?>">
+                                    <input type="hidden" name="version_id" value="<?= (int)$proposal['version_id'] ?>">
+                                    <button type="submit" name="start_law_vote" value="1">ادامه به رأی‌گیری (پس از تأیید قواعد رأی‌گیری)</button>
+                                </form>
+                            <?php endif; ?>
+                        </div>
                     <?php endif; ?>
                     <?php if (!empty($legal_assessments_by_version[(int)$proposal['version_id']])): ?>
                         <details style="margin-top:10px">
