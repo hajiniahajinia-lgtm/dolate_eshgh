@@ -69,13 +69,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $implementation_plan = trim((string)($_POST['implementation_plan'] ?? ''));
         $source_topic_id = (int)($_POST['source_topic_id'] ?? 0);
         $source_idea_id = (int)($_POST['source_idea_id'] ?? 0);
+        $source_topic_id = $source_topic_id > 0 ? $source_topic_id : null;
+        $source_idea_id = $source_idea_id > 0 ? $source_idea_id : null;
         $include_descendants = isset($_POST['include_descendants']) ? 1 : 0;
 
         if ($title === '' || mb_strlen($title) > 200 || $law_text === '' || mb_strlen($law_text) > 50000 || mb_strlen($implementation_plan) > 30000) {
             community_laws_redirect($community_id, 'invalid');
         }
 
-        if ($source_idea_id > 0) {
+        if ($source_idea_id !== null) {
             $source_stmt = $conn->prepare(
                 'SELECT t.id AS topic_id
                  FROM ideas i
@@ -86,11 +88,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $source_stmt->execute();
             $source_row = $source_stmt->get_result()->fetch_assoc();
             $source_stmt->close();
-            if (!$source_row || ($source_topic_id > 0 && $source_topic_id !== (int)$source_row['topic_id'])) {
+            if (!$source_row || ($source_topic_id !== null && $source_topic_id !== (int)$source_row['topic_id'])) {
                 community_laws_redirect($community_id, 'invalid_source');
             }
             $source_topic_id = (int)$source_row['topic_id'];
-        } elseif ($source_topic_id > 0) {
+        } elseif ($source_topic_id !== null) {
             $source_stmt = $conn->prepare('SELECT id FROM topics WHERE id=? AND community_id=? LIMIT 1');
             $source_stmt->bind_param('ii', $source_topic_id, $community_id);
             $source_stmt->execute();
@@ -190,7 +192,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $law_stmt = $conn->prepare('SELECT law_id FROM community_law_versions WHERE id=? LIMIT 1');
-        $law_stmt->bind_param('i', $law_version_id);
+        $law_stmt->bind_param('s', $law_version_id);
         $law_stmt->execute();
         $law_row = $law_stmt->get_result()->fetch_assoc();
         $law_stmt->close();
@@ -205,7 +207,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             );
             if (!$objection_insert) throw new Exception('objection insert prepare failed');
             $objection_insert->bind_param(
-                'iiisss',
+                'siisss',
                 $law_version_id,
                 $community_id,
                 $user_id,
