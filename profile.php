@@ -384,6 +384,12 @@ if ($hierarchy_votes_ready) {
 <p style="color:#b42318;font-size:13px;">دور رأی‌گیری پایان یافت اما شرایط لازم برای تغییر جایگاه جامعه فراهم نشد؛ جایگاه فعلی حفظ شد.</p>
 <?php elseif (($_GET['hierarchy_status'] ?? '') === 'approved'): ?>
 <p style="color:#18794e;font-size:13px;">دور رأی‌گیری با شرایط مقرر تصویب شد و جایگاه جامعه به‌روزرسانی گردید.</p>
+<?php elseif (($_GET['hierarchy_status'] ?? '') === 'already_finalized'): ?>
+<p style="color:#596579;font-size:13px;">این دور قبلاً نهایی شده است؛ صفحه را تازه‌سازی کنید تا وضعیت دور بعدی را ببینید.</p>
+<?php elseif (($_GET['hierarchy_status'] ?? '') === 'round_expired'): ?>
+<p style="color:#8a4b08;font-size:13px;">مهلت رأی‌گیری تمام شده است؛ صفحه را تازه‌سازی کنید تا نتیجه نهایی شود.</p>
+<?php elseif (($_GET['hierarchy_status'] ?? '') === 'not_expired'): ?>
+<p style="color:#8a4b08;font-size:13px;">مهلت رأی‌گیری هنوز تمام نشده است؛ فعلاً امکان نهایی‌سازی وجود ندارد.</p>
 <?php elseif (($_GET['hierarchy_status'] ?? '') === 'schema'): ?>
 <p style="color:#b42318;font-size:13px;">ساختار جدید رأی‌گیری در پایگاه داده نصب نشده است.</p>
 <?php endif; ?>
@@ -446,6 +452,7 @@ foreach ($hierarchy_communities as $candidate_row) {
 <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($community_hierarchy_csrf, ENT_QUOTES, 'UTF-8') ?>">
 <input type="hidden" name="community_id" value="<?= $cid ?>">
 <input type="hidden" name="return_to" value="profile">
+<input type="hidden" name="action" value="<?= ($round_info && $round_info['status'] === 'open' && (int)$round_info['is_expired'] === 1) ? 'finalize' : 'vote' ?>">
 <label style="font-size:13px;display:block;">نظر شما دربارهٔ جایگاه این جامعه</label>
 <select name="parent_community_id" required>
 <option value="0" <?= $current_vote === 0 ? 'selected' : '' ?>>جامعهٔ مستقل (<?= (int)($counts_for_community[0] ?? 0) ?> رأی)</option>
