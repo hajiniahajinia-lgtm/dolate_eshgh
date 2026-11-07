@@ -87,7 +87,7 @@ try {
 
     // فقط اعضای موجود در لحظه آغاز دور، در فهرست ثابت رأی‌دهندگان قرار می‌گیرند.
     $round_stmt = $conn->prepare(
-        "SELECT id, deadline FROM community_parent_vote_rounds
+        "SELECT id, deadline, (deadline <= NOW()) AS is_expired FROM community_parent_vote_rounds
          WHERE community_id=? AND status='open' ORDER BY id DESC LIMIT 1 FOR UPDATE"
     );
     if (!$round_stmt) throw new Exception('prepare round lookup failed');
@@ -96,7 +96,7 @@ try {
     $round = $round_stmt->get_result()->fetch_assoc();
     $round_stmt->close();
 
-    if ($round && strtotime($round['deadline']) <= time()) {
+    if ($round && (int)$round['is_expired'] === 1) {
         $round_id = (int)$round['id'];
         $vote_counts = $conn->prepare(
             "SELECT parent_community_id, COUNT(*) AS vote_count
@@ -235,11 +235,11 @@ try {
         $update_round->bind_param("iii", $electorate_count, $quorum_required, $round_id);
         if (!$update_round->execute()) throw new Exception('save electorate count failed');
         $update_round->close();
-        $round = ['id' => $round_id, 'deadline' => date('Y-m-d H:i:s', time() + 7 * 86400)];
+        $round = ['id' => $round_id, 'deadline' => null, 'is_expired' => 0];
     }
 
     $round_id = (int)$round['id'];
-    if (strtotime($round['deadline']) <= time()) throw new RuntimeException('round expired');
+    if (isset($round['is_expired']) && (int)$round['is_expired'] === 1) throw new RuntimeException('round expired');
     $eligible = $conn->prepare("SELECT 1 FROM community_parent_vote_electorate WHERE round_id=? AND user_id=? LIMIT 1");
     if (!$eligible) throw new Exception('prepare eligibility check failed');
     $eligible->bind_param("ii", $round_id, $user_id);
