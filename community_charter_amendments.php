@@ -284,7 +284,7 @@ if (!in_array($a['status'], ['draft','independent_review'], true)) {
         $review_stats->close();
     }
 }
-if (!in_array($a['status'], ['draft','independent_review','public_voting'], true)) {
+if (!empty($a['voting_opens_at']) && !in_array($a['status'], ['draft','independent_review','public_voting'], true)) {
     $vote_stats = $conn->prepare(
         "SELECT
             (SELECT COUNT(*) FROM community_charter_amendment_electorate WHERE amendment_id=?) AS electorate,
