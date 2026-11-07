@@ -154,7 +154,4 @@ try {
 
     header("Location: profile.php?msg=community_created");
     exit;
-} else {
-    die("خطا در ایجاد جامعه: " . $stmt->error);
-}
 ?>
