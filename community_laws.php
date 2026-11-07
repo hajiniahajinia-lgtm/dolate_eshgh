@@ -480,6 +480,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $aggregate = $conn->prepare(
                 "SELECT e.voting_community_id,
+                        COUNT(e.id) AS electorate_count,
                         COUNT(v.id) AS cast_count,
                         SUM(CASE WHEN v.vote='yes' THEN 1 ELSE 0 END) AS yes_count,
                         SUM(CASE WHEN v.vote='no' THEN 1 ELSE 0 END) AS no_count,
