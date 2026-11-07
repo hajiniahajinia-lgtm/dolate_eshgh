@@ -327,6 +327,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     (law_version_id, community_id, electorate_count, position_result)
                  VALUES (?, ?, 0, 'pending')"
             );
+
+            // مسیر رأی مستقیم: هر کاربر از اجتماع اعضای همه جوامع مشمول فقط یک‌بار وارد فهرست می‌شود.
+            $insert_direct_electorate = $conn->prepare(
+                "INSERT IGNORE INTO community_law_direct_electorate
+                    (law_version_id, user_id, vote_weight)
+                 SELECT ?, e.user_id, 1.00
+                 FROM community_law_electorate e
+                 WHERE e.law_version_id=?"
+            );
             $count_members = $conn->prepare(
                 "SELECT COUNT(*) AS total FROM community_members WHERE community_id=?"
             );
@@ -362,6 +371,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $set_position_count->close();
 
             if ($total_electorate === 0) throw new RuntimeException('empty_law_electorate');
+
+            if (!$insert_direct_electorate) throw new Exception('direct electorate prepare failed');
+            $insert_direct_electorate->bind_param('ii', $version_id, $version_id);
+            if (!$insert_direct_electorate->execute()) throw new Exception('direct electorate snapshot failed');
+            $insert_direct_electorate->close();
+
+            $direct_count_stmt = $conn->prepare(
+                "SELECT COUNT(*) AS total FROM community_law_direct_electorate WHERE law_version_id=?"
+            );
+            if (!$direct_count_stmt) throw new Exception('direct electorate count prepare failed');
+            $direct_count_stmt->bind_param('i', $version_id);
+            if (!$direct_count_stmt->execute()) throw new Exception('direct electorate count failed');
+            $direct_electorate_count = (int)$direct_count_stmt->get_result()->fetch_assoc()['total'];
+            $direct_count_stmt->close();
+            if ($direct_electorate_count === 0) throw new RuntimeException('empty_law_electorate');
 
             $deadline = date('Y-m-d H:i:s', time() + 7 * 24 * 60 * 60);
             $version_update = $conn->prepare(
@@ -503,6 +527,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             error_log('[Dolate Eshgh law tally] ' . $e->getMessage());
             community_laws_redirect($community_id, 'save_error');
         }
+    }
+
+    if (isset($_POST['cast_law_direct_vote'])) {
+        $version_id = (int)($_POST['version_id'] ?? 0);
+        $vote = (string)($_POST['direct_vote'] ?? '');
+        $comment = trim((string)($_POST['direct_comment'] ?? ''));
+        if ($version_id <= 0 || !in_array($vote, ['yes','no','abstain'], true) || mb_strlen($comment) > 5000) {
+            community_laws_redirect($community_id, 'invalid_law_vote');
+        }
+
+        $eligible = $conn->prepare(
+            "SELECT e.vote_weight
+             FROM community_law_direct_electorate e
+             JOIN community_law_versions v ON v.id=e.law_version_id
+             JOIN community_laws l ON l.id=v.law_id
+             WHERE e.law_version_id=? AND e.user_id=?
+               AND v.status='voting' AND l.status='voting'
+               AND v.vote_deadline > NOW()
+             LIMIT 1"
+        );
+        if (!$eligible) community_laws_redirect($community_id, 'save_error');
+        $eligible->bind_param('ii', $version_id, $user_id);
+        if (!$eligible->execute()) {
+            $eligible->close();
+            community_laws_redirect($community_id, 'save_error');
+        }
+        $eligibility = $eligible->get_result()->fetch_assoc();
+        $eligible->close();
+        if (!$eligibility) community_laws_redirect($community_id, 'not_law_elector');
+
+        $vote_stmt = $conn->prepare(
+            "INSERT INTO community_law_direct_votes
+                (law_version_id, voter_user_id, vote, vote_weight, comment)
+             VALUES (?, ?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE
+                vote=VALUES(vote), vote_weight=VALUES(vote_weight),
+                comment=VALUES(comment), voted_at=NOW()"
+        );
+        if (!$vote_stmt) community_laws_redirect($community_id, 'save_error');
+        $weight = (float)$eligibility['vote_weight'];
+        $vote_stmt->bind_param('iisds', $version_id, $user_id, $vote, $weight, $comment);
+        $saved = $vote_stmt->execute();
+        $vote_stmt->close();
+        if (!$saved) community_laws_redirect($community_id, 'save_error');
+        community_laws_redirect($community_id, 'direct_law_vote_saved');
     }
 
     if (isset($_POST['cast_law_vote'])) {
@@ -688,7 +757,10 @@ if ($schema_ready) {
                 v.law_text, v.vote_deadline,
                 (SELECT cv.vote FROM community_law_votes cv
                  WHERE cv.law_version_id=v.id AND cv.voting_community_id=? AND cv.voter_user_id=?
-                 LIMIT 1) AS current_vote
+                 LIMIT 1) AS community_current_vote,
+                (SELECT dv.vote FROM community_law_direct_votes dv
+                 WHERE dv.law_version_id=v.id AND dv.voter_user_id=?
+                 LIMIT 1) AS direct_current_vote
          FROM community_laws l
          JOIN community_law_versions v ON v.id=l.current_version_id
          JOIN community_law_electorate e ON e.law_version_id=v.id
@@ -697,7 +769,7 @@ if ($schema_ready) {
          ORDER BY v.vote_deadline ASC LIMIT 50"
     );
     if ($voting_stmt) {
-        $voting_stmt->bind_param('iiii', $community_id, $user_id, $community_id, $user_id);
+        $voting_stmt->bind_param('iiiii', $community_id, $user_id, $user_id, $community_id, $user_id);
         if ($voting_stmt->execute()) {
             $voting_result = $voting_stmt->get_result();
             while ($row = $voting_result->fetch_assoc()) $voting_laws[] = $row;
@@ -787,7 +859,8 @@ $status_messages = [
     'tally_saved' => 'شمارش آرا به تفکیک جوامع ثبت شد؛ تصویب نهایی هنوز به قواعد حدنصاب نیاز دارد.',
     'tally_not_ready' => 'مهلت رأی‌گیری هنوز پایان نیافته یا وضعیت پیشنهاد برای شمارش نهایی معتبر نیست.',
     'invalid_tally' => 'اطلاعات درخواست شمارش آرا معتبر نیست.',
-    'law_vote_saved' => 'رأی شما ثبت شد؛ تا پایان مهلت می‌توانید آن را تغییر دهید.',
+    'law_vote_saved' => 'رأی شما در شکل‌گیری موضع این جامعه ثبت شد؛ تا پایان مهلت می‌توانید آن را تغییر دهید.',
+    'direct_law_vote_saved' => 'رأی مستقیم شما ثبت شد؛ این رأی در کل سامانه فقط یک‌بار برای این قانون محاسبه می‌شود.',
     'invalid_law_vote' => 'رأی یا اطلاعات ارسالی معتبر نیست.',
     'not_law_elector' => 'نام شما در فهرست رأی‌دهندگان این رأی‌گیری ثبت نشده است.',
     'voting_started' => 'رأی‌گیری هفت‌روزه آغاز شد و فهرست اعضای واجد شرایط ثبت شد.',
@@ -985,19 +1058,40 @@ details>summary{cursor:pointer;font-weight:bold}
                 <strong><?= community_laws_escape($active_law['title']) ?></strong>
                 <div class="meta"><?= community_laws_escape($active_law['law_code']) ?> — پایان رأی‌گیری: <?= community_laws_escape($active_law['vote_deadline']) ?></div>
                 <div class="law-text"><?= community_laws_escape($active_law['law_text']) ?></div>
-                <form method="post">
-                    <input type="hidden" name="csrf_token" value="<?= community_laws_escape($csrf_token) ?>">
-                    <input type="hidden" name="version_id" value="<?= (int)$active_law['version_id'] ?>">
-                    <label>رأی شما</label>
-                    <select name="vote" required>
-                        <option value="yes" <?= ($active_law['current_vote'] ?? '') === 'yes' ? 'selected' : '' ?>>موافقم</option>
-                        <option value="no" <?= ($active_law['current_vote'] ?? '') === 'no' ? 'selected' : '' ?>>مخالفم</option>
-                        <option value="abstain" <?= ($active_law['current_vote'] ?? '') === 'abstain' ? 'selected' : '' ?>>ممتنع</option>
-                    </select>
-                    <label>توضیح (اختیاری)</label>
-                    <textarea name="comment" maxlength="5000"></textarea>
-                    <button type="submit" name="cast_law_vote" value="1">ثبت یا تغییر رأی</button>
-                </form>
+                <div class="notice">
+                    <strong>۱. رأی مستقیم شما</strong>
+                    <p class="muted">این رأی فقط یک‌بار برای هر فرد و هر قانون ثبت می‌شود؛ عضویت شما در چند جامعه باعث چندبار شمرده‌شدن آن نخواهد شد.</p>
+                    <form method="post">
+                        <input type="hidden" name="csrf_token" value="<?= community_laws_escape($csrf_token) ?>">
+                        <input type="hidden" name="version_id" value="<?= (int)$active_law['version_id'] ?>">
+                        <label>نظر مستقیم شما</label>
+                        <select name="direct_vote" required>
+                            <option value="yes" <?= ($active_law['direct_current_vote'] ?? '') === 'yes' ? 'selected' : '' ?>>موافقم</option>
+                            <option value="no" <?= ($active_law['direct_current_vote'] ?? '') === 'no' ? 'selected' : '' ?>>مخالفم</option>
+                            <option value="abstain" <?= ($active_law['direct_current_vote'] ?? '') === 'abstain' ? 'selected' : '' ?>>ممتنع</option>
+                        </select>
+                        <label>توضیح (اختیاری)</label>
+                        <textarea name="direct_comment" maxlength="5000"></textarea>
+                        <button type="submit" name="cast_law_direct_vote" value="1">ثبت یا تغییر رأی مستقیم</button>
+                    </form>
+                </div>
+                <div class="notice">
+                    <strong>۲. مشارکت در تعیین موضع این جامعه</strong>
+                    <p class="muted">این رأی در شکل‌گیری موضع رسمی همین جامعه نقش دارد و از رأی مستقیم فردی جدا محاسبه می‌شود.</p>
+                    <form method="post">
+                        <input type="hidden" name="csrf_token" value="<?= community_laws_escape($csrf_token) ?>">
+                        <input type="hidden" name="version_id" value="<?= (int)$active_law['version_id'] ?>">
+                        <label>رأی شما در این جامعه</label>
+                        <select name="vote" required>
+                            <option value="yes" <?= ($active_law['community_current_vote'] ?? '') === 'yes' ? 'selected' : '' ?>>موافقم</option>
+                            <option value="no" <?= ($active_law['community_current_vote'] ?? '') === 'no' ? 'selected' : '' ?>>مخالفم</option>
+                            <option value="abstain" <?= ($active_law['community_current_vote'] ?? '') === 'abstain' ? 'selected' : '' ?>>ممتنع</option>
+                        </select>
+                        <label>توضیح (اختیاری)</label>
+                        <textarea name="comment" maxlength="5000"></textarea>
+                        <button type="submit" name="cast_law_vote" value="1">ثبت یا تغییر رأی در این جامعه</button>
+                    </form>
+                </div>
             </div>
         <?php endforeach; ?>
     <?php endif; ?>
