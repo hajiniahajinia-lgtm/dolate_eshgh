@@ -157,20 +157,92 @@ if($_SERVER['REQUEST_METHOD'] === 'POST'){
         }
 
         $weight = 1.00;
-        $competency = $conn->prepare("
-            SELECT ec.weight
-            FROM topic_expertise_proposals p
-            JOIN expertise_competencies ec ON ec.domain_id=p.domain_id AND ec.user_id=?
-            WHERE p.topic_id=? AND p.community_id=? AND p.status='approved'
-              AND ec.valid_from<=NOW() AND ec.valid_until>NOW()
-            LIMIT 1
-        ");
-        if ($competency) {
-            $competency->bind_param("iii", $user_id, $topic_id, $community_id);
-            $competency->execute();
-            $cr = $competency->get_result()->fetch_assoc();
-            $competency->close();
-            if ($cr) { $weight = min(3.00, max(1.00, (float)$cr['weight'])); }
+        $profile_tables = $conn->query(
+            "SELECT COUNT(*) AS total FROM information_schema.tables
+             WHERE table_schema=DATABASE()
+               AND table_name IN ('topic_expertise_profiles','topic_expertise_profile_domains')"
+        );
+        $profile_schema_ready = $profile_tables &&
+            (int)$profile_tables->fetch_assoc()['total'] === 2;
+        if ($profile_tables) $profile_tables->free();
+
+        $approved_profile_found = false;
+        $profile_lookup_failed = false;
+        if ($profile_schema_ready) {
+            $profile_lookup = $conn->prepare(
+                "SELECT p.id, COUNT(pd.id) AS domain_count,
+                        COALESCE(SUM(pd.share_percent),0) AS share_total,
+                        COUNT(DISTINCT pd.domain_id) AS distinct_domains
+                 FROM topic_expertise_profiles p
+                 LEFT JOIN topic_expertise_profile_domains pd ON pd.profile_id=p.id
+                 WHERE p.topic_id=? AND p.community_id=? AND p.status='approved'
+                 GROUP BY p.id
+                 ORDER BY p.version_number DESC LIMIT 1"
+            );
+            if (!$profile_lookup) {
+                $profile_lookup_failed = true;
+            } else {
+                $profile_lookup->bind_param("ii", $topic_id, $community_id);
+                if (!$profile_lookup->execute()) {
+                    $profile_lookup_failed = true;
+                } else {
+                    $profile = $profile_lookup->get_result()->fetch_assoc();
+                    if ($profile) {
+                        $approved_profile_found = true;
+                        $profile_valid =
+                            (int)$profile['domain_count'] > 0 &&
+                            (int)$profile['domain_count'] === (int)$profile['distinct_domains'] &&
+                            abs((float)$profile['share_total'] - 100.00) < 0.001;
+                        if ($profile_valid) {
+                            $profile_weight_stmt = $conn->prepare(
+                                "SELECT COALESCE(
+                                    SUM(pd.share_percent *
+                                        LEAST(3.00, GREATEST(1.00, COALESCE(ec.weight,1.00)))
+                                    ) / 100.00, 1.00
+                                 ) AS calculated_weight
+                                 FROM topic_expertise_profile_domains pd
+                                 LEFT JOIN expertise_competencies ec
+                                   ON ec.domain_id=pd.domain_id AND ec.user_id=?
+                                  AND ec.valid_from<=NOW() AND ec.valid_until>NOW()
+                                 WHERE pd.profile_id=?"
+                            );
+                            if ($profile_weight_stmt) {
+                                $profile_weight_stmt->bind_param("ii", $user_id, $profile['id']);
+                                if ($profile_weight_stmt->execute()) {
+                                    $profile_weight_row = $profile_weight_stmt->get_result()->fetch_assoc();
+                                    if ($profile_weight_row) {
+                                        $weight = min(3.00, max(1.00, (float)$profile_weight_row['calculated_weight']));
+                                    }
+                                }
+                                $profile_weight_stmt->close();
+                            }
+                        } else {
+                            // پروفایل تأییدشده اما ناسازگار است؛ وزن پایه اعمال می‌شود و مسیر قدیمی دور زده نمی‌شود.
+                            $profile_lookup_failed = true;
+                        }
+                    }
+                }
+                $profile_lookup->close();
+            }
+        }
+
+        // سازگاری با پیشنهادهای تک‌حوزه‌ای قدیمی فقط وقتی پروفایل چندحوزه‌ای تأییدشده‌ای وجود ندارد.
+        if (!$approved_profile_found && !$profile_lookup_failed) {
+            $competency = $conn->prepare("
+                SELECT ec.weight
+                FROM topic_expertise_proposals p
+                JOIN expertise_competencies ec ON ec.domain_id=p.domain_id AND ec.user_id=?
+                WHERE p.topic_id=? AND p.community_id=? AND p.status='approved'
+                  AND ec.valid_from<=NOW() AND ec.valid_until>NOW()
+                LIMIT 1
+            ");
+            if ($competency) {
+                $competency->bind_param("iii", $user_id, $topic_id, $community_id);
+                $competency->execute();
+                $cr = $competency->get_result()->fetch_assoc();
+                $competency->close();
+                if ($cr) { $weight = min(3.00, max(1.00, (float)$cr['weight'])); }
+            }
         }
 
         $stmt = $conn->prepare("
