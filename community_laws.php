@@ -2335,6 +2335,8 @@ $recent_objections = [];
 $passed_laws_pending_final_review = [];
 $final_review_laws = [];
 $appeals_by_version = [];
+$final_assessments_by_version = [];
+$appeal_assessments_by_id = [];
 
 if ($schema_ready) {
     $law_result = $conn->query(
@@ -2801,6 +2803,35 @@ if ($schema_ready) {
         $appeal_stmt->close();
     }
 
+
+    $final_assessment_result = $conn->query(
+        "SELECT law_version_id, reviewer_user_id, verdict,
+                charter_and_rights, non_discrimination, power_concentration,
+                human_and_social_impact, environmental_impact,
+                economic_and_resource_impact, future_generations_and_other_life,
+                implementation_and_accountability, reasoning, evidence, submitted_at
+         FROM community_law_final_review_assessments
+         ORDER BY submitted_at ASC LIMIT 500"
+    );
+    if ($final_assessment_result) {
+        while ($assessment_row = $final_assessment_result->fetch_assoc()) {
+            $final_assessments_by_version[(int)$assessment_row['law_version_id']][] = $assessment_row;
+        }
+        $final_assessment_result->free();
+    }
+
+    $appeal_assessment_result = $conn->query(
+        "SELECT appeal_id, reviewer_user_id, verdict, reasoning, evidence, submitted_at
+         FROM community_law_appeal_assessments
+         ORDER BY submitted_at ASC LIMIT 500"
+    );
+    if ($appeal_assessment_result) {
+        while ($assessment_row = $appeal_assessment_result->fetch_assoc()) {
+            $appeal_assessments_by_id[(int)$assessment_row['appeal_id']][] = $assessment_row;
+        }
+        $appeal_assessment_result->free();
+    }
+
     $objection_stmt = $conn->prepare(
         "SELECT o.id, o.objection_type, o.status, o.description, o.created_at,
                 v.title, l.law_code
@@ -3108,6 +3139,29 @@ details>summary{cursor:pointer;font-weight:bold}
             <div class="notice">
                 <strong><?= community_laws_escape($final_law['title']) ?></strong>
                 <div class="meta"><?= community_laws_escape($final_law['law_code']) ?> — <?= community_laws_escape($final_status_labels[$final_law['final_status']] ?? $final_law['final_status']) ?></div>
+                <?php if (!empty($final_assessments_by_version[(int)$final_law['version_id']])): ?>
+                    <details style="margin-top:10px">
+                        <summary>مشاهده ارزیابی‌ها و استدلال‌های نهایی</summary>
+                        <?php foreach ($final_assessments_by_version[(int)$final_law['version_id']] as $assessment): ?>
+                            <div class="notice">
+                                <div class="meta">ارزیاب مستقل #<?= (int)$assessment['reviewer_user_id'] ?> — <?= community_laws_escape($assessment['verdict']) ?> — <?= community_laws_escape($assessment['submitted_at']) ?></div>
+                                <div class="meta">
+                                    اصول و حقوق: <?= community_laws_escape($assessment['charter_and_rights']) ?>؛
+                                    برابری: <?= community_laws_escape($assessment['non_discrimination']) ?>؛
+                                    تمرکز قدرت: <?= community_laws_escape($assessment['power_concentration']) ?>؛
+                                    پیامد اجتماعی: <?= community_laws_escape($assessment['human_and_social_impact']) ?>؛
+                                    محیط‌زیست: <?= community_laws_escape($assessment['environmental_impact']) ?>؛
+                                    منابع: <?= community_laws_escape($assessment['economic_and_resource_impact']) ?>؛
+                                    نسل آینده و جانداران: <?= community_laws_escape($assessment['future_generations_and_other_life']) ?>؛
+                                    اجرا و پاسخ‌گویی: <?= community_laws_escape($assessment['implementation_and_accountability']) ?>
+                                </div>
+                                <p><?= nl2br(community_laws_escape($assessment['reasoning'])) ?></p>
+                                <?php if (!empty($assessment['evidence'])): ?><p class="muted">شواهد: <?= nl2br(community_laws_escape($assessment['evidence'])) ?></p><?php endif; ?>
+                            </div>
+                        <?php endforeach; ?>
+                    </details>
+                <?php endif; ?>
+
                 <?php if ($final_law['final_status'] === 'pending'): ?>
                     <p>ارزیابی‌های ثبت‌شده: <?= (int)$final_law['assessment_count'] ?> از <?= (int)$final_law['reviewer_quorum'] ?> ارزیاب مستقل.</p>
                     <p class="muted">ارزیابان این مرحله با ارزیابان غربالگری و صلاحیت قبلی متفاوت‌اند. همه ابعاد حقوقی، اجتماعی، زیست‌محیطی و بلندمدت باید بررسی شوند.</p>
@@ -3196,6 +3250,18 @@ details>summary{cursor:pointer;font-weight:bold}
                                 <div class="meta">اعتراض #<?= (int)$appeal['appeal_id'] ?> — وضعیت: <?= community_laws_escape($appeal['appeal_status']) ?> — ارزیابی‌ها: <?= (int)$appeal['assessment_count'] ?> از <?= (int)$appeal['reviewer_quorum'] ?></div>
                                 <p><?= nl2br(community_laws_escape($appeal['description'])) ?></p>
                                 <?php if (!empty($appeal['evidence'])): ?><p class="muted">شواهد: <?= nl2br(community_laws_escape($appeal['evidence'])) ?></p><?php endif; ?>
+                                <?php if (!empty($appeal_assessments_by_id[(int)$appeal['appeal_id']])): ?>
+                                    <details style="margin-top:8px">
+                                        <summary>مشاهده استدلال‌های رسیدگی به اعتراض</summary>
+                                        <?php foreach ($appeal_assessments_by_id[(int)$appeal['appeal_id']] as $appeal_assessment): ?>
+                                            <div class="notice">
+                                                <div class="meta">ارزیاب #<?= (int)$appeal_assessment['reviewer_user_id'] ?> — <?= community_laws_escape($appeal_assessment['verdict']) ?> — <?= community_laws_escape($appeal_assessment['submitted_at']) ?></div>
+                                                <p><?= nl2br(community_laws_escape($appeal_assessment['reasoning'])) ?></p>
+                                                <?php if (!empty($appeal_assessment['evidence'])): ?><p class="muted">شواهد: <?= nl2br(community_laws_escape($appeal_assessment['evidence'])) ?></p><?php endif; ?>
+                                            </div>
+                                        <?php endforeach; ?>
+                                    </details>
+                                <?php endif; ?>
                                 <?php if (
                                     $is_member &&
                                     in_array($appeal['appeal_status'], ['submitted','under_review'], true) &&
