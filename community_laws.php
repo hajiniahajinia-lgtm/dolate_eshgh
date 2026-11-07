@@ -171,6 +171,81 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    if (isset($_POST['submit_law_for_review'])) {
+        if (!$is_member) community_laws_redirect($community_id, 'not_member');
+
+        $law_id = (int)($_POST['law_id'] ?? 0);
+        $version_id = (int)($_POST['version_id'] ?? 0);
+        if ($law_id <= 0 || $version_id <= 0) {
+            community_laws_redirect($community_id, 'invalid_submission');
+        }
+
+        if (!$conn->begin_transaction()) community_laws_redirect($community_id, 'save_error');
+        try {
+            $lock = $conn->prepare(
+                "SELECT l.id, l.status, l.current_version_id, v.id AS version_id,
+                        v.status AS version_status, v.proposed_by
+                 FROM community_laws l
+                 JOIN community_law_versions v ON v.law_id=l.id
+                 WHERE l.id=? AND v.id=? AND l.originating_community_id=?
+                 FOR UPDATE"
+            );
+            if (!$lock) throw new Exception('law review lock prepare failed');
+            $lock->bind_param('iii', $law_id, $version_id, $community_id);
+            if (!$lock->execute()) throw new Exception('law review lock failed');
+            $record = $lock->get_result()->fetch_assoc();
+            $lock->close();
+
+            if (
+                !$record ||
+                $record['status'] !== 'draft' ||
+                $record['version_status'] !== 'draft' ||
+                (int)$record['current_version_id'] !== $version_id ||
+                (int)$record['proposed_by'] !== $user_id
+            ) {
+                throw new RuntimeException('invalid_draft_state');
+            }
+
+            $update = $conn->prepare(
+                "UPDATE community_laws SET status='proposed' WHERE id=? AND status='draft'"
+            );
+            if (!$update) throw new Exception('law proposal update prepare failed');
+            $update->bind_param('i', $law_id);
+            if (!$update->execute() || $update->affected_rows !== 1) {
+                throw new Exception('law proposal update failed');
+            }
+            $update->close();
+
+            $update_version = $conn->prepare(
+                "UPDATE community_law_versions SET status='proposed' WHERE id=? AND status='draft'"
+            );
+            if (!$update_version) throw new Exception('law version proposal prepare failed');
+            $update_version->bind_param('i', $version_id);
+            if (!$update_version->execute() || $update_version->affected_rows !== 1) {
+                throw new Exception('law version proposal update failed');
+            }
+            $update_version->close();
+
+            if (!community_law_record_history(
+                $conn, $law_id, $version_id, $community_id, $user_id,
+                'submitted_for_review',
+                'پیش‌نویس برای بررسی صلاحیت، دامنه شمول و پیامدها ارسال شد.'
+            )) {
+                throw new Exception('law proposal history failed');
+            }
+
+            if (!$conn->commit()) throw new Exception('law proposal commit failed');
+            community_laws_redirect($community_id, 'submitted_for_review');
+        } catch (Throwable $e) {
+            $conn->rollback();
+            if ($e instanceof RuntimeException && $e->getMessage() === 'invalid_draft_state') {
+                community_laws_redirect($community_id, 'invalid_submission');
+            }
+            error_log('[Dolate Eshgh law submission] ' . $e->getMessage());
+            community_laws_redirect($community_id, 'save_error');
+        }
+    }
+
     if (isset($_POST['submit_law_objection'])) {
         if (!$is_member) community_laws_redirect($community_id, 'not_member');
 
@@ -283,6 +358,23 @@ if ($schema_ready) {
         $draft_stmt->close();
     }
 
+    $proposed_stmt = $conn->prepare(
+        "SELECT l.id AS law_id, l.law_code, v.id AS version_id, v.title,
+                v.created_at, v.proposed_by
+         FROM community_laws l
+         JOIN community_law_versions v ON v.id=l.current_version_id
+         WHERE l.originating_community_id=? AND l.status='proposed' AND v.status='proposed'
+         ORDER BY v.created_at DESC LIMIT 30"
+    );
+    if ($proposed_stmt) {
+        $proposed_stmt->bind_param('i', $community_id);
+        if ($proposed_stmt->execute()) {
+            $proposed_result = $proposed_stmt->get_result();
+            while ($row = $proposed_result->fetch_assoc()) $proposed_laws[] = $row;
+        }
+        $proposed_stmt->close();
+    }
+
     $objection_stmt = $conn->prepare(
         "SELECT o.id, o.objection_type, o.status, o.description, o.created_at,
                 v.title, l.law_code
@@ -304,7 +396,7 @@ if ($schema_ready) {
 
 $status = (string)($_GET['status'] ?? '');
 $status_messages = [
-    'draft_saved' => 'پیش‌نویس قانون ثبت شد؛ این پیش‌نویس هنوز الزام‌آور نیست.',
+    'draft_saved' => 'پیش‌نویس قانون ثبت شد؛ این پیش‌نویس هنوز الزام‌آور نیست.',\n    'submitted_for_review' => 'پیش‌نویس برای بررسی صلاحیت و دامنه شمول ارسال شد؛ هنوز رأی‌گیری یا الزام‌آوری آغاز نشده است.',\n    'invalid_submission' => 'این پیش‌نویس قابل ارسال نیست؛ ممکن است قبلاً ارسال شده یا متعلق به شما نباشد.',
     'objection_saved' => 'اعتراض شما ثبت شد و برای بررسی باقی می‌ماند.',
     'not_member' => 'برای این عملیات باید عضو جامعه باشید.',
     'invalid' => 'اطلاعات واردشده معتبر نیست یا از حد مجاز بیشتر است.',
@@ -418,7 +510,29 @@ details>summary{cursor:pointer;font-weight:bold}
         <?php foreach ($draft_laws as $draft): ?>
             <div class="notice">
                 <strong><?= community_laws_escape($draft['title']) ?></strong>
-                <div class="meta"><?= community_laws_escape($draft['law_code']) ?> — هنوز پیش‌نویس است و الزام‌آور نیست.</div>
+                <div class="meta"><?= community_laws_escape($draft['law_code']) ?> — پیش‌نویس؛ هنوز الزام‌آور نیست.</div>
+                <?php if ($is_member && (int)$draft['proposed_by'] === $user_id): ?>
+                <form method="post">
+                    <input type="hidden" name="csrf_token" value="<?= community_laws_escape($csrf_token) ?>">
+                    <input type="hidden" name="law_id" value="<?= (int)$draft['law_id'] ?>">
+                    <input type="hidden" name="version_id" value="<?= (int)$draft['version_id'] ?>">
+                    <button type="submit" name="submit_law_for_review" value="1">ارسال برای بررسی صلاحیت و دامنه شمول</button>
+                </form>
+                <?php endif; ?>
+            </div>
+        <?php endforeach; ?>
+    <?php endif; ?>
+</div>
+
+<div class="card">
+    <h3>پیشنهادهای در انتظار بررسی</h3>
+    <?php if (!$proposed_laws): ?>
+        <p class="muted">پیشنهادی برای بررسی ثبت نشده است.</p>
+    <?php else: ?>
+        <?php foreach ($proposed_laws as $proposal): ?>
+            <div class="notice">
+                <strong><?= community_laws_escape($proposal['title']) ?></strong>
+                <div class="meta"><?= community_laws_escape($proposal['law_code']) ?> — در انتظار بررسی صلاحیت و دامنه شمول</div>
             </div>
         <?php endforeach; ?>
     <?php endif; ?>
