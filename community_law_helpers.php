@@ -197,7 +197,7 @@ if (!function_exists('community_law_record_history')) {
         if (!$stmt) return false;
 
         $stmt->bind_param(
-            'ssiiss',
+            'iiiiss',
             $law_id,
             $law_version_id,
             $community_id,
