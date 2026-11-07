@@ -130,52 +130,8 @@ if (!function_exists('community_law_parent_map_is_valid')) {
 
 if (!function_exists('community_law_scope_matches')) {
     function community_law_scope_matches(mysqli $conn, int $law_version_id, int $target_community_id): bool {
-        if ($law_version_id <= 0 || $target_community_id <= 0) return false;
-
-        $scope_stmt = $conn->prepare(
-            "SELECT scope_community_id, include_descendants
-             FROM community_law_scopes
-             WHERE law_version_id = ?"
-        );
-        if (!$scope_stmt) return false;
-
-        $scope_stmt->bind_param('s', $law_version_id);
-        if (!$scope_stmt->execute()) {
-            $scope_stmt->close();
-            return false;
-        }
-
-        $scopes = $scope_stmt->get_result();
-        $scope_rows = [];
-        while ($row = $scopes->fetch_assoc()) {
-            $scope_rows[] = [
-                'community_id' => (int)$row['scope_community_id'],
-                'include_descendants' => (int)$row['include_descendants'] === 1
-            ];
-        }
-        $scope_stmt->close();
-
-        if (!$scope_rows) return false;
-
-        $parent_map = community_law_load_parent_map($conn);
-        if ($parent_map === null) return false;
-
-        foreach ($scope_rows as $scope) {
-            if ($target_community_id === $scope['community_id']) return true;
-
-            if (
-                $scope['include_descendants'] &&
-                community_law_is_descendant_or_same(
-                    $parent_map,
-                    $target_community_id,
-                    $scope['community_id']
-                )
-            ) {
-                return true;
-            }
-        }
-
-        return false;
+        // تمام مسیرهای تشخیص دامنه باید از اعتبارسنجی fail-closed مشترک استفاده کنند.
+        return community_law_scope_match_checked($conn, $law_version_id, $target_community_id) === true;
     }
 }
 
@@ -250,7 +206,7 @@ if (!function_exists('community_law_scope_community_ids')) {
         if (!$scopes) return null;
 
         $parent_map = community_law_load_parent_map($conn);
-        if ($parent_map === null) return null;
+        if ($parent_map === null || !community_law_parent_map_is_valid($parent_map)) return null;
 
         $included = [];
         foreach ($parent_map as $candidate_id => $_parent_id) {
