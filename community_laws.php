@@ -628,7 +628,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             strtotime($proposal['review_deadline']) <= time() ||
             $proposal['law_status'] !== 'proposed' || $proposal['version_status'] !== 'proposed' ||
             (int)$proposal['current_version_id'] !== (int)$proposal['law_version_id'] ||
-            (int)$proposal['originating_community_id'] !== $community_id
+            community_law_scope_match_checked(
+                $conn, (int)$proposal['law_version_id'], $community_id
+            ) !== true
         ) community_laws_redirect($community_id, 'voting_rule_assessment_not_allowed');
 
         $eligible = $conn->prepare(
@@ -688,7 +690,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 strtotime($proposal['review_deadline']) > time() ||
                 $proposal['law_status'] !== 'proposed' || $proposal['version_status'] !== 'proposed' ||
                 (int)$proposal['current_version_id'] !== (int)$proposal['law_version_id'] ||
-                (int)$proposal['originating_community_id'] !== $community_id ||
+                community_law_scope_match_checked(
+                    $conn, (int)$proposal['law_version_id'], $community_id
+                ) !== true ||
                 $proposal['authority_status'] !== 'confirmed' ||
                 $proposal['jurisdiction_level'] !== $proposal['derived_jurisdiction_level']
             ) throw new RuntimeException('voting_rules_not_finalizable');
@@ -708,7 +712,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($total_votes < (int)$proposal['reviewer_quorum']) {
                 throw new RuntimeException('insufficient_rule_votes');
             }
-            $approved = ($approvals * 100) >= ($total_votes * (float)$proposal['approval_threshold_percent']);
+            // نسبت دقیق دوسوم؛ از خطای گردکردن 66.67 جلوگیری می‌شود.
+            $approved = ($approvals * 3) >= ($total_votes * 2);
             $new_status = $approved ? 'approved' : 'rejected';
 
             $decision_update = $conn->prepare(
@@ -4265,7 +4270,7 @@ details>summary{cursor:pointer;font-weight:bold}
                                 <?php if (
                                     $latest_rule_proposal['status'] === 'pending_review' &&
                                     $is_member &&
-                                    (int)$proposal['originating_community_id'] === $community_id &&
+                                    community_law_scope_matches($conn, (int)$proposal['version_id'], $community_id) &&
                                     strtotime($latest_rule_proposal['review_deadline']) <= time()
                                 ): ?>
                                     <form method="post">
