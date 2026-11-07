@@ -115,6 +115,32 @@ try {
     $community_id = (int)$stmt->insert_id;
     $stmt->close();
 
+    // عضویت سازنده، در صورت انتخاب، در همان تراکنش ایجاد جامعه ثبت می‌شود.
+    // بنابراین رأی‌گیری نمی‌تواند پیش از ثبت عضویت اولیه آغاز شود.
+    if ($join_now) {
+        $creator_membership = $conn->prepare(
+            "INSERT INTO community_members (community_id, user_id) VALUES (?, ?)"
+        );
+        if (!$creator_membership) {
+            throw new RuntimeException('prepare creator membership failed');
+        }
+        $creator_membership->bind_param("ii", $community_id, $user_id);
+        if (!$creator_membership->execute()) {
+            throw new RuntimeException('insert creator membership failed');
+        }
+        $creator_membership->close();
+
+        $creator_count = $conn->prepare("UPDATE communities SET members_count=1 WHERE id=?");
+        if (!$creator_count) {
+            throw new RuntimeException('prepare creator member count failed');
+        }
+        $creator_count->bind_param("i", $community_id);
+        if (!$creator_count->execute() || $creator_count->affected_rows !== 1) {
+            throw new RuntimeException('save creator member count failed');
+        }
+        $creator_count->close();
+    }
+
     if (!$conn->commit()) {
         throw new RuntimeException('commit community creation failed');
     }
@@ -139,16 +165,6 @@ try {
             $initial_proposal->bind_param("iis", $community_id, $user_id, $approach);
             $initial_proposal->execute();
             $initial_proposal->close();
-        }
-    }
-
-    // اگر تیک "همین الان عضو شوم" زده شده، اضافه کردن کاربر به members
-    if ($join_now) {
-        $mem_stmt = $conn->prepare("INSERT INTO community_members (community_id, user_id) VALUES (?, ?)");
-        if ($mem_stmt) {
-            $mem_stmt->bind_param("ii", $community_id, $user_id);
-            $mem_stmt->execute();
-            $mem_stmt->close();
         }
     }
 
