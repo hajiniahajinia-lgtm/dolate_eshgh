@@ -183,7 +183,7 @@ try {
 
         $finalize = $conn->prepare(
             "UPDATE community_parent_vote_rounds
-             SET status=?, winning_parent_id=?, yes_count=?, decided_at=NOW() WHERE id=? AND status='open'"
+             SET status=?, winning_parent_id=?, winning_vote_count=?, decided_at=NOW() WHERE id=? AND status='open'"
         );
         if (!$finalize) throw new Exception('prepare round finalization failed');
         $winner_db = ($status === 'approved' && $winner !== null && $winner > 0) ? $winner : null;
