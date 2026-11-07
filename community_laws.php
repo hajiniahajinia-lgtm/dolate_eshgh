@@ -4254,7 +4254,20 @@ details>summary{cursor:pointer;font-weight:bold}
                                 ?>
                                 <div class="meta">پیشنهاد شماره <?= (int)$latest_rule_proposal['proposal_number'] ?> — <?= community_laws_escape($rule_status_labels[$latest_rule_proposal['status']] ?? $latest_rule_proposal['status']) ?></div>
                                 <div class="meta">پنل مستقل: <?= (int)$latest_rule_proposal['electorate_count'] ?> نفر — ارزیابی ثبت‌شده: <?= (int)$latest_rule_proposal['vote_count'] ?> نفر — موافقت: <?= (int)$latest_rule_proposal['approval_count'] ?> نفر — مهلت: <?= community_laws_escape($latest_rule_proposal['review_deadline']) ?></div>
-                                <p><?= nl2br(community_laws_escape($latest_rule_proposal['rationale'])) ?></p>
+                                <div class="notice">
+                                    <strong>متن قواعد پیشنهادی</strong>
+                                    <div>حدنصاب مشارکت رأی مستقیم: <?= number_format((float)$latest_rule_proposal['individual_quorum_percent'], 2) ?>٪</div>
+                                    <div>موافقت لازم در رأی مستقیم: <?= number_format((float)$latest_rule_proposal['individual_approval_percent'], 2) ?>٪</div>
+                                    <div>تأیید جداگانه جوامع: <?= (int)$latest_rule_proposal['require_community_approval'] === 1 ? 'لازم است' : 'لازم نیست' ?></div>
+                                    <?php if ((int)$latest_rule_proposal['require_community_approval'] === 1): ?>
+                                        <div>حدنصاب مشارکت هر جامعه: <?= number_format((float)$latest_rule_proposal['community_quorum_percent'], 2) ?>٪</div>
+                                        <div>موافقت لازم در هر جامعه: <?= number_format((float)$latest_rule_proposal['community_approval_percent'], 2) ?>٪</div>
+                                        <div>حدنصاب مشارکت مجموع جوامع: <?= number_format((float)$latest_rule_proposal['community_aggregate_quorum_percent'], 2) ?>٪</div>
+                                        <div>موافقت لازم در مجموع جوامع: <?= number_format((float)$latest_rule_proposal['community_aggregate_approval_percent'], 2) ?>٪</div>
+                                    <?php endif; ?>
+                                    <div>مبنای رأی فردی: شمارش برابر هر فرد — مبنای رأی جوامع: یک جامعه، یک رأی</div>
+                                </div>
+                                <p><strong>استدلال پیشنهاددهنده:</strong><br><?= nl2br(community_laws_escape($latest_rule_proposal['rationale'])) ?></p>
                                 <p class="muted">حدنصاب بررسی دست‌کم سه ارزیابی و تصویب با موافقت حداقل دوسوم ارزیابان شرکت‌کننده است. مهلت هر دور هفت روز است.</p>
                                 <?php if (!empty($voting_rule_votes_by_proposal[(int)$latest_rule_proposal['id']])): ?>
                                     <details>
