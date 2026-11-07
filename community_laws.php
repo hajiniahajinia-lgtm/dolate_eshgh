@@ -1059,10 +1059,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $weight_details = $conn->prepare(
                     "INSERT INTO community_law_expertise_weight_details
                         (law_version_id, user_id, domain_id, share_percent,
-                         competency_id, competency_weight, weighted_contribution)
+                         competency_id, source_application_id, competency_weight, weighted_contribution)
                      SELECT ?, e.user_id, pd.domain_id, pd.share_percent,
-                            ec.id, COALESCE(ec.weight, 1.00),
-                            (pd.share_percent * COALESCE(ec.weight, 1.00)) / 100.00
+                            ec.id, ec.source_application_id,
+                            LEAST(3.00, GREATEST(1.00, COALESCE(ec.weight, 1.00))),
+                            (pd.share_percent * LEAST(3.00, GREATEST(1.00, COALESCE(ec.weight, 1.00)))) / 100.00
                      FROM community_law_direct_electorate e
                      CROSS JOIN topic_expertise_profile_domains pd
                      LEFT JOIN expertise_competencies ec
