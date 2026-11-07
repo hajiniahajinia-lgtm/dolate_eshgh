@@ -647,3 +647,181 @@ if (!function_exists('community_law_record_history')) {
         return $ok;
     }
 }
+
+
+if (!function_exists('community_law_charter_tables_ready')) {
+    function community_law_charter_tables_ready(mysqli $conn): bool {
+        $required = [
+            'community_charter_versions',
+            'community_charter_articles',
+            'community_law_charter_references',
+            'community_law_charter_assessments'
+        ];
+        $placeholders = implode(',', array_fill(0, count($required), '?'));
+        $stmt = $conn->prepare(
+            "SELECT COUNT(*) AS total FROM information_schema.tables
+             WHERE table_schema=DATABASE() AND table_name IN ($placeholders)"
+        );
+        if (!$stmt) return false;
+        $types = str_repeat('s', count($required));
+        $params = array_merge([$types], $required);
+        $refs = [];
+        foreach ($params as $key => $value) $refs[$key] = &$params[$key];
+        call_user_func_array([$stmt, 'bind_param'], $refs);
+        if (!$stmt->execute()) {
+            $stmt->close();
+            return false;
+        }
+        $row = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+        return (int)($row['total'] ?? 0) === count($required);
+    }
+}
+
+if (!function_exists('community_law_capture_charter_snapshot')) {
+    /**
+     * نسخه و تمام مواد منشور لازم‌الاجرا را برای یک نسخه قانون تثبیت می‌کند.
+     * نبود منشور یکتا، ماده ناقص یا خطای DB به معنی توقف امن است.
+     */
+    function community_law_capture_charter_snapshot(mysqli $conn, int $law_version_id): bool {
+        if ($law_version_id <= 0 || !community_law_charter_tables_ready($conn)) return false;
+
+        $active = $conn->query(
+            "SELECT id FROM community_charter_versions
+             WHERE status='effective' AND effective_at<=NOW()
+             ORDER BY version_number DESC"
+        );
+        if (!$active) return false;
+        $active_rows = [];
+        while ($row = $active->fetch_assoc()) $active_rows[] = (int)$row['id'];
+        $active->free();
+        if (count($active_rows) !== 1 || $active_rows[0] <= 0) return false;
+        $charter_version_id = $active_rows[0];
+
+        $existing = $conn->prepare(
+            "SELECT COUNT(*) AS total FROM community_law_charter_references
+             WHERE law_version_id=?"
+        );
+        if (!$existing) return false;
+        $existing->bind_param('i', $law_version_id);
+        if (!$existing->execute()) {
+            $existing->close();
+            return false;
+        }
+        $already = (int)$existing->get_result()->fetch_assoc()['total'];
+        $existing->close();
+        if ($already > 0) return false;
+
+        $articles = $conn->prepare(
+            "SELECT id, article_code, title, article_text, principle_group, is_core
+             FROM community_charter_articles
+             WHERE charter_version_id=? ORDER BY display_order, id"
+        );
+        if (!$articles) return false;
+        $articles->bind_param('i', $charter_version_id);
+        if (!$articles->execute()) {
+            $articles->close();
+            return false;
+        }
+        $rows = [];
+        $result = $articles->get_result();
+        while ($row = $result->fetch_assoc()) $rows[] = $row;
+        $articles->close();
+        if (!$rows) return false;
+
+        $insert = $conn->prepare(
+            "INSERT INTO community_law_charter_references
+                (law_version_id, charter_version_id, charter_article_id, article_code, article_fingerprint)
+             VALUES (?, ?, ?, ?, ?)"
+        );
+        if (!$insert) return false;
+        foreach ($rows as $row) {
+            $article_id = (int)$row['id'];
+            $article_code = (string)$row['article_code'];
+            $fingerprint = hash('sha256', json_encode([
+                $row['article_code'], $row['title'], $row['article_text'],
+                $row['principle_group'], (int)$row['is_core']
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+            $insert->bind_param(
+                'iiiss', $law_version_id, $charter_version_id, $article_id,
+                $article_code, $fingerprint
+            );
+            if (!$insert->execute()) {
+                $insert->close();
+                return false;
+            }
+        }
+        $insert->close();
+        return true;
+    }
+}
+
+if (!function_exists('community_law_charter_snapshot_is_current')) {
+    /**
+     * true فقط وقتی snapshot دقیقاً با نسخه منشور لازم‌الاجرا و همه مواد آن برابر باشد.
+     * هر تغییر، حذف، افزودن یا ابهام باعث توقف ابلاغ می‌شود.
+     */
+    function community_law_charter_snapshot_is_current(mysqli $conn, int $law_version_id): ?bool {
+        if ($law_version_id <= 0 || !community_law_charter_tables_ready($conn)) return null;
+
+        $active = $conn->query(
+            "SELECT id FROM community_charter_versions
+             WHERE status='effective' AND effective_at<=NOW()"
+        );
+        if (!$active) return null;
+        $active_ids = [];
+        while ($row = $active->fetch_assoc()) $active_ids[] = (int)$row['id'];
+        $active->free();
+        if (count($active_ids) !== 1) return null;
+        $active_id = $active_ids[0];
+
+        $stmt = $conn->prepare(
+            "SELECT r.charter_version_id, r.charter_article_id, r.article_code,
+                    r.article_fingerprint, a.title, a.article_text,
+                    a.principle_group, a.is_core
+             FROM community_law_charter_references r
+             JOIN community_charter_articles a ON a.id=r.charter_article_id
+             WHERE r.law_version_id=? ORDER BY r.charter_article_id"
+        );
+        if (!$stmt) return null;
+        $stmt->bind_param('i', $law_version_id);
+        if (!$stmt->execute()) {
+            $stmt->close();
+            return null;
+        }
+        $snapshots = [];
+        $result = $stmt->get_result();
+        while ($row = $result->fetch_assoc()) $snapshots[] = $row;
+        $stmt->close();
+        if (!$snapshots) return false;
+
+        $active_articles = $conn->prepare(
+            "SELECT id FROM community_charter_articles
+             WHERE charter_version_id=? ORDER BY display_order, id"
+        );
+        if (!$active_articles) return null;
+        $active_articles->bind_param('i', $active_id);
+        if (!$active_articles->execute()) {
+            $active_articles->close();
+            return null;
+        }
+        $expected_ids = [];
+        $result = $active_articles->get_result();
+        while ($row = $result->fetch_assoc()) $expected_ids[] = (int)$row['id'];
+        $active_articles->close();
+
+        $captured_ids = [];
+        foreach ($snapshots as $row) {
+            if ((int)$row['charter_version_id'] !== $active_id) return false;
+            $captured_ids[] = (int)$row['charter_article_id'];
+            $fingerprint = hash('sha256', json_encode([
+                $row['article_code'], $row['title'], $row['article_text'],
+                $row['principle_group'], (int)$row['is_core']
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+            if (!hash_equals((string)$row['article_fingerprint'], $fingerprint)) return false;
+        }
+        sort($captured_ids, SORT_NUMERIC);
+        sort($expected_ids, SORT_NUMERIC);
+        return $captured_ids === $expected_ids;
+    }
+}
