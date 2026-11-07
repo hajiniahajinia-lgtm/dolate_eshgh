@@ -2081,10 +2081,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $lock = $conn->prepare(
                 "SELECT l.id AS law_id, l.status AS law_status, l.current_version_id,
                         l.originating_community_id, v.status AS version_status,
-                        fc.status AS final_status, fc.appeal_deadline
+                        fc.status AS final_status, fc.appeal_deadline,
+                        rc.status AS screening_status, ac.status AS authority_status,
+                        fr.final_status AS vote_result
                  FROM community_law_versions v
                  JOIN community_laws l ON l.id=v.law_id
                  JOIN community_law_final_review_cases fc ON fc.law_version_id=v.id
+                 JOIN community_law_review_cases rc ON rc.law_version_id=v.id
+                 JOIN community_law_authority_cases ac ON ac.law_version_id=v.id
+                 JOIN community_law_final_results fr ON fr.law_version_id=v.id
                  WHERE v.id=? FOR UPDATE"
             );
             if (!$lock) throw new Exception('enactment lock prepare failed');
@@ -2097,6 +2102,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 (int)$law['current_version_id'] !== $version_id ||
                 $law['law_status'] !== 'appeal_period' ||
                 $law['version_status'] !== 'appeal_period' ||
+                $law['screening_status'] !== 'screening_clear' ||
+                $law['authority_status'] !== 'confirmed' ||
+                $law['vote_result'] !== 'vote_passed' ||
                 !in_array($law['final_status'], ['appeal_period','appeal_hold'], true) ||
                 empty($law['appeal_deadline']) || strtotime($law['appeal_deadline']) > time()
             ) throw new RuntimeException('enactment_not_ready');
