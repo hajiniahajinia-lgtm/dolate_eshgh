@@ -12,7 +12,9 @@ on:
       - 'community.php'
       - 'community_charter_amendment_action.php'
       - 'community_charter_amendments.php'
-      - 'migrations/20261107_community_charter_foundation.sql'\n      - 'migrations/20261107_community_charter_foundation.sql'\n      - 'migrations/20261108_community_charter_amendment_appeal_assignments.sql'
+      - 'migrations/20261107_community_charter_foundation.sql'
+      - 'migrations/20261107_community_charter_amendments.sql'
+      - 'migrations/20261108_community_charter_amendment_appeal_assignments.sql'
       - 'community_law_helpers.php'
       - 'set_community_parent.php'
       - 'profile.php'
@@ -25,8 +27,8 @@ on:
       - 'request_member_removal.php'
       - 'vote_member_removal.php'
       - 'tests/community_law_hierarchy_helpers_test.php'
-      - 'migrations/20261107_community_charter_amendments.sql'
-      - 'tests/community_charter_amendments_test.php'\n      - 'tests/community_charter_amendments_integration_test.php'\n      - 'tests/community_charter_amendments_integration_test.php'
+      - 'tests/community_charter_amendments_test.php'
+      - 'tests/community_charter_amendments_integration_test.php'
       - '.github/workflows/php-expertise-framework-check.yml'
   pull_request:
     paths:
@@ -36,6 +38,8 @@ on:
       - 'community_laws.php'
       - 'community_charter_amendment_action.php'
       - 'community_charter_amendments.php'
+      - 'migrations/20261107_community_charter_foundation.sql'
+      - 'migrations/20261107_community_charter_amendments.sql'
       - 'migrations/20261108_community_charter_amendment_appeal_assignments.sql'
       - 'community.php'
       - 'community_law_helpers.php'
@@ -50,8 +54,8 @@ on:
       - 'topic_expertise_profile_action.php'
       - 'vote_member_removal.php'
       - 'tests/community_law_hierarchy_helpers_test.php'
-      - 'migrations/20261107_community_charter_amendments.sql'
       - 'tests/community_charter_amendments_test.php'
+      - 'tests/community_charter_amendments_integration_test.php'
       - '.github/workflows/php-expertise-framework-check.yml'
 
 jobs:
@@ -86,6 +90,7 @@ jobs:
           php -l topic_expertise_profile_action.php
           php -l tests/community_law_hierarchy_helpers_test.php
           php -l tests/community_charter_amendments_test.php
+          php -l tests/community_charter_amendments_integration_test.php
       - name: Run community law hierarchy and charter amendment tests
         run: |
           php tests/community_law_hierarchy_helpers_test.php
