@@ -238,6 +238,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 throw new RuntimeException('invalid_law_scope');
             }
             $has_unrelated_scope = false;
+            $has_descendant_scope = false;
             foreach ($review_scope_ids as $scope_target_id) {
                 if (
                     $scope_target_id !== $community_id &&
@@ -246,13 +247,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     // قانون جامعه زیرمجموعه نباید دامنه الزام‌آور را به جامعه مادر گسترش دهد.
                     throw new RuntimeException('law_scope_exceeds_authority');
                 }
-                if (!community_law_is_descendant_or_same(
+                if (community_law_is_descendant_or_same(
                     $authority_parent_map, $scope_target_id, $community_id
-                )) $has_unrelated_scope = true;
+                )) {
+                    if ($scope_target_id !== $community_id) $has_descendant_scope = true;
+                } else {
+                    $has_unrelated_scope = true;
+                }
             }
             $derived_jurisdiction = $has_unrelated_scope
                 ? 'intercommunity'
-                : (count($review_scope_ids) > 1 ? 'parent_shared' : 'local');
+                : ($has_descendant_scope ? 'parent_shared' : 'local');
 
             $review_case = $conn->prepare(
                 "INSERT INTO community_law_review_cases
@@ -305,12 +310,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 if (!$applies_to_scope) continue;
 
-                if ($reference_origin === $community_id) {
-                    $relation_type = 'same_level';
-                } elseif (community_law_is_descendant_or_same(
-                    $authority_parent_map, $community_id, $reference_origin
-                )) {
+                $is_higher_for_scope = false;
+                foreach ($review_scope_ids as $scope_target_id) {
+                    if (
+                        $scope_target_id !== $reference_origin &&
+                        community_law_is_descendant_or_same(
+                            $authority_parent_map, $scope_target_id, $reference_origin
+                        )
+                    ) {
+                        $is_higher_for_scope = true;
+                        break;
+                    }
+                }
+                if ($is_higher_for_scope) {
                     $relation_type = 'higher';
+                } elseif ($reference_origin === $community_id) {
+                    $relation_type = 'same_level';
                 } elseif (community_law_is_descendant_or_same(
                     $authority_parent_map, $reference_origin, $community_id
                 )) {
