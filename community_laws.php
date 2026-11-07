@@ -246,6 +246,131 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    if (isset($_POST['start_law_vote'])) {
+        if (!$is_member) community_laws_redirect($community_id, 'not_member');
+
+        $law_id = (int)($_POST['law_id'] ?? 0);
+        $version_id = (int)($_POST['version_id'] ?? 0);
+        if ($law_id <= 0 || $version_id <= 0) community_laws_redirect($community_id, 'invalid_vote_start');
+
+        if (!$conn->begin_transaction()) community_laws_redirect($community_id, 'save_error');
+        try {
+            $lock = $conn->prepare(
+                "SELECT l.status, l.current_version_id, v.status AS version_status
+                 FROM community_laws l
+                 JOIN community_law_versions v ON v.law_id=l.id
+                 WHERE l.id=? AND v.id=? AND l.originating_community_id=?
+                 FOR UPDATE"
+            );
+            if (!$lock) throw new Exception('law vote lock prepare failed');
+            $lock->bind_param('iii', $law_id, $version_id, $community_id);
+            if (!$lock->execute()) throw new Exception('law vote lock failed');
+            $record = $lock->get_result()->fetch_assoc();
+            $lock->close();
+
+            if (
+                !$record ||
+                $record['status'] !== 'proposed' ||
+                $record['version_status'] !== 'proposed' ||
+                (int)$record['current_version_id'] !== $version_id
+            ) {
+                throw new RuntimeException('invalid_law_vote_state');
+            }
+
+            $affected_communities = community_law_scope_community_ids($conn, $version_id);
+            if (!$affected_communities) throw new RuntimeException('invalid_law_scope');
+
+            $insert_elector = $conn->prepare(
+                "INSERT IGNORE INTO community_law_electorate
+                    (law_version_id, voting_community_id, user_id, vote_weight)
+                 SELECT ?, ?, cm.user_id, 1.00
+                 FROM community_members cm
+                 WHERE cm.community_id=?"
+            );
+            $insert_position = $conn->prepare(
+                "INSERT INTO community_law_positions
+                    (law_version_id, community_id, electorate_count, position_result)
+                 VALUES (?, ?, 0, 'pending')"
+            );
+            $count_members = $conn->prepare(
+                "SELECT COUNT(*) AS total FROM community_members WHERE community_id=?"
+            );
+            $set_position_count = $conn->prepare(
+                "UPDATE community_law_positions SET electorate_count=? 
+                 WHERE law_version_id=? AND community_id=?"
+            );
+            if (!$insert_elector || !$insert_position || !$count_members || !$set_position_count) {
+                throw new Exception('law electorate prepare failed');
+            }
+
+            $total_electorate = 0;
+            foreach ($affected_communities as $affected_id) {
+                $count_members->bind_param('i', $affected_id);
+                if (!$count_members->execute()) throw new Exception('member count failed');
+                $member_count = (int)$count_members->get_result()->fetch_assoc()['total'];
+
+                if ($member_count === 0) continue;
+
+                $insert_position->bind_param('ii', $version_id, $affected_id);
+                if (!$insert_position->execute()) throw new Exception('position snapshot failed');
+
+                $insert_elector->bind_param('iii', $version_id, $affected_id, $affected_id);
+                if (!$insert_elector->execute()) throw new Exception('electorate snapshot failed');
+
+                $set_position_count->bind_param('iii', $member_count, $version_id, $affected_id);
+                if (!$set_position_count->execute()) throw new Exception('position count update failed');
+                $total_electorate += $member_count;
+            }
+            $insert_elector->close();
+            $insert_position->close();
+            $count_members->close();
+            $set_position_count->close();
+
+            if ($total_electorate === 0) throw new RuntimeException('empty_law_electorate');
+
+            $deadline = date('Y-m-d H:i:s', time() + 7 * 24 * 60 * 60);
+            $version_update = $conn->prepare(
+                "UPDATE community_law_versions
+                 SET status='voting', vote_started_at=NOW(), vote_deadline=?
+                 WHERE id=? AND status='proposed'"
+            );
+            if (!$version_update) throw new Exception('law version start prepare failed');
+            $version_update->bind_param('si', $deadline, $version_id);
+            if (!$version_update->execute() || $version_update->affected_rows !== 1) {
+                throw new Exception('law version start failed');
+            }
+            $version_update->close();
+
+            $law_update = $conn->prepare(
+                "UPDATE community_laws SET status='voting' WHERE id=? AND status='proposed'"
+            );
+            if (!$law_update) throw new Exception('law start prepare failed');
+            $law_update->bind_param('i', $law_id);
+            if (!$law_update->execute() || $law_update->affected_rows !== 1) {
+                throw new Exception('law start failed');
+            }
+            $law_update->close();
+
+            if (!community_law_record_history(
+                $conn, $law_id, $version_id, $community_id, $user_id,
+                'voting_started',
+                'رأی‌گیری هفت‌روزه آغاز شد؛ فهرست اعضای واجد شرایط هر جامعه مشمول در زمان آغاز ثبت شد.'
+            )) throw new Exception('law vote history failed');
+
+            if (!$conn->commit()) throw new Exception('law vote commit failed');
+            community_laws_redirect($community_id, 'voting_started');
+        } catch (Throwable $e) {
+            $conn->rollback();
+            if ($e instanceof RuntimeException) {
+                if ($e->getMessage() === 'invalid_law_vote_state') community_laws_redirect($community_id, 'invalid_vote_start');
+                if ($e->getMessage() === 'invalid_law_scope') community_laws_redirect($community_id, 'invalid_law_scope');
+                if ($e->getMessage() === 'empty_law_electorate') community_laws_redirect($community_id, 'empty_law_electorate');
+            }
+            error_log('[Dolate Eshgh law vote start] ' . $e->getMessage());
+            community_laws_redirect($community_id, 'save_error');
+        }
+    }
+
     if (isset($_POST['submit_law_objection'])) {
         if (!$is_member) community_laws_redirect($community_id, 'not_member');
 
@@ -399,6 +524,10 @@ $status = (string)($_GET['status'] ?? '');
 $status_messages = [
     'draft_saved' => 'پیش‌نویس قانون ثبت شد؛ این پیش‌نویس هنوز الزام‌آور نیست.',
     'submitted_for_review' => 'پیش‌نویس برای بررسی صلاحیت و دامنه شمول ارسال شد؛ هنوز رأی‌گیری یا الزام‌آوری آغاز نشده است.',
+    'voting_started' => 'رأی‌گیری هفت‌روزه آغاز شد و فهرست اعضای واجد شرایط ثبت شد.',
+    'invalid_vote_start' => 'این پیشنهاد در وضعیت قابل رأی‌گیری نیست.',
+    'invalid_law_scope' => 'دامنه شمول قانون معتبر نیست.',
+    'empty_law_electorate' => 'در جوامع مشمول، عضو واجد شرایطی برای رأی‌گیری یافت نشد.',
     'invalid_submission' => 'این پیش‌نویس قابل ارسال نیست؛ ممکن است قبلاً ارسال شده یا متعلق به شما نباشد.',
     'objection_saved' => 'اعتراض شما ثبت شد و برای بررسی باقی می‌ماند.',
     'not_member' => 'برای این عملیات باید عضو جامعه باشید.',
@@ -535,7 +664,15 @@ details>summary{cursor:pointer;font-weight:bold}
         <?php foreach ($proposed_laws as $proposal): ?>
             <div class="notice">
                 <strong><?= community_laws_escape($proposal['title']) ?></strong>
-                <div class="meta"><?= community_laws_escape($proposal['law_code']) ?> — در انتظار بررسی صلاحیت و دامنه شمول</div>
+                <div class="meta"><?= community_laws_escape($proposal['law_code']) ?> — آماده آغاز رأی‌گیری پس از بررسی صلاحیت و دامنه شمول</div>
+                <?php if ($is_member): ?>
+                <form method="post">
+                    <input type="hidden" name="csrf_token" value="<?= community_laws_escape($csrf_token) ?>">
+                    <input type="hidden" name="law_id" value="<?= (int)$proposal['law_id'] ?>">
+                    <input type="hidden" name="version_id" value="<?= (int)$proposal['version_id'] ?>">
+                    <button type="submit" name="start_law_vote" value="1">آغاز رأی‌گیری هفت‌روزه</button>
+                </form>
+                <?php endif; ?>
             </div>
         <?php endforeach; ?>
     <?php endif; ?>
