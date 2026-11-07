@@ -1,6 +1,7 @@
 <?php
 session_start();
 require __DIR__ . "/db.php";
+require_once __DIR__ . "/community_law_helpers.php";
 
 if (!isset($_SESSION['user_id'])) {
     header("Location: login.php");
@@ -130,6 +131,16 @@ try {
             }
         }
         if ($valid_winner) {
+            // پیش از اعمال تغییر، تمام ورود/خروج جوامع از دامنه قوانین جاری ثبت می‌شود.
+            // شکست ثبت تاریخچه باعث rollback رأی و تغییر سلسله‌مراتب خواهد شد.
+            $new_parents = $parents;
+            $new_parents[$community_id] = $winner;
+            if (!community_law_record_hierarchy_scope_changes(
+                $conn, $parents, $new_parents, $community_id, $user_id
+            )) {
+                throw new Exception('record law scope history failed');
+            }
+
             if ($winner > 0) {
                 $apply = $conn->prepare("UPDATE communities SET parent_community_id = ? WHERE id = ?");
                 if (!$apply) throw new Exception('prepare hierarchy update failed');
