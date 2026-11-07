@@ -44,6 +44,34 @@ if($expired){$expired->bind_param("i",$user_id);$expired->execute();$ids=$expire
         elseif($score<80){$level=2;$weight=1.50;}
         elseif($score<90){$level=3;$weight=2.00;}
         else{$level=4;$weight=3.00;}
+        // پیش از جایگزینی رکورد جاری، نسخهٔ قبلی را در تاریخچهٔ تغییرناپذیر نگه می‌داریم.
+        $archive=$conn->prepare(
+          "INSERT INTO expertise_competency_history
+             (user_id,domain_id,level,weight,approved_in_community_id,source_application_id,
+              valid_from,valid_until,superseded_at,superseded_by_application_id)
+           SELECT user_id,domain_id,level,weight,approved_in_community_id,source_application_id,
+                  valid_from,valid_until,NOW(),?
+           FROM expertise_competencies
+           WHERE user_id=? AND domain_id=?
+           LIMIT 1"
+        );
+        if(!$archive) throw new RuntimeException("آماده‌سازی حفظ تاریخچهٔ شایستگی انجام نشد.");
+        $archive->bind_param("iii",$id,$a['target_user_id'],$a['domain_id']);
+        if(!$archive->execute()) throw new RuntimeException("حفظ نسخهٔ قبلی شایستگی انجام نشد.");
+        $archived_previous = $archive->affected_rows > 0;
+        $archive->close();
+        if($archived_previous){
+          $archive_detail="نسخهٔ قبلی شایستگی پیش از ثبت نسخهٔ جدید بایگانی شد؛ درخواست مرجع: ".$id;
+          $archive_history=$conn->prepare(
+            "INSERT INTO expertise_application_history
+               (application_id,actor_user_id,event_type,details)
+             VALUES (?,NULL,'competency_version_archived',?)"
+          );
+          if(!$archive_history) throw new RuntimeException("ثبت رویداد تاریخچهٔ شایستگی انجام نشد.");
+          $archive_history->bind_param("is",$id,$archive_detail);
+          if(!$archive_history->execute()) throw new RuntimeException("ثبت رویداد بایگانی شایستگی انجام نشد.");
+          $archive_history->close();
+        }
         $up=$conn->prepare("INSERT INTO expertise_competencies (user_id,domain_id,level,weight,approved_in_community_id,source_application_id,valid_from,valid_until) VALUES (?,?,?,?,?,?,NOW(),DATE_ADD(NOW(),INTERVAL 3 YEAR)) ON DUPLICATE KEY UPDATE level=VALUES(level),weight=VALUES(weight),approved_in_community_id=VALUES(approved_in_community_id),source_application_id=VALUES(source_application_id),valid_from=NOW(),valid_until=DATE_ADD(NOW(),INTERVAL 3 YEAR)");
         $up->bind_param("iiidii",$a['target_user_id'],$a['domain_id'],$level,$weight,$a['community_id'],$id);$up->execute();$up->close();
         $status='approved';$reason='تصویب: رأی موافق به حداقل دوسوم رسیده و امتیاز شایستگی کافی است.';

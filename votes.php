@@ -248,7 +248,7 @@ if($_SERVER['REQUEST_METHOD'] === 'POST'){
         $stmt = $conn->prepare("
             INSERT INTO topic_voting_ballots (topic_id, idea_id, user_id, vote_type, vote_weight)
             VALUES (?,?,?,?,?)
-            ON DUPLICATE KEY UPDATE vote_type=VALUES(vote_type), vote_weight=VALUES(vote_weight), created_at=CURRENT_TIMESTAMP
+            ON DUPLICATE KEY UPDATE vote_type=VALUES(vote_type), created_at=CURRENT_TIMESTAMP
         ");
         $stmt->bind_param("iiisd", $topic_id, $idea_id, $user_id, $vote_type, $weight);
         $stmt->execute();
