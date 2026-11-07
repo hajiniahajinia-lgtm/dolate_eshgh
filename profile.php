@@ -385,10 +385,21 @@ if ($hierarchy_votes_ready) {
 <?php foreach ($hierarchy_communities as $hc): ?>
 <?php
 $cid = (int)$hc['id'];
-$counts_for_community = $hierarchy_vote_counts[$cid] ?? [];
+$round_info = $hierarchy_rounds[$cid] ?? null;
+$round_id = $round_info ? (int)$round_info['id'] : 0;
+$counts_for_community = $round_id > 0 ? ($hierarchy_vote_counts[$round_id] ?? []) : [];
 $total_community_votes = array_sum($counts_for_community);
-$current_vote = array_key_exists($cid, $hierarchy_user_votes) ? $hierarchy_user_votes[$cid] : $hc['parent_community_id'];
+$round_is_open = $round_info && $round_info['status'] === 'open' && strtotime($round_info['deadline']) > time();
+$current_vote = ($round_is_open && array_key_exists($cid, $hierarchy_user_votes))
+    ? $hierarchy_user_votes[$cid] : $hc['parent_community_id'];
 $current_parent_id = $hc['parent_community_id'];
+$member_stmt = $conn->prepare("SELECT 1 FROM community_members WHERE community_id=? AND user_id=? LIMIT 1");
+$is_hierarchy_member = false;
+if ($member_stmt) {
+    $member_stmt->bind_param("ii", $cid, $user_id);
+    if ($member_stmt->execute()) $is_hierarchy_member = (bool)$member_stmt->get_result()->fetch_row();
+    $member_stmt->close();
+}
 $current_parent_name = 'مستقل';
 foreach ($hierarchy_communities as $candidate_row) {
     if ((int)$candidate_row['id'] === $current_parent_id && $current_parent_id > 0) {
@@ -401,7 +412,7 @@ foreach ($hierarchy_communities as $candidate_row) {
 <strong><?= htmlspecialchars($hc['name'], ENT_QUOTES, 'UTF-8') ?></strong>
 <div style="font-size:12px;color:#596579;margin:4px 0 8px;line-height:1.8;">
 جایگاه فعلی: <strong><?= htmlspecialchars($current_parent_name, ENT_QUOTES, 'UTF-8') ?></strong>
-— مجموع رأی‌ها: <?= $total_community_votes ?>
+— رأی‌های ثبت‌شده در این دور: <?= $total_community_votes ?>
 </div>
 <form method="post" action="set_community_parent.php" style="margin:0;">
 <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($community_hierarchy_csrf, ENT_QUOTES, 'UTF-8') ?>">
