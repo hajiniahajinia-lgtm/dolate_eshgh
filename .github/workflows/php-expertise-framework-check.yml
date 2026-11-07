@@ -12,7 +12,7 @@ on:
       - 'community.php'
       - 'community_charter_amendment_action.php'
       - 'community_charter_amendments.php'
-      - 'migrations/20261108_community_charter_amendment_appeal_assignments.sql'
+      - 'migrations/20261107_community_charter_foundation.sql'\n      - 'migrations/20261107_community_charter_foundation.sql'\n      - 'migrations/20261108_community_charter_amendment_appeal_assignments.sql'
       - 'community_law_helpers.php'
       - 'set_community_parent.php'
       - 'profile.php'
@@ -26,7 +26,7 @@ on:
       - 'vote_member_removal.php'
       - 'tests/community_law_hierarchy_helpers_test.php'
       - 'migrations/20261107_community_charter_amendments.sql'
-      - 'tests/community_charter_amendments_test.php'
+      - 'tests/community_charter_amendments_test.php'\n      - 'tests/community_charter_amendments_integration_test.php'\n      - 'tests/community_charter_amendments_integration_test.php'
       - '.github/workflows/php-expertise-framework-check.yml'
   pull_request:
     paths:
@@ -90,3 +90,35 @@ jobs:
         run: |
           php tests/community_law_hierarchy_helpers_test.php
           php tests/community_charter_amendments_test.php
+
+  charter-mysql-integration:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: dolate_charter_ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up PHP with MySQL support
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mysqli
+      - name: Run isolated charter amendment database integration test
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_NAME: dolate_charter_ci
+          DB_USER: root
+          DB_PASSWORD: root
+        run: php tests/community_charter_amendments_integration_test.php
