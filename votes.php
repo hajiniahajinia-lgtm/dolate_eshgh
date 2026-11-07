@@ -276,8 +276,9 @@ if($_SERVER['REQUEST_METHOD'] === 'POST'){
             VALUES (?,?,?,?,?)
             ON DUPLICATE KEY UPDATE vote_type=VALUES(vote_type), created_at=CURRENT_TIMESTAMP
         ");
+        if(!$stmt) throw new RuntimeException("آماده‌سازی ثبت برگهٔ رأی انجام نشد.");
         $stmt->bind_param("iiisd", $topic_id, $idea_id, $user_id, $vote_type, $weight);
-        $stmt->execute();
+        if(!$stmt->execute()) throw new RuntimeException("ثبت برگهٔ رأی انجام نشد.");
         $stmt->close();
 
         $counts = $conn->prepare("
@@ -290,6 +291,7 @@ if($_SERVER['REQUEST_METHOD'] === 'POST'){
               SUM(CASE WHEN vote_type='no' THEN GREATEST(vote_weight - 1, 0) ELSE 0 END) AS no_expertise_effect
             FROM topic_voting_ballots WHERE topic_id=? AND idea_id=?
         ");
+        if(!$counts) throw new RuntimeException("آماده‌سازی محاسبهٔ نتیجهٔ رأی‌ها انجام نشد.");
         $counts->bind_param("ii", $topic_id, $idea_id);
         if(!$counts->execute()) throw new RuntimeException("محاسبهٔ نتیجهٔ رأی‌ها انجام نشد.");
         $result = $counts->get_result()->fetch_assoc();

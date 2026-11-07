@@ -101,9 +101,17 @@ if($expired){$expired->bind_param("i",$user_id);$expired->execute();$ids=$expire
       $status='not_approved';$reason='عدم تصویب: هیچ‌یک از دو گزینهٔ موافق یا مخالف به دوسوم آرا نرسید.';
     }
     $fin=$conn->prepare("UPDATE expertise_applications SET status=?,decision_at=NOW() WHERE id=? AND decision_at IS NULL");
-    $fin->bind_param("si",$status,$id);$fin->execute();$fin->close();
+    if(!$fin) throw new RuntimeException("آماده‌سازی ثبت نتیجهٔ پرونده انجام نشد.");
+    $fin->bind_param("si",$status,$id);
+    if(!$fin->execute()) throw new RuntimeException("ثبت نتیجهٔ پرونده انجام نشد.");
+    if($fin->affected_rows!==1) throw new RuntimeException("وضعیت پرونده هم‌زمان تغییر کرده است؛ نهایی‌سازی متوقف شد.");
+    $fin->close();
     $detail=$reason." ارزیابی مستقل: ".$reviewCount."؛ موافق: ".$yes."؛ مخالف: ".$no."؛ شرط تصمیم: دوسوم.";
-    $hist=$conn->prepare("INSERT INTO expertise_application_history (application_id,actor_user_id,event_type,details) VALUES (?,NULL,'voting_closed',?)");$hist->bind_param("is",$id,$detail);$hist->execute();$hist->close();
+    $hist=$conn->prepare("INSERT INTO expertise_application_history (application_id,actor_user_id,event_type,details) VALUES (?,NULL,'voting_closed',?)");
+    if(!$hist) throw new RuntimeException("آماده‌سازی ثبت تاریخچهٔ پرونده انجام نشد.");
+    $hist->bind_param("is",$id,$detail);
+    if(!$hist->execute()) throw new RuntimeException("ثبت تاریخچهٔ پرونده انجام نشد.");
+    $hist->close();
    }
    $conn->commit();
   }catch(Throwable $e){$conn->rollback();error_log("Expertise finalization: ".$e->getMessage());}
