@@ -317,6 +317,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $effective_laws = [];
 $draft_laws = [];
+$proposed_laws = [];
 $recent_objections = [];
 
 if ($schema_ready) {
