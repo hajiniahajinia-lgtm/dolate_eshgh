@@ -953,3 +953,37 @@ if (!function_exists('community_charter_amendment_items_are_valid')) {
         return true;
     }
 }
+
+
+if (!function_exists('community_charter_amendment_appeal_result')) {
+    /**
+     * اعتراض با رأی دست‌کم دو نفر از سه ارزیاب مستقل پذیرفته یا رد می‌شود.
+     * رأی نامشخص یا اختلاف بدون اکثریت، پرونده را باز نگه می‌دارد.
+     */
+    function community_charter_amendment_appeal_result(
+        array $assessments,
+        int $quorum = 3,
+        int $majority = 2
+    ): string {
+        if ($quorum < 3 || $majority < 2 || $majority > $quorum) return 'invalid';
+        $seen = [];
+        $uphold = 0;
+        $dismiss = 0;
+        foreach ($assessments as $assessment) {
+            if (!is_array($assessment) || (int)($assessment['reviewer_user_id'] ?? 0) <= 0) {
+                return 'invalid';
+            }
+            $reviewer_id = (int)$assessment['reviewer_user_id'];
+            if (isset($seen[$reviewer_id])) return 'invalid';
+            $seen[$reviewer_id] = true;
+            $verdict = $assessment['verdict'] ?? '';
+            if (!in_array($verdict, ['uphold','dismiss','unclear'], true)) return 'invalid';
+            if ($verdict === 'uphold') $uphold++;
+            if ($verdict === 'dismiss') $dismiss++;
+        }
+        if (count($seen) < $quorum) return 'pending';
+        if ($uphold >= $majority) return 'upheld';
+        if ($dismiss >= $majority) return 'dismissed';
+        return 'pending';
+    }
+}
