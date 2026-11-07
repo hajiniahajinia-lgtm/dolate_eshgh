@@ -147,4 +147,30 @@ check_charter_amendment(
     'appeal deadline has mutually exclusive open and closed conditions'
 );
 
+
+check_charter_amendment(
+    community_charter_amendment_vote_result(90, 45, 15, 0) === 'approved',
+    'exactly two-thirds turnout and exactly three-quarters approval pass'
+);
+check_charter_amendment(
+    community_charter_amendment_vote_result(90, 44, 16, 0) === 'rejected',
+    'one vote below the three-quarters approval threshold fails'
+);
+check_charter_amendment(
+    community_charter_amendment_vote_result(90, 45, 15, 1) === 'approved',
+    'abstention does not alter the yes-to-no approval ratio'
+);
+check_charter_amendment(
+    community_charter_amendment_vote_result(90, 90, 1, 0) === 'invalid',
+    'votes exceeding the captured electorate are invalid'
+);
+check_charter_amendment(
+    community_charter_amendment_vote_result(90, 0, 0, 60) === 'no_quorum',
+    'an all-abstention ballot cannot approve an amendment'
+);
+check_charter_amendment(
+    community_charter_amendment_appeal_result(array_slice($appeal_three, 0, 2)) === 'pending',
+    'fewer than three appeal reviewers cannot resolve an appeal'
+);
+
 fwrite(STDOUT, "OK: {$checks} charter amendment checks passed.\n");
