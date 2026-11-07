@@ -228,6 +228,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $review_scope_ids = community_law_scope_community_ids($conn, $version_id);
             if (!$review_scope_ids) throw new RuntimeException('invalid_law_scope');
+
+            $authority_parent_map = community_law_load_parent_map($conn);
+            if ($authority_parent_map === null || !isset($authority_parent_map[$community_id])) {
+                throw new RuntimeException('invalid_law_scope');
+            }
+            $has_unrelated_scope = false;
+            foreach ($review_scope_ids as $scope_target_id) {
+                if (
+                    $scope_target_id !== $community_id &&
+                    community_law_is_descendant_or_same($authority_parent_map, $community_id, $scope_target_id)
+                ) {
+                    // قانون جامعه زیرمجموعه نباید دامنه الزام‌آور را به جامعه مادر گسترش دهد.
+                    throw new RuntimeException('law_scope_exceeds_authority');
+                }
+                if (!community_law_is_descendant_or_same(
+                    $authority_parent_map, $scope_target_id, $community_id
+                )) $has_unrelated_scope = true;
+            }
+            $derived_jurisdiction = $has_unrelated_scope
+                ? 'intercommunity'
+                : (count($review_scope_ids) > 1 ? 'parent_shared' : 'local');
+
             $review_case = $conn->prepare(
                 "INSERT INTO community_law_review_cases
                     (law_version_id, originating_community_id, status, reviewer_quorum, opened_by)
@@ -237,6 +259,74 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $review_case->bind_param('iii', $version_id, $community_id, $user_id);
             if (!$review_case->execute()) throw new Exception('legal review case insert failed');
             $review_case->close();
+
+            $authority_case = $conn->prepare(
+                "INSERT INTO community_law_authority_cases
+                    (law_version_id, derived_jurisdiction_level, status, reviewer_quorum, opened_by)
+                 VALUES (?, ?, 'pending', 3, ?)"
+            );
+            if (!$authority_case) throw new Exception('authority case prepare failed');
+            $authority_case->bind_param('isi', $version_id, $derived_jurisdiction, $user_id);
+            if (!$authority_case->execute()) throw new Exception('authority case insert failed');
+            $authority_case->close();
+
+            $authority_reference_insert = $conn->prepare(
+                "INSERT IGNORE INTO community_law_authority_references
+                    (law_version_id, reference_law_id, reference_law_version_id,
+                     reference_origin_community_id, relation_type)
+                 VALUES (?, ?, ?, ?, ?)"
+            );
+            if (!$authority_reference_insert) throw new Exception('authority reference prepare failed');
+
+            $active_laws_result = $conn->query(
+                "SELECT l.id AS law_id, l.originating_community_id,
+                        l.current_version_id AS reference_version_id
+                 FROM community_laws l
+                 JOIN community_law_versions v ON v.id=l.current_version_id
+                 WHERE l.status='approved' AND v.status='approved'
+                   AND (l.effective_at IS NULL OR l.effective_at<=NOW())
+                   AND (l.expires_at IS NULL OR l.expires_at>NOW())
+                   AND l.repealed_at IS NULL"
+            );
+            if (!$active_laws_result) throw new Exception('active laws lookup failed');
+            while ($active_law = $active_laws_result->fetch_assoc()) {
+                $reference_origin = (int)$active_law['originating_community_id'];
+                $reference_version = (int)$active_law['reference_version_id'];
+                $applies_to_scope = false;
+                foreach ($review_scope_ids as $scope_target_id) {
+                    if (community_law_scope_matches($conn, $reference_version, $scope_target_id)) {
+                        $applies_to_scope = true;
+                        break;
+                    }
+                }
+                if (!$applies_to_scope) continue;
+
+                if ($reference_origin === $community_id) {
+                    $relation_type = 'same_level';
+                } elseif (community_law_is_descendant_or_same(
+                    $authority_parent_map, $community_id, $reference_origin
+                )) {
+                    $relation_type = 'higher';
+                } elseif (community_law_is_descendant_or_same(
+                    $authority_parent_map, $reference_origin, $community_id
+                )) {
+                    $relation_type = 'lower_level';
+                } else {
+                    $relation_type = 'peer';
+                }
+
+                $reference_law_id = (int)$active_law['law_id'];
+                $authority_reference_insert->bind_param(
+                    'iiiis', $version_id, $reference_law_id, $reference_version,
+                    $reference_origin, $relation_type
+                );
+                if (!$authority_reference_insert->execute()) {
+                    $active_laws_result->free();
+                    throw new Exception('authority reference insert failed');
+                }
+            }
+            $active_laws_result->free();
+            $authority_reference_insert->close();
 
             $review_elector_insert = $conn->prepare(
                 "INSERT IGNORE INTO community_law_review_electorate (law_version_id, user_id)
@@ -270,6 +360,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $conn->rollback();
             if ($e instanceof RuntimeException && $e->getMessage() === 'invalid_draft_state') {
                 community_laws_redirect($community_id, 'invalid_submission');
+            }
+            if ($e instanceof RuntimeException && $e->getMessage() === 'law_scope_exceeds_authority') {
+                community_laws_redirect($community_id, 'law_scope_exceeds_authority');
             }
             error_log('[Dolate Eshgh law submission] ' . $e->getMessage());
             community_laws_redirect($community_id, 'save_error');
