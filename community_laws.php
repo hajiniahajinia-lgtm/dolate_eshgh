@@ -2131,6 +2131,61 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             $reference_check->close();
 
+            // علاوه بر تغییر نسخه قوانین مرجع قبلی، هر قانون تازه‌لازم‌الاجرای مرتبط نیز باید در snapshot نهایی وجود داشته باشد.
+            $candidate_scope_ids = community_law_scope_community_ids($conn, $version_id);
+            if (!$candidate_scope_ids) throw new RuntimeException('reference_law_changed');
+            $active_reference_scan = $conn->query(
+                "SELECT l.id AS law_id, l.current_version_id
+                 FROM community_laws l
+                 JOIN community_law_versions v ON v.id=l.current_version_id
+                 WHERE l.status='approved' AND v.status='approved'
+                   AND (l.effective_at IS NULL OR l.effective_at<=NOW())
+                   AND (l.expires_at IS NULL OR l.expires_at>NOW())
+                   AND l.repealed_at IS NULL"
+            );
+            if (!$active_reference_scan) throw new Exception('active reference rescan failed');
+            while ($active_reference = $active_reference_scan->fetch_assoc()) {
+                $active_version_id = (int)$active_reference['current_version_id'];
+                $applies_now = false;
+                foreach ($candidate_scope_ids as $target_community_id) {
+                    $scope_match = community_law_scope_match_checked(
+                        $conn, $active_version_id, (int)$target_community_id
+                    );
+                    if ($scope_match === null) {
+                        $active_reference_scan->free();
+                        throw new RuntimeException('reference_law_changed');
+                    }
+                    if ($scope_match) {
+                        $applies_now = true;
+                        break;
+                    }
+                }
+                if (!$applies_now) continue;
+                $captured_reference = $conn->prepare(
+                    "SELECT 1 FROM community_law_final_review_references
+                     WHERE law_version_id=? AND reference_law_id=?
+                       AND reference_law_version_id=? LIMIT 1"
+                );
+                if (!$captured_reference) {
+                    $active_reference_scan->free();
+                    throw new Exception('final reference snapshot verification prepare failed');
+                }
+                $active_law_id = (int)$active_reference['law_id'];
+                $captured_reference->bind_param('iii', $version_id, $active_law_id, $active_version_id);
+                if (!$captured_reference->execute()) {
+                    $captured_reference->close();
+                    $active_reference_scan->free();
+                    throw new Exception('final reference snapshot verification failed');
+                }
+                $was_captured = (bool)$captured_reference->get_result()->fetch_row();
+                $captured_reference->close();
+                if (!$was_captured) {
+                    $active_reference_scan->free();
+                    throw new RuntimeException('reference_law_changed');
+                }
+            }
+            $active_reference_scan->free();
+
             $law_update = $conn->prepare(
                 "UPDATE community_laws
                  SET status='approved', effective_at=NOW()
