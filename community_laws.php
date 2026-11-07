@@ -810,7 +810,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$conn->begin_transaction()) community_laws_redirect($community_id, 'save_error');
         try {
             $lock = $conn->prepare(
-                "SELECT l.status, l.current_version_id, v.status AS version_status
+                "SELECT l.status, l.current_version_id, v.status AS version_status,
+                        v.source_topic_id
                  FROM community_laws l
                  JOIN community_law_versions v ON v.law_id=l.id
                  WHERE l.id=? AND v.id=? AND l.originating_community_id=?
@@ -980,6 +981,126 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $direct_count_stmt->close();
             if ($direct_electorate_count === 0) throw new RuntimeException('empty_law_electorate');
 
+            // رأی وزن‌دار فقط با پروفایل چندحوزه‌ایِ تأییدشده و snapshot کامل مجاز است.
+            if ($rules['individual_vote_basis'] === 'weighted') {
+                $source_topic_id = (int)($record['source_topic_id'] ?? 0);
+                if ($source_topic_id <= 0) throw new RuntimeException('weighted_expertise_profile_required');
+
+                $profile_stmt = $conn->prepare(
+                    "SELECT id FROM topic_expertise_profiles
+                     WHERE topic_id=? AND status='approved'
+                     ORDER BY version_number DESC LIMIT 1 FOR UPDATE"
+                );
+                if (!$profile_stmt) throw new Exception('expertise profile lookup prepare failed');
+                $profile_stmt->bind_param('i', $source_topic_id);
+                if (!$profile_stmt->execute()) throw new Exception('expertise profile lookup failed');
+                $expertise_profile = $profile_stmt->get_result()->fetch_assoc();
+                $profile_stmt->close();
+                if (!$expertise_profile) throw new RuntimeException('weighted_expertise_profile_required');
+                $profile_id = (int)$expertise_profile['id'];
+
+                $profile_check = $conn->prepare(
+                    "SELECT COUNT(*) AS domain_count,
+                            COALESCE(SUM(share_percent),0) AS share_total,
+                            COUNT(DISTINCT domain_id) AS distinct_domains
+                     FROM topic_expertise_profile_domains WHERE profile_id=?"
+                );
+                if (!$profile_check) throw new Exception('expertise profile validation prepare failed');
+                $profile_check->bind_param('i', $profile_id);
+                if (!$profile_check->execute()) throw new Exception('expertise profile validation failed');
+                $profile_stats = $profile_check->get_result()->fetch_assoc();
+                $profile_check->close();
+                if (
+                    (int)$profile_stats['domain_count'] < 1 ||
+                    (int)$profile_stats['domain_count'] !== (int)$profile_stats['distinct_domains'] ||
+                    abs((float)$profile_stats['share_total'] - 100.0) > 0.001
+                ) throw new RuntimeException('weighted_expertise_profile_invalid');
+
+                $snapshot = $conn->prepare(
+                    "INSERT INTO community_law_expertise_profile_snapshots
+                        (law_version_id, profile_id, topic_id)
+                     VALUES (?, ?, ?)"
+                );
+                if (!$snapshot) throw new Exception('expertise profile snapshot prepare failed');
+                $snapshot->bind_param('iii', $version_id, $profile_id, $source_topic_id);
+                if (!$snapshot->execute()) throw new Exception('expertise profile snapshot failed');
+                $snapshot->close();
+
+                $snapshot_domains = $conn->prepare(
+                    "INSERT INTO community_law_expertise_profile_domains
+                        (law_version_id, domain_id, share_percent)
+                     SELECT ?, domain_id, share_percent
+                     FROM topic_expertise_profile_domains WHERE profile_id=?"
+                );
+                if (!$snapshot_domains) throw new Exception('expertise domain snapshot prepare failed');
+                $snapshot_domains->bind_param('ii', $version_id, $profile_id);
+                if (!$snapshot_domains->execute()) throw new Exception('expertise domain snapshot failed');
+                $snapshot_domains->close();
+
+                // نبود شایستگی معتبر در یک حوزه، وزن پایهٔ ۱ همان حوزه را اعمال می‌کند.
+                $weight_details = $conn->prepare(
+                    "INSERT INTO community_law_expertise_weight_details
+                        (law_version_id, user_id, domain_id, share_percent,
+                         competency_id, competency_weight, weighted_contribution)
+                     SELECT ?, e.user_id, pd.domain_id, pd.share_percent,
+                            ec.id, COALESCE(ec.weight, 1.00),
+                            (pd.share_percent * COALESCE(ec.weight, 1.00)) / 100.00
+                     FROM community_law_direct_electorate e
+                     CROSS JOIN topic_expertise_profile_domains pd
+                     LEFT JOIN expertise_competencies ec
+                       ON ec.user_id=e.user_id
+                      AND ec.domain_id=pd.domain_id
+                      AND ec.valid_from<=NOW()
+                      AND ec.valid_until>NOW()
+                     WHERE e.law_version_id=? AND pd.profile_id=?"
+                );
+                if (!$weight_details) throw new Exception('expertise weight detail prepare failed');
+                $weight_details->bind_param('iii', $version_id, $version_id, $profile_id);
+                if (!$weight_details->execute()) throw new Exception('expertise weight details snapshot failed');
+                $weight_details->close();
+
+                $weight_snapshot = $conn->prepare(
+                    "INSERT INTO community_law_expertise_voter_weights
+                        (law_version_id, user_id, profile_id, final_vote_weight)
+                     SELECT law_version_id, user_id, ?, LEAST(3.00, GREATEST(1.00, SUM(weighted_contribution)))
+                     FROM community_law_expertise_weight_details
+                     WHERE law_version_id=?
+                     GROUP BY law_version_id, user_id"
+                );
+                if (!$weight_snapshot) throw new Exception('expertise voter weight snapshot prepare failed');
+                $weight_snapshot->bind_param('ii', $profile_id, $version_id);
+                if (!$weight_snapshot->execute() || $weight_snapshot->affected_rows !== $direct_electorate_count) {
+                    throw new Exception('expertise voter weight snapshot incomplete');
+                }
+                $weight_snapshot->close();
+
+                $apply_direct_weights = $conn->prepare(
+                    "UPDATE community_law_direct_electorate e
+                     JOIN community_law_expertise_voter_weights w
+                       ON w.law_version_id=e.law_version_id AND w.user_id=e.user_id
+                     SET e.vote_weight=w.final_vote_weight
+                     WHERE e.law_version_id=?"
+                );
+                if (!$apply_direct_weights) throw new Exception('direct expertise weights prepare failed');
+                $apply_direct_weights->bind_param('i', $version_id);
+                if (!$apply_direct_weights->execute() || $apply_direct_weights->affected_rows < 0) {
+                    throw new Exception('direct expertise weights update failed');
+                }
+                $apply_direct_weights->close();
+
+                $apply_community_weights = $conn->prepare(
+                    "UPDATE community_law_electorate e
+                     JOIN community_law_expertise_voter_weights w
+                       ON w.law_version_id=e.law_version_id AND w.user_id=e.user_id
+                     SET e.vote_weight=w.final_vote_weight
+                     WHERE e.law_version_id=?"
+                );
+                if (!$apply_community_weights) throw new Exception('community expertise weights prepare failed');
+                $apply_community_weights->bind_param('i', $version_id);
+                if (!$apply_community_weights->execute()) throw new Exception('community expertise weights update failed');
+                $apply_community_weights->close();
+            }
+
             $deadline = date('Y-m-d H:i:s', time() + 7 * 24 * 60 * 60);
             $version_update = $conn->prepare(
                 "UPDATE community_law_versions
@@ -1020,6 +1141,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($e->getMessage() === 'population_snapshot_required') community_laws_redirect($community_id, 'population_snapshot_required');
                 if ($e->getMessage() === 'invalid_law_scope') community_laws_redirect($community_id, 'invalid_law_scope');
                 if ($e->getMessage() === 'empty_law_electorate') community_laws_redirect($community_id, 'empty_law_electorate');
+                if ($e->getMessage() === 'weighted_expertise_profile_required') community_laws_redirect($community_id, 'weighted_expertise_profile_required');
+                if ($e->getMessage() === 'weighted_expertise_profile_invalid') community_laws_redirect($community_id, 'weighted_expertise_profile_invalid');
             }
             error_log('[Dolate Eshgh law vote start] ' . $e->getMessage());
             community_laws_redirect($community_id, 'save_error');
