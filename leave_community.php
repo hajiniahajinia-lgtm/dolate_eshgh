@@ -63,15 +63,15 @@ try {
     $delete->close();
 
     // فقط در صورت حذف واقعی عضویت، شمارنده کاهش می‌یابد.
-    if ($removed === 1) {
+    if ($removed > 0) {
         $count_update = $conn->prepare(
-            "UPDATE communities SET members_count=GREATEST(members_count-1,0) WHERE id=?"
+            "UPDATE communities SET members_count=GREATEST(members_count-?,0) WHERE id=?"
         );
         if (!$count_update) {
             throw new RuntimeException("prepare member count update failed");
         }
-        $count_update->bind_param("i", $community_id);
-        if (!$count_update->execute() || $count_update->affected_rows !== 1) {
+        $count_update->bind_param("ii", $removed, $community_id);
+        if (!$count_update->execute()) {
             throw new RuntimeException("member count update failed");
         }
         $count_update->close();
