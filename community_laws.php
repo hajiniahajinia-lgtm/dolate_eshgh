@@ -588,6 +588,7 @@ $draft_laws = [];
 $proposed_laws = [];
 $voting_laws = [];
 $closed_voting_laws = [];
+$tallied_laws = [];
 $recent_objections = [];
 
 if ($schema_ready) {
@@ -687,6 +688,41 @@ if ($schema_ready) {
             while ($row = $closed_result->fetch_assoc()) $closed_voting_laws[] = $row;
         }
         $closed_stmt->close();
+    }
+
+    $tallied_stmt = $conn->prepare(
+        "SELECT l.id AS law_id, l.law_code, v.id AS version_id, v.title,
+                v.vote_deadline, p.community_id, c.name AS community_name,
+                p.electorate_count, p.yes_count, p.no_count, p.abstain_count,
+                p.yes_weight, p.no_weight, p.position_result
+         FROM community_laws l
+         JOIN community_law_versions v ON v.id=l.current_version_id
+         JOIN community_law_positions p ON p.law_version_id=v.id
+         JOIN communities c ON c.id=p.community_id
+         WHERE l.originating_community_id=?
+           AND l.status='voting' AND v.status='voting'
+           AND v.vote_deadline <= NOW()
+         ORDER BY v.vote_deadline DESC, c.name ASC LIMIT 300"
+    );
+    if ($tallied_stmt) {
+        $tallied_stmt->bind_param('i', $community_id);
+        if ($tallied_stmt->execute()) {
+            $tallied_result = $tallied_stmt->get_result();
+            while ($row = $tallied_result->fetch_assoc()) {
+                $law_key = (int)$row['law_id'];
+                if (!isset($tallied_laws[$law_key])) {
+                    $tallied_laws[$law_key] = [
+                        'title' => $row['title'],
+                        'law_code' => $row['law_code'],
+                        'version_id' => (int)$row['version_id'],
+                        'vote_deadline' => $row['vote_deadline'],
+                        'communities' => []
+                    ];
+                }
+                $tallied_laws[$law_key]['communities'][] = $row;
+            }
+        }
+        $tallied_stmt->close();
     }
 
     $objection_stmt = $conn->prepare(
@@ -845,6 +881,38 @@ details>summary{cursor:pointer;font-weight:bold}
                     <button type="submit" name="submit_law_for_review" value="1">ارسال برای بررسی صلاحیت و دامنه شمول</button>
                 </form>
                 <?php endif; ?>
+            </div>
+        <?php endforeach; ?>
+    <?php endif; ?>
+</div>
+
+<div class="card">
+    <h3>گزارش نتایج رأی‌گیری‌های پایان‌یافته</h3>
+    <?php if (!$tallied_laws): ?>
+        <p class="muted">هنوز گزارشی از رأی‌گیری پایان‌یافته ثبت نشده است.</p>
+    <?php else: ?>
+        <?php foreach ($tallied_laws as $tallied_law): ?>
+            <div class="notice">
+                <strong><?= community_laws_escape($tallied_law['title']) ?></strong>
+                <div class="meta"><?= community_laws_escape($tallied_law['law_code']) ?> — پایان مهلت: <?= community_laws_escape($tallied_law['vote_deadline']) ?></div>
+                <table style="width:100%;border-collapse:collapse;margin-top:10px;font-size:13px">
+                    <thead><tr>
+                        <th>جامعه</th><th>واجدان</th><th>موافق</th><th>مخالف</th><th>ممتنع</th><th>وضعیت</th>
+                    </tr></thead>
+                    <tbody>
+                    <?php foreach ($tallied_law['communities'] as $result_row): ?>
+                        <tr>
+                            <td><?= community_laws_escape($result_row['community_name']) ?></td>
+                            <td><?= (int)$result_row['electorate_count'] ?></td>
+                            <td><?= (int)$result_row['yes_count'] ?></td>
+                            <td><?= (int)$result_row['no_count'] ?></td>
+                            <td><?= (int)$result_row['abstain_count'] ?></td>
+                            <td><?= (int)$result_row['yes_count'] + (int)$result_row['no_count'] + (int)$result_row['abstain_count'] === 0 ? 'بدون رأی' : 'در انتظار قواعد تصویب' ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+                <p class="muted">این گزارش صرفاً شمارش آراست؛ تا تعیین حدنصاب و قواعد تصویب، قانون تصویب‌شده محسوب نمی‌شود.</p>
             </div>
         <?php endforeach; ?>
     <?php endif; ?>
