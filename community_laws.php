@@ -463,6 +463,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 throw new RuntimeException('tally_not_ready');
             }
 
+            $already_counted = $conn->prepare(
+                "SELECT 1 FROM community_law_final_results WHERE law_version_id=? LIMIT 1"
+            );
+            if (!$already_counted) throw new Exception('final result existence prepare failed');
+            $already_counted->bind_param('i', $version_id);
+            if (!$already_counted->execute()) throw new Exception('final result existence lookup failed');
+            $has_final_result = (bool)$already_counted->get_result()->fetch_row();
+            $already_counted->close();
+            if ($has_final_result) throw new RuntimeException('tally_already_done');
+
             $rules_stmt = $conn->prepare(
                 "SELECT individual_quorum_percent, individual_approval_percent,
                         community_quorum_percent, community_approval_percent,
@@ -600,10 +610,155 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!$save_direct_result->execute()) throw new Exception('direct result save failed');
             $save_direct_result->close();
 
+            // ارزیابی مسیر مستقیم افراد طبق مبنای شمارش مصوب همین نسخه.
+            $direct_metrics_stmt = $conn->prepare(
+                "SELECT COUNT(e.user_id) AS eligible_count,
+                        COALESCE(SUM(e.vote_weight),0) AS eligible_weight,
+                        COUNT(v.voter_user_id) AS cast_count,
+                        COALESCE(SUM(v.vote_weight),0) AS cast_weight,
+                        COALESCE(SUM(CASE WHEN v.vote='yes' THEN 1 ELSE 0 END),0) AS yes_count,
+                        COALESCE(SUM(CASE WHEN v.vote='no' THEN 1 ELSE 0 END),0) AS no_count,
+                        COALESCE(SUM(CASE WHEN v.vote='abstain' THEN 1 ELSE 0 END),0) AS abstain_count,
+                        COALESCE(SUM(CASE WHEN v.vote='yes' THEN v.vote_weight ELSE 0 END),0) AS yes_weight,
+                        COALESCE(SUM(CASE WHEN v.vote='no' THEN v.vote_weight ELSE 0 END),0) AS no_weight,
+                        COALESCE(SUM(CASE WHEN v.vote='abstain' THEN v.vote_weight ELSE 0 END),0) AS abstain_weight
+                 FROM community_law_direct_electorate e
+                 LEFT JOIN community_law_direct_votes v
+                   ON v.law_version_id=e.law_version_id AND v.voter_user_id=e.user_id
+                 WHERE e.law_version_id=?"
+            );
+            if (!$direct_metrics_stmt) throw new Exception('direct metrics prepare failed');
+            $direct_metrics_stmt->bind_param('i', $version_id);
+            if (!$direct_metrics_stmt->execute()) throw new Exception('direct metrics failed');
+            $direct_metrics = $direct_metrics_stmt->get_result()->fetch_assoc();
+            $direct_metrics_stmt->close();
+
+            $individual_basis = $approved_rules['individual_vote_basis'];
+            if (!in_array($individual_basis, ['count','weighted'], true)) {
+                throw new RuntimeException('invalid_individual_vote_basis');
+            }
+            $individual_eligible = $individual_basis === 'weighted'
+                ? (float)$direct_metrics['eligible_weight'] : (float)$direct_metrics['eligible_count'];
+            $individual_participating = $individual_basis === 'weighted'
+                ? (float)$direct_metrics['cast_weight'] : (float)$direct_metrics['cast_count'];
+            $individual_yes_metric = $individual_basis === 'weighted'
+                ? (float)$direct_metrics['yes_weight'] : (float)$direct_metrics['yes_count'];
+            $individual_no_metric = $individual_basis === 'weighted'
+                ? (float)$direct_metrics['no_weight'] : (float)$direct_metrics['no_count'];
+            $individual_abstain_metric = $individual_basis === 'weighted'
+                ? (float)$direct_metrics['abstain_weight'] : (float)$direct_metrics['abstain_count'];
+            $individual_decisive = $individual_yes_metric + $individual_no_metric;
+            $individual_turnout_percent = $individual_eligible > 0
+                ? ($individual_participating / $individual_eligible) * 100 : 0;
+            $individual_approval_percent = $individual_decisive > 0
+                ? ($individual_yes_metric / $individual_decisive) * 100 : 0;
+
+            $require_community = (int)$approved_rules['require_community_approval'];
+            $community_basis = $require_community ? $approved_rules['community_vote_basis'] : null;
+            $community_eligible_metric = 0.0;
+            $community_participating_metric = 0.0;
+            $community_yes_metric = 0.0;
+            $community_no_metric = 0.0;
+            $community_turnout_percent = 0.0;
+            $community_approval_percent = 0.0;
+            $community_quorum_met = true;
+            $community_approval_met = true;
+
+            if ($require_community === 1) {
+                if (!in_array($community_basis, ['one_community_one_vote','population_weighted'], true)) {
+                    throw new RuntimeException('invalid_community_vote_basis');
+                }
+                $community_metrics_stmt = $conn->prepare(
+                    "SELECT COUNT(*) AS eligible_communities,
+                            COALESCE(SUM(electorate_count),0) AS eligible_population,
+                            SUM(CASE WHEN position_result IN ('approve','reject') THEN 1 ELSE 0 END) AS participating_communities,
+                            COALESCE(SUM(CASE WHEN position_result IN ('approve','reject') THEN electorate_count ELSE 0 END),0) AS participating_population,
+                            SUM(CASE WHEN position_result='approve' THEN 1 ELSE 0 END) AS yes_communities,
+                            SUM(CASE WHEN position_result='reject' THEN 1 ELSE 0 END) AS no_communities,
+                            COALESCE(SUM(CASE WHEN position_result='approve' THEN electorate_count ELSE 0 END),0) AS yes_population,
+                            COALESCE(SUM(CASE WHEN position_result='reject' THEN electorate_count ELSE 0 END),0) AS no_population
+                     FROM community_law_positions WHERE law_version_id=?"
+                );
+                if (!$community_metrics_stmt) throw new Exception('community metrics prepare failed');
+                $community_metrics_stmt->bind_param('i', $version_id);
+                if (!$community_metrics_stmt->execute()) throw new Exception('community metrics failed');
+                $community_metrics = $community_metrics_stmt->get_result()->fetch_assoc();
+                $community_metrics_stmt->close();
+
+                if ($community_basis === 'one_community_one_vote') {
+                    $community_eligible_metric = (float)$community_metrics['eligible_communities'];
+                    $community_participating_metric = (float)$community_metrics['participating_communities'];
+                    $community_yes_metric = (float)$community_metrics['yes_communities'];
+                    $community_no_metric = (float)$community_metrics['no_communities'];
+                } else {
+                    $community_eligible_metric = (float)$community_metrics['eligible_population'];
+                    $community_participating_metric = (float)$community_metrics['participating_population'];
+                    $community_yes_metric = (float)$community_metrics['yes_population'];
+                    $community_no_metric = (float)$community_metrics['no_population'];
+                }
+                $community_decisive = $community_yes_metric + $community_no_metric;
+                $community_turnout_percent = $community_eligible_metric > 0
+                    ? ($community_participating_metric / $community_eligible_metric) * 100 : 0;
+                $community_approval_percent = $community_decisive > 0
+                    ? ($community_yes_metric / $community_decisive) * 100 : 0;
+                $community_quorum_met = $community_eligible_metric > 0
+                    && $community_turnout_percent + 0.00001 >= (float)$approved_rules['community_quorum_percent']
+                    && $community_decisive > 0;
+                $community_approval_met = $community_quorum_met
+                    && $community_approval_percent + 0.00001 >= (float)$approved_rules['community_approval_percent'];
+            }
+
+            $individual_quorum_met = $individual_eligible > 0
+                && $individual_turnout_percent + 0.00001 >= (float)$approved_rules['individual_quorum_percent']
+                && $individual_decisive > 0;
+            $individual_approval_met = $individual_quorum_met
+                && $individual_approval_percent + 0.00001 >= (float)$approved_rules['individual_approval_percent'];
+
+            if (!$individual_quorum_met || ($require_community === 1 && !$community_quorum_met)) {
+                $final_status = 'insufficient';
+            } elseif (!$individual_approval_met || ($require_community === 1 && !$community_approval_met)) {
+                $final_status = 'vote_rejected';
+            } else {
+                $final_status = 'vote_passed';
+            }
+
+            $save_final_result = $conn->prepare(
+                "INSERT INTO community_law_final_results
+                    (law_version_id, individual_vote_basis,
+                     individual_eligible, individual_participating,
+                     individual_yes, individual_no, individual_abstain,
+                     individual_turnout_percent, individual_approval_percent,
+                     require_community_approval, community_vote_basis,
+                     community_eligible, community_participating,
+                     community_yes, community_no,
+                     community_turnout_percent, community_approval_percent,
+                     final_status, calculated_by)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            );
+            if (!$save_final_result) throw new Exception('final result insert prepare failed');
+            $individual_turnout_percent = round($individual_turnout_percent, 3);
+            $individual_approval_percent = round($individual_approval_percent, 3);
+            $community_turnout_percent = round($community_turnout_percent, 3);
+            $community_approval_percent = round($community_approval_percent, 3);
+            $save_final_result->bind_param(
+                'isdddddddisddddddsi',
+                $version_id, $individual_basis,
+                $individual_eligible, $individual_participating,
+                $individual_yes_metric, $individual_no_metric, $individual_abstain_metric,
+                $individual_turnout_percent, $individual_approval_percent,
+                $require_community, $community_basis,
+                $community_eligible_metric, $community_participating_metric,
+                $community_yes_metric, $community_no_metric,
+                $community_turnout_percent, $community_approval_percent,
+                $final_status, $user_id
+            );
+            if (!$save_final_result->execute()) throw new Exception('final result insert failed');
+            $save_final_result->close();
+
             if (!community_law_record_history(
                 $conn, $law_id, $version_id, $community_id, $user_id,
-                'voting_tallied',
-                'مهلت رأی‌گیری پایان یافت و شمارش آرا به تفکیک جامعه ثبت شد؛ نتیجه تصویب تا تعیین و اعمال قواعد حدنصاب و اکثریت نهایی نمی‌شود.'
+                'voting_result_calculated',
+                'نتیجه مرکب رأی‌گیری بر اساس قواعد تأییدشده محاسبه شد؛ این نتیجه به‌تنهایی موجب لازم‌الاجرا شدن قانون نیست.'
             )) throw new Exception('tally history failed');
 
             if (!$conn->commit()) throw new Exception('tally commit failed');
@@ -615,6 +770,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             if ($e instanceof RuntimeException && $e->getMessage() === 'tally_rules_missing') {
                 community_laws_redirect($community_id, 'voting_rules_required');
+            }
+            if ($e instanceof RuntimeException && $e->getMessage() === 'tally_already_done') {
+                community_laws_redirect($community_id, 'tally_already_done');
             }
             error_log('[Dolate Eshgh law tally] ' . $e->getMessage());
             community_laws_redirect($community_id, 'save_error');
@@ -974,6 +1132,10 @@ if ($schema_ready) {
          WHERE l.originating_community_id=?
            AND l.status='voting' AND v.status='voting'
            AND v.vote_deadline <= NOW()
+           AND NOT EXISTS (
+               SELECT 1 FROM community_law_final_results fr
+               WHERE fr.law_version_id=v.id
+           )
          ORDER BY v.vote_deadline DESC LIMIT 30"
     );
     if ($closed_stmt) {
@@ -995,12 +1157,21 @@ if ($schema_ready) {
                 dr.no_count AS direct_no_count,
                 dr.abstain_count AS direct_abstain_count,
                 dr.yes_weight AS direct_yes_weight,
-                dr.no_weight AS direct_no_weight
+                dr.no_weight AS direct_no_weight,
+                fr.final_status,
+                fr.individual_turnout_percent,
+                fr.individual_approval_percent,
+                fr.community_turnout_percent,
+                fr.community_approval_percent,
+                fr.individual_vote_basis,
+                fr.community_vote_basis,
+                fr.require_community_approval
          FROM community_laws l
          JOIN community_law_versions v ON v.id=l.current_version_id
          JOIN community_law_positions p ON p.law_version_id=v.id
          JOIN communities c ON c.id=p.community_id
          LEFT JOIN community_law_direct_results dr ON dr.law_version_id=v.id
+         LEFT JOIN community_law_final_results fr ON fr.law_version_id=v.id
          WHERE l.originating_community_id=?
            AND l.status='voting' AND v.status='voting'
            AND v.vote_deadline <= NOW()
@@ -1018,6 +1189,16 @@ if ($schema_ready) {
                         'law_code' => $row['law_code'],
                         'version_id' => (int)$row['version_id'],
                         'vote_deadline' => $row['vote_deadline'],
+                        'final_result' => [
+                            'status' => $row['final_status'] ?? null,
+                            'individual_turnout' => (float)($row['individual_turnout_percent'] ?? 0),
+                            'individual_approval' => (float)($row['individual_approval_percent'] ?? 0),
+                            'community_turnout' => (float)($row['community_turnout_percent'] ?? 0),
+                            'community_approval' => (float)($row['community_approval_percent'] ?? 0),
+                            'individual_basis' => $row['individual_vote_basis'] ?? null,
+                            'community_basis' => $row['community_vote_basis'] ?? null,
+                            'require_community' => (int)($row['require_community_approval'] ?? 0)
+                        ],
                         'direct_result' => [
                             'electorate_count' => (int)($row['direct_electorate_count'] ?? 0),
                             'yes_count' => (int)($row['direct_yes_count'] ?? 0),
@@ -1058,7 +1239,8 @@ $status = (string)($_GET['status'] ?? '');
 $status_messages = [
     'draft_saved' => 'پیش‌نویس قانون ثبت شد؛ این پیش‌نویس هنوز الزام‌آور نیست.',
     'submitted_for_review' => 'پیش‌نویس برای بررسی صلاحیت و دامنه شمول ارسال شد؛ هنوز رأی‌گیری یا الزام‌آوری آغاز نشده است.',
-    'tally_saved' => 'شمارش آرا به تفکیک جوامع ثبت شد؛ تصویب نهایی هنوز به قواعد حدنصاب نیاز دارد.',
+    'tally_saved' => 'نتیجه مرکب رأی‌گیری طبق قواعد تأییدشده ثبت شد؛ لازم‌الاجرا شدن قانون مرحله جداگانه‌ای است.',
+    'tally_already_done' => 'نتیجه این رأی‌گیری قبلاً محاسبه شده است.',
     'tally_not_ready' => 'مهلت رأی‌گیری هنوز پایان نیافته یا وضعیت پیشنهاد برای شمارش نهایی معتبر نیست.',
     'invalid_tally' => 'اطلاعات درخواست شمارش آرا معتبر نیست.',
     'law_vote_saved' => 'رأی شما در شکل‌گیری موضع این جامعه ثبت شد؛ تا پایان مهلت می‌توانید آن را تغییر دهید.',
@@ -1209,6 +1391,18 @@ details>summary{cursor:pointer;font-weight:bold}
             <div class="notice">
                 <strong><?= community_laws_escape($tallied_law['title']) ?></strong>
                 <div class="meta"><?= community_laws_escape($tallied_law['law_code']) ?> — پایان مهلت: <?= community_laws_escape($tallied_law['vote_deadline']) ?></div>
+                <div class="notice">
+                    <strong>نتیجه مرکب رأی‌گیری</strong>
+                    <p>
+                        <?= $tallied_law['final_result']['status'] === 'vote_passed' ? 'رأی‌گیری به تصویب پیشنهاد انجامید؛ هنوز به معنای لازم‌الاجرا شدن قانون نیست.' : ($tallied_law['final_result']['status'] === 'vote_rejected' ? 'پیشنهاد در رأی‌گیری تصویب نشد.' : ($tallied_law['final_result']['status'] === 'insufficient' ? 'حدنصاب مشارکت در دست‌کم یکی از مسیرهای الزامی حاصل نشد.' : 'نتیجه مرکب هنوز محاسبه نشده است.')) ?>
+                    </p>
+                    <div>مشارکت مستقیم: <?= number_format($tallied_law['final_result']['individual_turnout'], 2) ?>٪ —
+                    موافقت مستقیم: <?= number_format($tallied_law['final_result']['individual_approval'], 2) ?>٪</div>
+                    <?php if ($tallied_law['final_result']['require_community'] === 1): ?>
+                        <div>مشارکت جوامع: <?= number_format($tallied_law['final_result']['community_turnout'], 2) ?>٪ —
+                        موضع موافق جوامع: <?= number_format($tallied_law['final_result']['community_approval'], 2) ?>٪</div>
+                    <?php endif; ?>
+                </div>
                 <div class="notice">
                     <strong>نتیجه رأی مستقیم افراد (مستقل از عضویت چندگانه)</strong>
                     <div>واجدان: <?= (int)$tallied_law['direct_result']['electorate_count'] ?> —
