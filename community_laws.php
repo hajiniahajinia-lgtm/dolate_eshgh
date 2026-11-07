@@ -277,6 +277,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 throw new RuntimeException('invalid_law_vote_state');
             }
 
+            // آغاز رأی‌گیری بدون قواعد تصویبِ تکمیل و تأییدشده مجاز نیست.
+            $rules_stmt = $conn->prepare(
+                "SELECT status, jurisdiction_level,
+                        individual_quorum_percent, individual_approval_percent,
+                        community_quorum_percent, community_approval_percent,
+                        require_community_approval, individual_vote_basis,
+                        community_vote_basis
+                 FROM community_law_voting_rules
+                 WHERE law_version_id=? LIMIT 1 FOR UPDATE"
+            );
+            if (!$rules_stmt) throw new Exception('voting rules prepare failed');
+            $rules_stmt->bind_param('i', $version_id);
+            if (!$rules_stmt->execute()) throw new Exception('voting rules lookup failed');
+            $rules = $rules_stmt->get_result()->fetch_assoc();
+            $rules_stmt->close();
+
+            $rules_complete = $rules
+                && $rules['status'] === 'approved'
+                && !empty($rules['jurisdiction_level'])
+                && $rules['individual_quorum_percent'] !== null
+                && $rules['individual_approval_percent'] !== null
+                && $rules['individual_vote_basis'] !== null
+                && $rules['require_community_approval'] !== null
+                && (
+                    (int)$rules['require_community_approval'] === 0
+                    || (
+                        $rules['community_quorum_percent'] !== null
+                        && $rules['community_approval_percent'] !== null
+                        && $rules['community_vote_basis'] !== null
+                    )
+                );
+            if (!$rules_complete) {
+                throw new RuntimeException('voting_rules_not_approved');
+            }
+
             $affected_communities = community_law_scope_community_ids($conn, $version_id);
             if (!$affected_communities) throw new RuntimeException('invalid_law_scope');
 
@@ -363,6 +398,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $conn->rollback();
             if ($e instanceof RuntimeException) {
                 if ($e->getMessage() === 'invalid_law_vote_state') community_laws_redirect($community_id, 'invalid_vote_start');
+                if ($e->getMessage() === 'voting_rules_not_approved') community_laws_redirect($community_id, 'voting_rules_required');
                 if ($e->getMessage() === 'invalid_law_scope') community_laws_redirect($community_id, 'invalid_law_scope');
                 if ($e->getMessage() === 'empty_law_electorate') community_laws_redirect($community_id, 'empty_law_electorate');
             }
@@ -755,6 +791,7 @@ $status_messages = [
     'invalid_law_vote' => 'رأی یا اطلاعات ارسالی معتبر نیست.',
     'not_law_elector' => 'نام شما در فهرست رأی‌دهندگان این رأی‌گیری ثبت نشده است.',
     'voting_started' => 'رأی‌گیری هفت‌روزه آغاز شد و فهرست اعضای واجد شرایط ثبت شد.',
+    'voting_rules_required' => 'قواعد تصویب این نسخه هنوز تکمیل و تأیید نشده‌اند؛ برای جلوگیری از تصویب خودسرانه، آغاز رأی‌گیری متوقف شد.',
     'invalid_vote_start' => 'این پیشنهاد در وضعیت قابل رأی‌گیری نیست.',
     'invalid_law_scope' => 'دامنه شمول قانون معتبر نیست.',
     'empty_law_electorate' => 'در جوامع مشمول، عضو واجد شرایطی برای رأی‌گیری یافت نشد.',
