@@ -414,6 +414,17 @@ foreach ($hierarchy_communities as $candidate_row) {
 جایگاه فعلی: <strong><?= htmlspecialchars($current_parent_name, ENT_QUOTES, 'UTF-8') ?></strong>
 — رأی‌های ثبت‌شده در این دور: <?= $total_community_votes ?>
 </div>
+<?php if ($round_is_open): ?>
+<div style="font-size:12px;color:#596579;margin:4px 0 8px;line-height:1.8;">
+مهلت پایان: <?= htmlspecialchars($round_info['deadline'], ENT_QUOTES, 'UTF-8') ?> —
+مشارکت لازم: <?= (int)$round_info['quorum_required'] ?> از <?= (int)$round_info['electorate_count'] ?> عضو
+</div>
+<?php elseif ($round_info && $round_info['status'] === 'open'): ?>
+<p style="font-size:12px;color:#8a4b08;">مهلت این دور گذشته است؛ با نخستین درخواست بعدی، نتیجه نهایی می‌شود.</p>
+<?php else: ?>
+<p style="font-size:12px;color:#596579;">برای آغاز دور بعدی، یکی از اعضا می‌تواند رأی خود را ثبت کند؛ مهلت دور جدید ۷ روز خواهد بود.</p>
+<?php endif; ?>
+<?php if ($is_hierarchy_member): ?>
 <form method="post" action="set_community_parent.php" style="margin:0;">
 <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($community_hierarchy_csrf, ENT_QUOTES, 'UTF-8') ?>">
 <input type="hidden" name="community_id" value="<?= $cid ?>">
@@ -440,6 +451,9 @@ if ($is_descendant) continue;
 </select>
 <button type="submit" style="margin-top:7px;background:#facc15;color:#3b2f00;">ثبت / تغییر رأی</button>
 </form>
+<?php else: ?>
+<p style="font-size:12px;color:#8a4b08;">ثبت رأی فقط برای اعضای این جامعه امکان‌پذیر است.</p>
+<?php endif; ?>
 </div>
 <?php endforeach; ?>
 <?php endif; ?>
