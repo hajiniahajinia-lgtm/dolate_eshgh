@@ -406,9 +406,13 @@ if (!function_exists('community_law_record_hierarchy_scope_changes')) {
         if (!community_law_tables_ready($conn)) return false;
 
         // snapshot صلاحیت قوانین در حال بررسی نباید با تغییر سلسله‌مراتب کهنه شود.
-        if (community_law_hierarchy_change_has_pending_review_dependency(
+        $pending_review_dependency = community_law_hierarchy_change_has_pending_review_dependency(
             $conn, $old_parent_map, $new_parent_map
-        ) !== false) return false;
+        );
+        if ($pending_review_dependency === null) return false;
+        if ($pending_review_dependency) {
+            throw new RuntimeException('law_review_dependency_pending');
+        }
 
         $active = $conn->query(
             "SELECT l.id AS law_id, l.current_version_id AS version_id
