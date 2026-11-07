@@ -9,6 +9,7 @@ on:
       - 'expertise_action.php'
       - 'votes.php'
       - 'community_laws.php'
+      - 'community.php'
       - 'community_charter_amendment_action.php'
       - 'community_charter_amendments.php'
       - 'migrations/20261108_community_charter_amendment_appeal_assignments.sql'
@@ -33,6 +34,10 @@ on:
       - 'expertise_action.php'
       - 'votes.php'
       - 'community_laws.php'
+      - 'community_charter_amendment_action.php'
+      - 'community_charter_amendments.php'
+      - 'migrations/20261108_community_charter_amendment_appeal_assignments.sql'
+      - 'community.php'
       - 'community_law_helpers.php'
       - 'set_community_parent.php'
       - 'request_member_removal.php'
@@ -65,6 +70,7 @@ jobs:
           php -l expertise_action.php
           php -l votes.php
           php -l community_laws.php
+          php -l community.php
           php -l community_charter_amendment_action.php
           php -l community_charter_amendments.php
           php -l community_law_helpers.php
