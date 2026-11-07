@@ -127,8 +127,10 @@ foreach ($profiles as $p) if ($p['status']==='pending') $has_pending = true;
 $pid=(int)$p['id'];
 $ds=$conn->prepare('SELECT d.name,pd.share_percent FROM topic_expertise_profile_domains pd JOIN expertise_domains d ON d.id=pd.domain_id WHERE pd.profile_id=? ORDER BY d.name');
 $ds->bind_param('i',$pid);$ds->execute();$profile_domains=$ds->get_result()->fetch_all(MYSQLI_ASSOC);$ds->close();
-$vs=$conn->prepare("SELECT COUNT(*) total,SUM(vote='yes') yes_count,SUM(vote='no') no_count,MAX(user_id=?) my_vote FROM topic_expertise_profile_votes WHERE profile_id=?");
-$vs->bind_param('ii',$user_id,$pid);$vs->execute();$votes=$vs->get_result()->fetch_assoc();$vs->close();
+$vs=$conn->prepare("SELECT COUNT(*) total,SUM(vote='yes') yes_count,SUM(vote='no') no_count,(SELECT vote FROM topic_expertise_profile_votes WHERE profile_id=? AND user_id=? LIMIT 1) my_vote FROM topic_expertise_profile_votes WHERE profile_id=?");
+$vs->bind_param('iii',$pid,$user_id,$pid);$vs->execute();$votes=$vs->get_result()->fetch_assoc();$vs->close();
+$ec=$conn->prepare('SELECT COUNT(*) AS total FROM topic_expertise_profile_electorate WHERE profile_id=?');
+$ec->bind_param('i',$pid);$ec->execute();$eligible_count=(int)$ec->get_result()->fetch_assoc()['total'];$ec->close();
 $expired=strtotime($p['expires_at'])<=time();
 ?>
 <div class="item">
@@ -136,7 +138,7 @@ $expired=strtotime($p['expires_at'])<=time();
 <p class="muted">پیشنهاددهنده: <?= tep_escape($p['proposer_name'] ?? 'عضو جامعه') ?> | ثبت: <?= tep_escape($p['created_at']) ?></p>
 <ul><?php foreach ($profile_domains as $pd): ?><li><?= tep_escape($pd['name']) ?>: <?= number_format((float)$pd['share_percent'],2) ?>٪</li><?php endforeach; ?></ul>
 <?php if ($p['status']==='pending'): ?>
-<p>موافق: <?= (int)$votes['yes_count'] ?> | مخالف: <?= (int)$votes['no_count'] ?> | پایان: <?= tep_escape($p['expires_at']) ?></p>
+<p>رأی‌دهندگان مستقل: <?= $eligible_count ?> | موافق: <?= (int)$votes['yes_count'] ?> | مخالف: <?= (int)$votes['no_count'] ?> | پایان: <?= tep_escape($p['expires_at']) ?></p>
 <?php if (!$expired): ?>
 <form method="post" action="topic_expertise_profile_action.php" class="actions">
 <input type="hidden" name="csrf_token" value="<?= tep_escape($csrf) ?>"><input type="hidden" name="action" value="vote">
