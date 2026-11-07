@@ -283,6 +283,42 @@ if (!in_array($a['status'], ['draft','independent_review'], true)) {
         }
         $review_stats->close();
     }
+    $detail_stmt=$conn->prepare(
+        "SELECT r.reviewer_user_id,u.username,r.verdict,r.rights_protection,
+                r.equality_and_non_discrimination,r.living_beings_and_environment,
+                r.power_and_accountability,r.future_generations,r.reasoning,r.evidence
+         FROM community_charter_amendment_assessments r
+         LEFT JOIN users u ON u.id=r.reviewer_user_id
+         WHERE r.amendment_id=? ORDER BY r.submitted_at,r.reviewer_user_id"
+    );
+    if($detail_stmt):
+        $detail_stmt->bind_param('i',$aid);
+        if($detail_stmt->execute()):
+            $detail_result=$detail_stmt->get_result();
+            if($detail_result->num_rows>0):
+?>
+<div class="item">
+<strong>استدلال‌های ارزیابان مستقل</strong>
+<?php while($review=$detail_result->fetch_assoc()): ?>
+<div class="amendment">
+<strong><?= cam_page_h($review['username'] ?: 'ارزیاب مستقل') ?> — <?= cam_page_h($verdict_labels[$review['verdict']] ?? $review['verdict']) ?></strong>
+<p class="muted">
+حقوق: <?= cam_page_h($dimension_values[$review['rights_protection']] ?? $review['rights_protection']) ?>؛
+برابری: <?= cam_page_h($dimension_values[$review['equality_and_non_discrimination']] ?? $review['equality_and_non_discrimination']) ?>؛
+جانداران و محیط زیست: <?= cam_page_h($dimension_values[$review['living_beings_and_environment']] ?? $review['living_beings_and_environment']) ?>؛
+مهار قدرت: <?= cam_page_h($dimension_values[$review['power_and_accountability']] ?? $review['power_and_accountability']) ?>؛
+نسل‌های آینده: <?= cam_page_h($dimension_values[$review['future_generations']] ?? $review['future_generations']) ?>
+</p>
+<p><?= nl2br(cam_page_h($review['reasoning'])) ?></p>
+<?php if($review['evidence']): ?><p class="muted"><strong>شواهد:</strong> <?= nl2br(cam_page_h($review['evidence'])) ?></p><?php endif; ?>
+</div>
+<?php endwhile; ?>
+</div>
+<?php
+            endif;
+        endif;
+        $detail_stmt->close();
+    endif;
 }
 if (!empty($a['voting_opens_at']) && !in_array($a['status'], ['draft','independent_review','public_voting'], true)) {
     $vote_stats = $conn->prepare(
@@ -372,6 +408,25 @@ if($assigned_appeal){$q=$conn->prepare("SELECT 1 FROM community_charter_amendmen
 <strong>اعتراض شماره <?= $appeal_id ?> — <?= cam_page_h($appeal['status']) ?></strong>
 <p><?= nl2br(cam_page_h($appeal['grounds'])) ?></p>
 <?php if($appeal['evidence']): ?><p class="muted"><?= nl2br(cam_page_h($appeal['evidence'])) ?></p><?php endif; ?>
+<?php
+$appeal_detail=$conn->prepare(
+    "SELECT r.reviewer_user_id,u.username,r.verdict,r.reasoning
+     FROM community_charter_amendment_appeal_reviewers r
+     LEFT JOIN users u ON u.id=r.reviewer_user_id
+     WHERE r.appeal_id=? ORDER BY r.submitted_at,r.reviewer_user_id"
+);
+if($appeal_detail):
+$appeal_detail->bind_param('i',$appeal_id);
+if($appeal_detail->execute()):
+$appeal_detail_result=$appeal_detail->get_result();
+while($assessment=$appeal_detail_result->fetch_assoc()):
+$appeal_verdict_labels=['uphold'=>'اعتراض وارد است','dismiss'=>'اعتراض وارد نیست','unclear'=>'نامشخص'];
+?>
+<div class="item">
+<strong><?= cam_page_h($assessment['username'] ?: 'ارزیاب اعتراض') ?> — <?= cam_page_h($appeal_verdict_labels[$assessment['verdict']] ?? $assessment['verdict']) ?></strong>
+<p><?= nl2br(cam_page_h($assessment['reasoning'])) ?></p>
+</div>
+<?php endwhile; endif; $appeal_detail->close(); endif; ?>
 <?php if($assigned_appeal && in_array($appeal['status'],['submitted','under_review'],true)): ?>
 <form method="post" action="community_charter_amendment_action.php">
 <input type="hidden" name="csrf_token" value="<?= cam_page_h($csrf) ?>"><input type="hidden" name="action" value="assess_appeal"><input type="hidden" name="appeal_id" value="<?= $appeal_id ?>">
