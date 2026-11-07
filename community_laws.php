@@ -586,41 +586,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             community_laws_redirect($community_id, 'invalid_law_vote');
         }
 
-        $eligible = $conn->prepare(
-            "SELECT e.vote_weight
-             FROM community_law_direct_electorate e
-             JOIN community_law_versions v ON v.id=e.law_version_id
-             JOIN community_laws l ON l.id=v.law_id
-             WHERE e.law_version_id=? AND e.user_id=?
-               AND v.status='voting' AND l.status='voting'
-               AND v.vote_deadline > NOW()
-             LIMIT 1"
-        );
-        if (!$eligible) community_laws_redirect($community_id, 'save_error');
-        $eligible->bind_param('ii', $version_id, $user_id);
-        if (!$eligible->execute()) {
+        if (!$conn->begin_transaction()) community_laws_redirect($community_id, 'save_error');
+        try {
+            $eligible = $conn->prepare(
+                "SELECT e.vote_weight
+                 FROM community_law_direct_electorate e
+                 JOIN community_law_versions v ON v.id=e.law_version_id
+                 JOIN community_laws l ON l.id=v.law_id
+                 WHERE e.law_version_id=? AND e.user_id=?
+                   AND v.status='voting' AND l.status='voting'
+                   AND v.vote_deadline > NOW()
+                 LIMIT 1 FOR UPDATE"
+            );
+            if (!$eligible) throw new Exception('direct vote eligibility prepare failed');
+            $eligible->bind_param('ii', $version_id, $user_id);
+            if (!$eligible->execute()) throw new Exception('direct vote eligibility failed');
+            $eligibility = $eligible->get_result()->fetch_assoc();
             $eligible->close();
+            if (!$eligibility) throw new RuntimeException('not_law_elector');
+
+            $vote_stmt = $conn->prepare(
+                "INSERT INTO community_law_direct_votes
+                    (law_version_id, voter_user_id, vote, vote_weight, comment)
+                 VALUES (?, ?, ?, ?, ?)
+                 ON DUPLICATE KEY UPDATE
+                    vote=VALUES(vote), vote_weight=VALUES(vote_weight),
+                    comment=VALUES(comment), voted_at=NOW()"
+            );
+            if (!$vote_stmt) throw new Exception('direct vote insert prepare failed');
+            $weight = (float)$eligibility['vote_weight'];
+            $vote_stmt->bind_param('iisds', $version_id, $user_id, $vote, $weight, $comment);
+            if (!$vote_stmt->execute()) throw new Exception('direct vote insert failed');
+            $vote_stmt->close();
+
+            if (!$conn->commit()) throw new Exception('direct vote commit failed');
+            community_laws_redirect($community_id, 'direct_law_vote_saved');
+        } catch (Throwable $e) {
+            $conn->rollback();
+            if ($e instanceof RuntimeException && $e->getMessage() === 'not_law_elector') {
+                community_laws_redirect($community_id, 'not_law_elector');
+            }
+            error_log('[Dolate Eshgh direct law vote] ' . $e->getMessage());
             community_laws_redirect($community_id, 'save_error');
         }
-        $eligibility = $eligible->get_result()->fetch_assoc();
-        $eligible->close();
-        if (!$eligibility) community_laws_redirect($community_id, 'not_law_elector');
-
-        $vote_stmt = $conn->prepare(
-            "INSERT INTO community_law_direct_votes
-                (law_version_id, voter_user_id, vote, vote_weight, comment)
-             VALUES (?, ?, ?, ?, ?)
-             ON DUPLICATE KEY UPDATE
-                vote=VALUES(vote), vote_weight=VALUES(vote_weight),
-                comment=VALUES(comment), voted_at=NOW()"
-        );
-        if (!$vote_stmt) community_laws_redirect($community_id, 'save_error');
-        $weight = (float)$eligibility['vote_weight'];
-        $vote_stmt->bind_param('iisds', $version_id, $user_id, $vote, $weight, $comment);
-        $saved = $vote_stmt->execute();
-        $vote_stmt->close();
-        if (!$saved) community_laws_redirect($community_id, 'save_error');
-        community_laws_redirect($community_id, 'direct_law_vote_saved');
     }
 
     if (isset($_POST['cast_law_vote'])) {
