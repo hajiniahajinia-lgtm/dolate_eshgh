@@ -438,10 +438,10 @@ if (!function_exists('community_law_record_hierarchy_scope_changes')) {
                             (law_version_id, community_id, status)
                          VALUES (?, ?, 'pending')
                          ON DUPLICATE KEY UPDATE
-                            status=IF(status='not_applicable','pending',status),
                             started_at=IF(status='not_applicable',NULL,started_at),
                             target_date=IF(status='not_applicable',NULL,target_date),
-                            completed_at=IF(status='not_applicable',NULL,completed_at)"
+                            completed_at=IF(status='not_applicable',NULL,completed_at),
+                            status=IF(status='not_applicable','pending',status)"
                     );
                     if (!$implementation) {
                         $ok = false;
