@@ -78,6 +78,7 @@ CREATE TABLE IF NOT EXISTS community_law_expertise_weight_details (
     domain_id BIGINT UNSIGNED NOT NULL,
     share_percent DECIMAL(5,2) NOT NULL,
     competency_id BIGINT UNSIGNED NULL,
+    source_application_id BIGINT UNSIGNED NULL,
     competency_weight DECIMAL(4,2) NOT NULL DEFAULT 1.00,
     weighted_contribution DECIMAL(6,4) NOT NULL DEFAULT 0.0000,
     captured_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
