@@ -15,6 +15,8 @@ CREATE TABLE IF NOT EXISTS community_law_voting_rules (
     individual_approval_percent DECIMAL(5,2) NULL,
     community_quorum_percent DECIMAL(5,2) NULL,
     community_approval_percent DECIMAL(5,2) NULL,
+    community_aggregate_quorum_percent DECIMAL(5,2) NULL,
+    community_aggregate_approval_percent DECIMAL(5,2) NULL,
     require_community_approval TINYINT(1) NULL,
     individual_vote_basis ENUM('count','weighted') NULL,
     community_vote_basis ENUM('one_community_one_vote','population_weighted') NULL,
