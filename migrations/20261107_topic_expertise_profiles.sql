@@ -2,7 +2,7 @@
 -- هر نسخه پس از رأی جامعه تغییرناپذیر است؛ اصلاحات در نسخه تازه ثبت می‌شوند.
 CREATE TABLE IF NOT EXISTS topic_expertise_profiles (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-    topic_id INT NOT NULL,
+    topic_id BIGINT UNSIGNED NOT NULL,
     community_id INT NOT NULL,
     version_number INT UNSIGNED NOT NULL,
     status ENUM('pending','approved','rejected','superseded') NOT NULL DEFAULT 'pending',
@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS topic_expertise_profile_votes (
 CREATE TABLE IF NOT EXISTS community_law_expertise_profile_snapshots (
     law_version_id BIGINT UNSIGNED NOT NULL,
     profile_id BIGINT UNSIGNED NOT NULL,
-    topic_id INT NOT NULL,
+    topic_id BIGINT UNSIGNED NOT NULL,
     captured_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (law_version_id),
     KEY idx_law_expertise_profile_snapshot (profile_id)
