@@ -11,6 +11,7 @@ on:
       - 'community_laws.php'
       - 'community_law_helpers.php'
       - 'set_community_parent.php'
+      - 'profile.php'
       - 'create_community.php'
       - 'topic_expertise_profile.php'
       - 'topic_expertise_profile_action.php'
@@ -45,6 +46,7 @@ jobs:
           php -l community_laws.php
           php -l community_law_helpers.php
           php -l set_community_parent.php
+          php -l profile.php
           php -l create_community.php
           php -l topic_expertise_profile.php
           php -l topic_expertise_profile_action.php
