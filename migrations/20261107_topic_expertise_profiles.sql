@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS topic_expertise_profiles (
 CREATE TABLE IF NOT EXISTS topic_expertise_profile_domains (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     profile_id BIGINT UNSIGNED NOT NULL,
-    domain_id BIGINT UNSIGNED NOT NULL,
+    domain_id INT UNSIGNED NOT NULL,
     share_percent DECIMAL(5,2) NOT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS community_law_expertise_profile_snapshots (
 CREATE TABLE IF NOT EXISTS community_law_expertise_profile_domains (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     law_version_id BIGINT UNSIGNED NOT NULL,
-    domain_id BIGINT UNSIGNED NOT NULL,
+    domain_id INT UNSIGNED NOT NULL,
     share_percent DECIMAL(5,2) NOT NULL,
     PRIMARY KEY (id),
     UNIQUE KEY uq_law_expertise_domain (law_version_id, domain_id),
@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS community_law_expertise_weight_details (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     law_version_id BIGINT UNSIGNED NOT NULL,
     user_id INT NOT NULL,
-    domain_id BIGINT UNSIGNED NOT NULL,
+    domain_id INT UNSIGNED NOT NULL,
     share_percent DECIMAL(5,2) NOT NULL,
     competency_id BIGINT UNSIGNED NULL,
     source_application_id BIGINT UNSIGNED NULL,
