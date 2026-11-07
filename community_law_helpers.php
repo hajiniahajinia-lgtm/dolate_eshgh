@@ -39,7 +39,11 @@ if (!function_exists('community_law_tables_ready')) {
             'community_law_final_review_references',
             'community_law_appeals',
             'community_law_appeal_electorate',
-            'community_law_appeal_assessments'
+            'community_law_appeal_assessments',
+            'community_charter_versions',
+            'community_charter_articles',
+            'community_law_charter_references',
+            'community_law_charter_assessments'
         ];
 
         $placeholders = implode(',', array_fill(0, count($required), '?'));
