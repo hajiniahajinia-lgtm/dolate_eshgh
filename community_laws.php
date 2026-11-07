@@ -371,6 +371,104 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    if (isset($_POST['finalize_law_tally'])) {
+        if (!$is_member) community_laws_redirect($community_id, 'not_member');
+
+        $law_id = (int)($_POST['law_id'] ?? 0);
+        $version_id = (int)($_POST['version_id'] ?? 0);
+        if ($law_id <= 0 || $version_id <= 0) community_laws_redirect($community_id, 'invalid_tally');
+
+        if (!$conn->begin_transaction()) community_laws_redirect($community_id, 'save_error');
+        try {
+            $lock = $conn->prepare(
+                "SELECT l.status, l.current_version_id, v.status AS version_status, v.vote_deadline
+                 FROM community_laws l
+                 JOIN community_law_versions v ON v.law_id=l.id
+                 WHERE l.id=? AND v.id=? AND l.originating_community_id=?
+                 FOR UPDATE"
+            );
+            if (!$lock) throw new Exception('tally lock prepare failed');
+            $lock->bind_param('iii', $law_id, $version_id, $community_id);
+            if (!$lock->execute()) throw new Exception('tally lock failed');
+            $record = $lock->get_result()->fetch_assoc();
+            $lock->close();
+
+            if (
+                !$record || $record['status'] !== 'voting' ||
+                $record['version_status'] !== 'voting' ||
+                (int)$record['current_version_id'] !== $version_id ||
+                empty($record['vote_deadline']) ||
+                strtotime($record['vote_deadline']) > time()
+            ) {
+                throw new RuntimeException('tally_not_ready');
+            }
+
+            $aggregate = $conn->prepare(
+                "SELECT e.voting_community_id,
+                        COUNT(v.id) AS cast_count,
+                        SUM(CASE WHEN v.vote='yes' THEN 1 ELSE 0 END) AS yes_count,
+                        SUM(CASE WHEN v.vote='no' THEN 1 ELSE 0 END) AS no_count,
+                        SUM(CASE WHEN v.vote='abstain' THEN 1 ELSE 0 END) AS abstain_count,
+                        COALESCE(SUM(CASE WHEN v.vote='yes' THEN v.vote_weight ELSE 0 END),0) AS yes_weight,
+                        COALESCE(SUM(CASE WHEN v.vote='no' THEN v.vote_weight ELSE 0 END),0) AS no_weight
+                 FROM community_law_electorate e
+                 LEFT JOIN community_law_votes v
+                   ON v.law_version_id=e.law_version_id
+                  AND v.voting_community_id=e.voting_community_id
+                  AND v.voter_user_id=e.user_id
+                 WHERE e.law_version_id=?
+                 GROUP BY e.voting_community_id"
+            );
+            if (!$aggregate) throw new Exception('tally aggregate prepare failed');
+            $aggregate->bind_param('i', $version_id);
+            if (!$aggregate->execute()) throw new Exception('tally aggregate failed');
+            $rows = $aggregate->get_result();
+
+            $update_position = $conn->prepare(
+                "UPDATE community_law_positions
+                 SET yes_count=?, no_count=?, abstain_count=?,
+                     yes_weight=?, no_weight=?,
+                     position_result=?
+                 WHERE law_version_id=? AND community_id=?"
+            );
+            if (!$update_position) throw new Exception('position update prepare failed');
+
+            while ($tally = $rows->fetch_assoc()) {
+                $yes = (int)$tally['yes_count'];
+                $no = (int)$tally['no_count'];
+                $abstain = (int)$tally['abstain_count'];
+                $yes_weight = (float)$tally['yes_weight'];
+                $no_weight = (float)$tally['no_weight'];
+                $position_status = ((int)$tally['cast_count'] === 0) ? 'insufficient' : 'pending';
+                $affected_id = (int)$tally['voting_community_id'];
+                $update_position->bind_param(
+                    'iiiddsii',
+                    $yes, $no, $abstain, $yes_weight, $no_weight,
+                    $position_status, $version_id, $affected_id
+                );
+                if (!$update_position->execute()) throw new Exception('position tally update failed');
+            }
+            $update_position->close();
+            $aggregate->close();
+
+            if (!community_law_record_history(
+                $conn, $law_id, $version_id, $community_id, $user_id,
+                'voting_tallied',
+                'مهلت رأی‌گیری پایان یافت و شمارش آرا به تفکیک جامعه ثبت شد؛ نتیجه تصویب تا تعیین و اعمال قواعد حدنصاب و اکثریت نهایی نمی‌شود.'
+            )) throw new Exception('tally history failed');
+
+            if (!$conn->commit()) throw new Exception('tally commit failed');
+            community_laws_redirect($community_id, 'tally_saved');
+        } catch (Throwable $e) {
+            $conn->rollback();
+            if ($e instanceof RuntimeException && $e->getMessage() === 'tally_not_ready') {
+                community_laws_redirect($community_id, 'tally_not_ready');
+            }
+            error_log('[Dolate Eshgh law tally] ' . $e->getMessage());
+            community_laws_redirect($community_id, 'save_error');
+        }
+    }
+
     if (isset($_POST['cast_law_vote'])) {
         $version_id = (int)($_POST['version_id'] ?? 0);
         $vote = (string)($_POST['vote'] ?? '');
@@ -489,6 +587,7 @@ $effective_laws = [];
 $draft_laws = [];
 $proposed_laws = [];
 $voting_laws = [];
+$closed_voting_laws = [];
 $recent_objections = [];
 
 if ($schema_ready) {
@@ -569,6 +668,27 @@ if ($schema_ready) {
         $voting_stmt->close();
     }
 
+    $closed_stmt = $conn->prepare(
+        "SELECT l.id AS law_id, l.law_code, v.id AS version_id, v.title,
+                v.vote_deadline,
+                (SELECT COUNT(*) FROM community_law_positions p
+                 WHERE p.law_version_id=v.id) AS community_count
+         FROM community_laws l
+         JOIN community_law_versions v ON v.id=l.current_version_id
+         WHERE l.originating_community_id=?
+           AND l.status='voting' AND v.status='voting'
+           AND v.vote_deadline <= NOW()
+         ORDER BY v.vote_deadline DESC LIMIT 30"
+    );
+    if ($closed_stmt) {
+        $closed_stmt->bind_param('i', $community_id);
+        if ($closed_stmt->execute()) {
+            $closed_result = $closed_stmt->get_result();
+            while ($row = $closed_result->fetch_assoc()) $closed_voting_laws[] = $row;
+        }
+        $closed_stmt->close();
+    }
+
     $objection_stmt = $conn->prepare(
         "SELECT o.id, o.objection_type, o.status, o.description, o.created_at,
                 v.title, l.law_code
@@ -592,6 +712,9 @@ $status = (string)($_GET['status'] ?? '');
 $status_messages = [
     'draft_saved' => 'پیش‌نویس قانون ثبت شد؛ این پیش‌نویس هنوز الزام‌آور نیست.',
     'submitted_for_review' => 'پیش‌نویس برای بررسی صلاحیت و دامنه شمول ارسال شد؛ هنوز رأی‌گیری یا الزام‌آوری آغاز نشده است.',
+    'tally_saved' => 'شمارش آرا به تفکیک جوامع ثبت شد؛ تصویب نهایی هنوز به قواعد حدنصاب نیاز دارد.',
+    'tally_not_ready' => 'مهلت رأی‌گیری هنوز پایان نیافته یا وضعیت پیشنهاد برای شمارش نهایی معتبر نیست.',
+    'invalid_tally' => 'اطلاعات درخواست شمارش آرا معتبر نیست.',
     'law_vote_saved' => 'رأی شما ثبت شد؛ تا پایان مهلت می‌توانید آن را تغییر دهید.',
     'invalid_law_vote' => 'رأی یا اطلاعات ارسالی معتبر نیست.',
     'not_law_elector' => 'نام شما در فهرست رأی‌دهندگان این رأی‌گیری ثبت نشده است.',
@@ -722,6 +845,26 @@ details>summary{cursor:pointer;font-weight:bold}
                     <button type="submit" name="submit_law_for_review" value="1">ارسال برای بررسی صلاحیت و دامنه شمول</button>
                 </form>
                 <?php endif; ?>
+            </div>
+        <?php endforeach; ?>
+    <?php endif; ?>
+</div>
+
+<div class="card">
+    <h3>رأی‌گیری‌های پایان‌یافته و در انتظار شمارش</h3>
+    <?php if (!$closed_voting_laws): ?>
+        <p class="muted">رأی‌گیری پایان‌یافته‌ای برای شمارش وجود ندارد.</p>
+    <?php else: ?>
+        <?php foreach ($closed_voting_laws as $closed_law): ?>
+            <div class="notice">
+                <strong><?= community_laws_escape($closed_law['title']) ?></strong>
+                <div class="meta"><?= community_laws_escape($closed_law['law_code']) ?> — پایان مهلت: <?= community_laws_escape($closed_law['vote_deadline']) ?></div>
+                <form method="post">
+                    <input type="hidden" name="csrf_token" value="<?= community_laws_escape($csrf_token) ?>">
+                    <input type="hidden" name="law_id" value="<?= (int)$closed_law['law_id'] ?>">
+                    <input type="hidden" name="version_id" value="<?= (int)$closed_law['version_id'] ?>">
+                    <button type="submit" name="finalize_law_tally" value="1">ثبت شمارش آرا به تفکیک جوامع</button>
+                </form>
             </div>
         <?php endforeach; ?>
     <?php endif; ?>
