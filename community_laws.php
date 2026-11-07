@@ -413,6 +413,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 throw new RuntimeException('legal_screening_required');
             }
 
+            $authority_stmt = $conn->prepare(
+                "SELECT status, derived_jurisdiction_level
+                 FROM community_law_authority_cases
+                 WHERE law_version_id=? FOR UPDATE"
+            );
+            if (!$authority_stmt) throw new Exception('authority state prepare failed');
+            $authority_stmt->bind_param('i', $version_id);
+            if (!$authority_stmt->execute()) throw new Exception('authority state lookup failed');
+            $authority_case = $authority_stmt->get_result()->fetch_assoc();
+            $authority_stmt->close();
+            if (!$authority_case || $authority_case['status'] !== 'confirmed') {
+                throw new RuntimeException('authority_review_required');
+            }
+
             // آغاز رأی‌گیری بدون قواعد تصویبِ تکمیل و تأییدشده مجاز نیست.
             $rules_stmt = $conn->prepare(
                 "SELECT status, jurisdiction_level,
@@ -447,8 +461,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         && $rules['community_vote_basis'] !== null
                     )
                 );
-            if (!$rules_complete) {
+            if (
+                !$rules_complete ||
+                $rules['jurisdiction_level'] !== $authority_case['derived_jurisdiction_level']
+            ) {
                 throw new RuntimeException('voting_rules_not_approved');
+            }
+            if (
+                (int)$rules['require_community_approval'] === 1 &&
+                $rules['community_vote_basis'] === 'population_weighted'
+            ) {
+                throw new RuntimeException('population_snapshot_required');
             }
 
             $affected_communities = community_law_scope_community_ids($conn, $version_id);
@@ -562,6 +585,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($e instanceof RuntimeException) {
                 if ($e->getMessage() === 'invalid_law_vote_state') community_laws_redirect($community_id, 'invalid_vote_start');
                 if ($e->getMessage() === 'voting_rules_not_approved') community_laws_redirect($community_id, 'voting_rules_required');
+                if ($e->getMessage() === 'authority_review_required') community_laws_redirect($community_id, 'authority_review_required');
+                if ($e->getMessage() === 'population_snapshot_required') community_laws_redirect($community_id, 'population_snapshot_required');
                 if ($e->getMessage() === 'invalid_law_scope') community_laws_redirect($community_id, 'invalid_law_scope');
                 if ($e->getMessage() === 'empty_law_electorate') community_laws_redirect($community_id, 'empty_law_electorate');
             }
@@ -1749,7 +1774,13 @@ $status_messages = [
     'legal_assessment_saved' => 'ارزیابی مستقل ثبت شد.',
     'legal_assessment_not_allowed' => 'شما برای ارزیابی این پیشنهاد واجد شرایط نیستید یا مرحله بررسی بسته شده است.',
     'legal_screening_required' => 'غربالگری حقوقی مستقل هنوز تکمیل نشده یا تعارض و ابهامی در آن ثبت شده است؛ آغاز رأی‌گیری مجاز نیست.',
+    'authority_review_required' => 'بررسی مستقل صلاحیت و انطباق با قوانین معتبر هنوز تأیید نشده است؛ آغاز رأی‌گیری مجاز نیست.',
+    'population_snapshot_required' => 'وزن‌دهی بر اساس جمعیت تا زمان فراهم شدن آمار رسمی و snapshot معتبر جمعیت قابل استفاده نیست.',
     'invalid_legal_assessment' => 'اطلاعات ارزیابی حقوقی معتبر نیست.',
+    'law_scope_exceeds_authority' => 'جامعه نمی‌تواند به‌تنهایی قانون الزام‌آور را به جامعه مادر یا سطح بالاتر گسترش دهد.',
+    'authority_assessment_saved' => 'ارزیابی صلاحیت و قوانین مرتبط ثبت شد.',
+    'authority_assessment_not_allowed' => 'شما برای این ارزیابی واجد شرایط نیستید یا مرحله بررسی بسته شده است.',
+    'invalid_authority_assessment' => 'اطلاعات ارزیابی صلاحیت یا تعارض قوانین معتبر نیست.',
     'tally_saved' => 'نتیجه مرکب رأی‌گیری طبق قواعد تأییدشده ثبت شد؛ لازم‌الاجرا شدن قانون مرحله جداگانه‌ای است.',
     'tally_already_done' => 'نتیجه این رأی‌گیری قبلاً محاسبه شده است.',
     'tally_not_ready' => 'مهلت رأی‌گیری هنوز پایان نیافته یا وضعیت پیشنهاد برای شمارش نهایی معتبر نیست.',
