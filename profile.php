@@ -428,7 +428,7 @@ foreach ($hierarchy_communities as $candidate_row) {
 <?php else: ?>
 <p style="font-size:12px;color:#596579;">برای آغاز دور بعدی، یکی از اعضا می‌تواند رأی خود را ثبت کند؛ مهلت دور جدید ۷ روز خواهد بود.</p>
 <?php endif; ?>
-<?php if ($is_hierarchy_member): ?>
+<?php if ($is_hierarchy_member || ($round_info && $round_info['status'] === 'open' && (int)$round_info['is_expired'] === 1)): ?>
 <form method="post" action="set_community_parent.php" style="margin:0;">
 <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($community_hierarchy_csrf, ENT_QUOTES, 'UTF-8') ?>">
 <input type="hidden" name="community_id" value="<?= $cid ?>">
@@ -453,10 +453,10 @@ if ($is_descendant) continue;
 <option value="<?= $pid ?>" <?= $current_vote === $pid ? 'selected' : '' ?>>زیرمجموعهٔ <?= htmlspecialchars($candidate['name'], ENT_QUOTES, 'UTF-8') ?> (<?= (int)($counts_for_community[$pid] ?? 0) ?> رأی)</option>
 <?php endforeach; ?>
 </select>
-<button type="submit" style="margin-top:7px;background:#facc15;color:#3b2f00;">ثبت / تغییر رأی</button>
+<button type="submit" style="margin-top:7px;background:#facc15;color:#3b2f00;"><?= ($round_info && $round_info['status'] === 'open' && (int)$round_info['is_expired'] === 1) ? 'بررسی و نهایی‌کردن دور پایان‌یافته' : 'ثبت / تغییر رأی' ?></button>
 </form>
 <?php else: ?>
-<p style="font-size:12px;color:#8a4b08;">ثبت رأی فقط برای اعضای این جامعه امکان‌پذیر است.</p>
+<p style="font-size:12px;color:#8a4b08;">ثبت رأی فقط برای اعضای این جامعه امکان‌پذیر است؛ پس از پایان مهلت، هر کاربر واردشده می‌تواند نتیجه را نهایی کند.</p>
 <?php endif; ?>
 </div>
 <?php endforeach; ?>
