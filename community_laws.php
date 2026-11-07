@@ -424,6 +424,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $aggregate_quorum = $_POST['community_aggregate_quorum_percent'] ?? '';
         $aggregate_approval = $_POST['community_aggregate_approval_percent'] ?? '';
         $rationale = trim((string)($_POST['rules_rationale'] ?? ''));
+        $individual_basis = (string)($_POST['individual_vote_basis'] ?? '');
 
         $percent_valid = static function ($value, float $minimum): bool {
             return $value !== '' && is_numeric($value)
@@ -434,6 +435,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             !$percent_valid($individual_quorum, 1) ||
             !$percent_valid($individual_approval, 50.01) ||
             !in_array($require_community, ['0','1'], true) ||
+            !in_array($individual_basis, ['count','weighted'], true) ||
             mb_strlen($rationale) < 20 || mb_strlen($rationale) > 20000 ||
             ($require_community === '1' && (
                 !$percent_valid($community_quorum, 1) ||
@@ -504,7 +506,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $proposal_number = (int)$number_stmt->get_result()->fetch_assoc()['next_number'];
             $number_stmt->close();
 
-            $individual_basis = 'count';
             $community_basis = $require_community === '1' ? 'one_community_one_vote' : null;
             $community_quorum_value = $require_community === '1' ? (float)$community_quorum : null;
             $community_approval_value = $require_community === '1' ? (float)$community_approval : null;
@@ -1215,6 +1216,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 "SELECT e.voting_community_id,
                         COUNT(e.id) AS electorate_count,
                         COUNT(v.id) AS cast_count,
+                        COALESCE(SUM(e.vote_weight),0) AS electorate_weight,
+                        COALESCE(SUM(CASE WHEN v.id IS NOT NULL THEN v.vote_weight ELSE 0 END),0) AS cast_weight,
                         SUM(CASE WHEN v.vote='yes' THEN 1 ELSE 0 END) AS yes_count,
                         SUM(CASE WHEN v.vote='no' THEN 1 ELSE 0 END) AS no_count,
                         SUM(CASE WHEN v.vote='abstain' THEN 1 ELSE 0 END) AS abstain_count,
@@ -1252,22 +1255,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $affected_id = (int)$tally['voting_community_id'];
                 $position_status = 'pending';
 
-                // موضع رسمی جامعه فقط وقتی تعیین می‌شود که قواعد، الزام تصویب جامعه را مقرر کرده باشند.
+                // در رأی‌گیری وزن‌دار، حدنصاب و درصد موافقت درون هر جامعه نیز با وزن snapshotشده محاسبه می‌شود.
                 if ((int)$approved_rules['require_community_approval'] === 1) {
                     $community_quorum = (float)$approved_rules['community_quorum_percent'];
                     $community_approval = (float)$approved_rules['community_approval_percent'];
-                    $turnout_percent = (int)$tally['electorate_count'] > 0
-                        ? ($cast_count / (int)$tally['electorate_count']) * 100
-                        : 0;
-                    $decisive_votes = $yes + $no;
+                    $weighted = $approved_rules['individual_vote_basis'] === 'weighted';
+                    $eligible_metric = $weighted
+                        ? (float)$tally['electorate_weight'] : (float)$tally['electorate_count'];
+                    $cast_metric = $weighted
+                        ? (float)$tally['cast_weight'] : (float)$cast_count;
+                    $yes_metric = $weighted ? $yes_weight : (float)$yes;
+                    $no_metric = $weighted ? $no_weight : (float)$no;
+                    $turnout_percent = $eligible_metric > 0
+                        ? ($cast_metric / $eligible_metric) * 100 : 0;
+                    $decisive_votes = $yes_metric + $no_metric;
                     if (
-                        $cast_count === 0 ||
+                        $cast_metric <= 0 ||
                         $turnout_percent + 0.00001 < $community_quorum ||
-                        $decisive_votes === 0
+                        $decisive_votes <= 0
                     ) {
                         $position_status = 'insufficient';
                     } else {
-                        $yes_percent = ($yes / $decisive_votes) * 100;
+                        $yes_percent = ($yes_metric / $decisive_votes) * 100;
                         $position_status = $yes_percent + 0.00001 >= $community_approval
                             ? 'approve'
                             : 'reject';
@@ -3565,6 +3574,8 @@ $status_messages = [
     'legal_screening_required' => 'غربالگری حقوقی مستقل هنوز تکمیل نشده یا تعارض و ابهامی در آن ثبت شده است؛ آغاز رأی‌گیری مجاز نیست.',
     'authority_review_required' => 'بررسی مستقل صلاحیت و انطباق با قوانین معتبر هنوز تأیید نشده است؛ آغاز رأی‌گیری مجاز نیست.',
     'population_snapshot_required' => 'وزن‌دهی بر اساس جمعیت تا زمان فراهم شدن آمار رسمی و snapshot معتبر جمعیت قابل استفاده نیست.',
+    'weighted_expertise_profile_required' => 'برای رأی وزن‌دار، ابتدا باید پروفایل چندحوزه‌ای تخصصی همین موضوع پیشنهاد و با رأی جامعه تأیید شود.',
+    'weighted_expertise_profile_invalid' => 'پروفایل تخصصی موضوع ناقص است یا سهم حوزه‌های آن دقیقاً ۱۰۰ درصد نیست؛ آغاز رأی‌گیری متوقف شد.',
     'invalid_legal_assessment' => 'اطلاعات ارزیابی حقوقی معتبر نیست.',
     'law_scope_exceeds_authority' => 'جامعه نمی‌تواند به‌تنهایی قانون الزام‌آور را به جامعه مادر یا سطح بالاتر گسترش دهد.',
     'insufficient_reviewers' => 'برای بررسی مستقل، دست‌کم سه عضو واجد شرایط غیر از پیشنهاددهنده لازم است؛ ابتدا مشارکت اعضای بیشتری فراهم شود.',
@@ -4388,7 +4399,7 @@ details>summary{cursor:pointer;font-weight:bold}
                                         <div>حدنصاب مشارکت مجموع جوامع: <?= number_format((float)$latest_rule_proposal['community_aggregate_quorum_percent'], 2) ?>٪</div>
                                         <div>موافقت لازم در مجموع جوامع: <?= number_format((float)$latest_rule_proposal['community_aggregate_approval_percent'], 2) ?>٪</div>
                                     <?php endif; ?>
-                                    <div>مبنای رأی فردی: شمارش برابر هر فرد — مبنای رأی جوامع: یک جامعه، یک رأی</div>
+                                    <div>مبنای رأی فردی: <?= ($latest_rule_proposal['individual_vote_basis'] ?? 'count') === 'weighted' ? 'وزن تخصصی بر اساس حوزه‌های مرتبط با موضوع' : 'شمارش برابر هر فرد' ?> — مبنای رأی جوامع: یک جامعه، یک رأی</div>
                                 </div>
                                 <p><strong>استدلال پیشنهاددهنده:</strong><br><?= nl2br(community_laws_escape($latest_rule_proposal['rationale'])) ?></p>
                                 <p class="muted">حدنصاب بررسی دست‌کم سه ارزیابی و تصویب با موافقت حداقل دوسوم ارزیابان شرکت‌کننده است. مهلت هر دور هفت روز است.</p>
@@ -4481,6 +4492,12 @@ details>summary{cursor:pointer;font-weight:bold}
                                         <input type="number" name="individual_quorum_percent" min="1" max="100" step="0.01" required>
                                         <label>درصد موافقت لازم در رأی مستقیم (بیش از ۵۰)</label>
                                         <input type="number" name="individual_approval_percent" min="50.01" max="100" step="0.01" required>
+                                        <label>مبنای محاسبه رأی مستقیم</label>
+                                        <select name="individual_vote_basis" required>
+                                            <option value="count">رأی برابر هر فرد</option>
+                                            <option value="weighted">وزن تخصصی بر اساس حوزه‌های مرتبط با موضوع</option>
+                                        </select>
+                                        <p class="muted">در حالت وزن تخصصی، باید پروفایل چندحوزه‌ای همین موضوع قبلاً به تأیید جامعه رسیده باشد. وزن هر فرد هنگام آغاز رأی‌گیری ثابت می‌شود و در بازه ۱ تا ۳ است.</p>
                                         <label>آیا تأیید جداگانه جوامع نیز لازم است؟</label>
                                         <select name="require_community_approval" required>
                                             <option value="">انتخاب کنید</option>
