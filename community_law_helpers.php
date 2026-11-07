@@ -383,11 +383,57 @@ if (!function_exists('community_law_record_hierarchy_scope_changes')) {
                 }
                 $scope_stmt->close();
 
+                // وضعیت و گزارش اجرای قبلی را پیش از تغییر دامنه ثبت می‌کنیم؛ هیچ گزارش اجرایی حذف نمی‌شود.
+                $implementation_state = null;
+                $state_stmt = $conn->prepare(
+                    "SELECT responsible_user_id, local_plan, status, started_at,
+                            target_date, completed_at, progress_report
+                     FROM community_law_implementations
+                     WHERE law_version_id=? AND community_id=? LIMIT 1"
+                );
+                if (!$state_stmt) {
+                    $ok = false;
+                    break 2;
+                }
+                $state_stmt->bind_param('ii', $version_id, $affected_id);
+                if (!$state_stmt->execute()) {
+                    $state_stmt->close();
+                    $ok = false;
+                    break 2;
+                }
+                $implementation_state = $state_stmt->get_result()->fetch_assoc() ?: null;
+                $state_stmt->close();
+
                 if ($entered) {
+                    // بازگشت به دامنه، تعهد را دوباره در انتظار بررسی اجرا قرار می‌دهد؛
+                    // مسئول، برنامه و گزارش‌های پیشین دست‌نخورده باقی می‌مانند.
                     $implementation = $conn->prepare(
-                        "INSERT IGNORE INTO community_law_implementations
+                        "INSERT INTO community_law_implementations
                             (law_version_id, community_id, status)
-                         VALUES (?, ?, 'pending')"
+                         VALUES (?, ?, 'pending')
+                         ON DUPLICATE KEY UPDATE
+                            status=IF(status='not_applicable','pending',status),
+                            started_at=IF(status='not_applicable',NULL,started_at),
+                            target_date=IF(status='not_applicable',NULL,target_date),
+                            completed_at=IF(status='not_applicable',NULL,completed_at)"
+                    );
+                    if (!$implementation) {
+                        $ok = false;
+                        break 2;
+                    }
+                    $implementation->bind_param('ii', $version_id, $affected_id);
+                    $implementation_ok = $implementation->execute();
+                    $implementation->close();
+                    if (!$implementation_ok) {
+                        $ok = false;
+                        break 2;
+                    }
+                } elseif ($implementation_state !== null) {
+                    // خروج از دامنه، تعهد جاری را متوقف می‌کند؛ جزئیات و گزارش‌ها در history حفظ می‌شوند.
+                    $implementation = $conn->prepare(
+                        "UPDATE community_law_implementations
+                         SET status='not_applicable'
+                         WHERE law_version_id=? AND community_id=?"
                     );
                     if (!$implementation) {
                         $ok = false;
@@ -411,7 +457,8 @@ if (!function_exists('community_law_record_hierarchy_scope_changes')) {
                     'new_parent_id' => (int)($new_parent_map[$changed_community_id] ?? 0),
                     'old_hierarchy_path' => $old_path,
                     'new_hierarchy_path' => $new_path,
-                    'scope_roots' => $scope_roots
+                    'scope_roots' => $scope_roots,
+                    'implementation_state_before_transition' => $implementation_state
                 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
                 if (!is_string($details) || !community_law_record_history(
                     $conn,
