@@ -1274,6 +1274,25 @@ if ($schema_ready) {
         $proposed_stmt->close();
     }
 
+    $legal_assessments_by_version = [];
+    $legal_assessment_stmt = $conn->query(
+        "SELECT a.law_version_id, a.reviewer_user_id,
+                a.charter_compatibility, a.hierarchy_compatibility,
+                a.rights_impact, a.environmental_impact,
+                a.implementation_feasibility, a.reasoning, a.evidence, a.submitted_at
+         FROM community_law_review_assessments a
+         JOIN community_law_versions v ON v.id=a.law_version_id
+         JOIN community_laws l ON l.id=v.law_id
+         WHERE l.status='proposed' AND v.status='proposed'
+         ORDER BY a.submitted_at ASC LIMIT 300"
+    );
+    if ($legal_assessment_stmt) {
+        while ($assessment_row = $legal_assessment_stmt->fetch_assoc()) {
+            $legal_assessments_by_version[(int)$assessment_row['law_version_id']][] = $assessment_row;
+        }
+        $legal_assessment_stmt->free();
+    }
+
     $voting_stmt = $conn->prepare(
         "SELECT l.id AS law_id, l.law_code, v.id AS version_id, v.title,
                 v.law_text, v.vote_deadline,
@@ -1796,6 +1815,33 @@ details>summary{cursor:pointer;font-weight:bold}
                     </details>
                     <?php elseif (($proposal['review_status'] ?? '') === 'screening_clear'): ?>
                         <p class="muted">این مرحله فقط غربالگری اولیه اعضاست؛ بررسی رسمی صلاحیت و انطباق نهایی هنوز لازم است.</p>
+                        <?php if ($is_member && (int)$proposal['originating_community_id'] === $community_id): ?>
+                        <form method="post">
+                            <input type="hidden" name="csrf_token" value="<?= community_laws_escape($csrf_token) ?>">
+                            <input type="hidden" name="law_id" value="<?= (int)$proposal['law_id'] ?>">
+                            <input type="hidden" name="version_id" value="<?= (int)$proposal['version_id'] ?>">
+                            <button type="submit" name="start_law_vote" value="1">ادامه به رأی‌گیری (مشروط به تأیید قواعد رأی‌گیری)</button>
+                        </form>
+                        <?php endif; ?>
+                    <?php endif; ?>
+                    <?php if (!empty($legal_assessments_by_version[(int)$proposal['version_id']])): ?>
+                        <details style="margin-top:10px">
+                            <summary>مشاهده ارزیابی‌ها و استدلال‌ها</summary>
+                            <?php foreach ($legal_assessments_by_version[(int)$proposal['version_id']] as $assessment): ?>
+                                <div class="notice">
+                                    <div class="meta">ارزیاب مستقل #<?= (int)$assessment['reviewer_user_id'] ?> — <?= community_laws_escape($assessment['submitted_at']) ?></div>
+                                    <div>منشور: <?= community_laws_escape($assessment['charter_compatibility']) ?>؛
+                                    قوانین بالادستی: <?= community_laws_escape($assessment['hierarchy_compatibility']) ?>؛
+                                    حقوق: <?= community_laws_escape($assessment['rights_impact']) ?>؛
+                                    محیط‌زیست: <?= community_laws_escape($assessment['environmental_impact']) ?>؛
+                                    اجرا: <?= community_laws_escape($assessment['implementation_feasibility']) ?></div>
+                                    <p><?= nl2br(community_laws_escape($assessment['reasoning'])) ?></p>
+                                    <?php if (!empty($assessment['evidence'])): ?>
+                                        <p class="muted">شواهد: <?= nl2br(community_laws_escape($assessment['evidence'])) ?></p>
+                                    <?php endif; ?>
+                                </div>
+                            <?php endforeach; ?>
+                        </details>
                     <?php endif; ?>
                 </div>
             </div>
