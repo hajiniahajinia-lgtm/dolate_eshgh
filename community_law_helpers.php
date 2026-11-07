@@ -318,6 +318,67 @@ if (!function_exists('community_law_hierarchy_path')) {
     }
 }
 
+if (!function_exists('community_law_hierarchy_change_has_pending_review_dependency')) {
+    /**
+     * اگر تغییر والد مسیر حقوقی یکی از جوامع مشمول یک قانونِ در حال بررسی را عوض کند،
+     * snapshot قوانین مرجع آن بررسی منقضی می‌شود؛ در این حالت تغییر سلسله‌مراتب متوقف می‌شود.
+     * true = وابستگی باز وجود دارد، false = مانعی نیست، null = خطای ساختار/داده.
+     */
+    function community_law_hierarchy_change_has_pending_review_dependency(
+        mysqli $conn,
+        array $old_parent_map,
+        array $new_parent_map
+    ): ?bool {
+        if (
+            !community_law_parent_map_is_valid($old_parent_map) ||
+            !community_law_parent_map_is_valid($new_parent_map)
+        ) return null;
+
+        $pending = $conn->query(
+            "SELECT l.current_version_id AS version_id
+             FROM community_laws l
+             JOIN community_law_versions v ON v.id=l.current_version_id
+             WHERE l.status IN (
+                    'proposed','voting','pending_final_review',
+                    'appeal_period','enactment_pending'
+                   )
+               AND v.status IN (
+                    'proposed','voting','pending_final_review',
+                    'appeal_period','enactment_pending'
+                   )
+             ORDER BY l.id"
+        );
+        if (!$pending) return null;
+
+        while ($law = $pending->fetch_assoc()) {
+            $version_id = (int)$law['version_id'];
+            $old_ids = community_law_scope_ids_for_parent_map($conn, $version_id, $old_parent_map);
+            $new_ids = community_law_scope_ids_for_parent_map($conn, $version_id, $new_parent_map);
+            if ($old_ids === null || $new_ids === null) {
+                $pending->free();
+                return null;
+            }
+
+            $affected_ids = array_unique(array_merge($old_ids, $new_ids));
+            foreach ($affected_ids as $affected_id) {
+                $old_path = community_law_hierarchy_path($old_parent_map, (int)$affected_id);
+                $new_path = community_law_hierarchy_path($new_parent_map, (int)$affected_id);
+                if ($old_path === null || $new_path === null) {
+                    $pending->free();
+                    return null;
+                }
+                if ($old_path !== $new_path) {
+                    $pending->free();
+                    return true;
+                }
+            }
+        }
+
+        $pending->free();
+        return false;
+    }
+}
+
 if (!function_exists('community_law_record_hierarchy_scope_changes')) {
     function community_law_record_hierarchy_scope_changes(
         mysqli $conn,
@@ -343,6 +404,11 @@ if (!function_exists('community_law_record_hierarchy_scope_changes')) {
 
         // وجود ناقص جداول قوانین نباید باعث تغییر سلسله‌مراتب بدون ثبت سابقه شود.
         if (!community_law_tables_ready($conn)) return false;
+
+        // snapshot صلاحیت قوانین در حال بررسی نباید با تغییر سلسله‌مراتب کهنه شود.
+        if (community_law_hierarchy_change_has_pending_review_dependency(
+            $conn, $old_parent_map, $new_parent_map
+        ) !== false) return false;
 
         $active = $conn->query(
             "SELECT l.id AS law_id, l.current_version_id AS version_id
