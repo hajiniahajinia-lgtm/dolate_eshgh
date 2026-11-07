@@ -1220,6 +1220,205 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    if (isset($_POST['submit_law_authority_assessment'])) {
+        if (!$is_member) community_laws_redirect($community_id, 'not_member');
+
+        $version_id = (int)($_POST['law_version_id'] ?? 0);
+        $authority_verdict = (string)($_POST['authority_verdict'] ?? '');
+        $reasoning = trim((string)($_POST['authority_reasoning'] ?? ''));
+        $evidence = trim((string)($_POST['authority_evidence'] ?? ''));
+        $precedent_values = $_POST['precedent_assessment'] ?? [];
+        $precedent_reasons = $_POST['precedent_reasoning'] ?? [];
+        $precedent_evidence = $_POST['precedent_evidence'] ?? [];
+
+        if (
+            $version_id <= 0 ||
+            !in_array($authority_verdict, ['confirm','dispute','unclear'], true) ||
+            $reasoning === '' || mb_strlen($reasoning) > 30000 ||
+            mb_strlen($evidence) > 30000 ||
+            !is_array($precedent_values) || !is_array($precedent_reasons) ||
+            !is_array($precedent_evidence) ||
+            !community_law_scope_matches($conn, $version_id, $community_id)
+        ) community_laws_redirect($community_id, 'invalid_authority_assessment');
+
+        if (!$conn->begin_transaction()) community_laws_redirect($community_id, 'save_error');
+        try {
+            $case_lock = $conn->prepare(
+                "SELECT l.id AS law_id, l.status AS law_status, l.current_version_id,
+                        v.status AS version_status, v.proposed_by,
+                        rc.status AS screening_status,
+                        ac.status AS authority_status, ac.reviewer_quorum,
+                        ac.derived_jurisdiction_level
+                 FROM community_law_versions v
+                 JOIN community_laws l ON l.id=v.law_id
+                 JOIN community_law_review_cases rc ON rc.law_version_id=v.id
+                 JOIN community_law_authority_cases ac ON ac.law_version_id=v.id
+                 WHERE v.id=? FOR UPDATE"
+            );
+            if (!$case_lock) throw new Exception('authority assessment lock prepare failed');
+            $case_lock->bind_param('i', $version_id);
+            if (!$case_lock->execute()) throw new Exception('authority assessment lock failed');
+            $case = $case_lock->get_result()->fetch_assoc();
+            $case_lock->close();
+
+            if (
+                !$case || $case['law_status'] !== 'proposed' ||
+                $case['version_status'] !== 'proposed' ||
+                (int)$case['current_version_id'] !== $version_id ||
+                (int)$case['proposed_by'] === $user_id ||
+                $case['screening_status'] !== 'screening_clear' ||
+                $case['authority_status'] !== 'pending'
+            ) throw new RuntimeException('authority_assessment_not_allowed');
+
+            $eligible_stmt = $conn->prepare(
+                "SELECT 1 FROM community_law_review_electorate
+                 WHERE law_version_id=? AND user_id=? LIMIT 1"
+            );
+            if (!$eligible_stmt) throw new Exception('authority reviewer eligibility prepare failed');
+            $eligible_stmt->bind_param('ii', $version_id, $user_id);
+            if (!$eligible_stmt->execute()) throw new Exception('authority reviewer eligibility lookup failed');
+            $is_eligible_reviewer = (bool)$eligible_stmt->get_result()->fetch_row();
+            $eligible_stmt->close();
+            if (!$is_eligible_reviewer) throw new RuntimeException('authority_assessment_not_allowed');
+
+            $reference_stmt = $conn->prepare(
+                "SELECT id, reference_law_id, reference_law_version_id,
+                        reference_origin_community_id, relation_type
+                 FROM community_law_authority_references
+                 WHERE law_version_id=? ORDER BY relation_type, reference_law_id"
+            );
+            if (!$reference_stmt) throw new Exception('authority references prepare failed');
+            $reference_stmt->bind_param('i', $version_id);
+            if (!$reference_stmt->execute()) throw new Exception('authority references lookup failed');
+            $reference_result = $reference_stmt->get_result();
+            $references = [];
+            while ($reference_row = $reference_result->fetch_assoc()) {
+                $references[(int)$reference_row['id']] = $reference_row;
+            }
+            $reference_stmt->close();
+
+            if (count($precedent_values) !== count($references)) {
+                throw new RuntimeException('authority_assessment_not_allowed');
+            }
+            foreach ($references as $reference_id => $reference_row) {
+                $verdict = $precedent_values[$reference_id] ?? '';
+                $reference_reason = trim((string)($precedent_reasons[$reference_id] ?? ''));
+                $reference_evidence = trim((string)($precedent_evidence[$reference_id] ?? ''));
+                if (
+                    !in_array($verdict, ['compatible','conflict','unclear'], true) ||
+                    $reference_reason === '' ||
+                    mb_strlen($reference_reason) > 30000 ||
+                    mb_strlen($reference_evidence) > 30000
+                ) throw new RuntimeException('invalid_authority_assessment');
+            }
+
+            $authority_insert = $conn->prepare(
+                "INSERT INTO community_law_authority_assessments
+                    (law_version_id, reviewer_user_id, authority_verdict, reasoning, evidence)
+                 VALUES (?, ?, ?, ?, ?)"
+            );
+            if (!$authority_insert) throw new Exception('authority assessment insert prepare failed');
+            $authority_insert->bind_param(
+                'iisss', $version_id, $user_id, $authority_verdict, $reasoning, $evidence
+            );
+            if (!$authority_insert->execute()) throw new Exception('authority assessment insert failed');
+            $authority_insert->close();
+
+            $precedent_insert = $conn->prepare(
+                "INSERT INTO community_law_precedent_assessments
+                    (reference_id, law_version_id, reviewer_user_id,
+                     compatibility_verdict, reasoning, evidence)
+                 VALUES (?, ?, ?, ?, ?, ?)"
+            );
+            if (!$precedent_insert) throw new Exception('precedent assessment insert prepare failed');
+            foreach ($references as $reference_id => $reference_row) {
+                $verdict = (string)$precedent_values[$reference_id];
+                $reference_reason = trim((string)$precedent_reasons[$reference_id]);
+                $reference_evidence = trim((string)($precedent_evidence[$reference_id] ?? ''));
+                $precedent_insert->bind_param(
+                    'iiisss', $reference_id, $version_id, $user_id,
+                    $verdict, $reference_reason, $reference_evidence
+                );
+                if (!$precedent_insert->execute()) throw new Exception('precedent assessment insert failed');
+            }
+            $precedent_insert->close();
+
+            $aggregate_stmt = $conn->prepare(
+                "SELECT
+                    (SELECT COUNT(*) FROM community_law_authority_assessments
+                     WHERE law_version_id=?) AS reviewer_count,
+                    (SELECT COUNT(*) FROM community_law_authority_assessments
+                     WHERE law_version_id=? AND authority_verdict='dispute') AS authority_conflicts,
+                    (SELECT COUNT(*) FROM community_law_authority_assessments
+                     WHERE law_version_id=? AND authority_verdict='unclear') AS authority_unclear,
+                    (SELECT COUNT(*) FROM community_law_precedent_assessments
+                     WHERE law_version_id=? AND compatibility_verdict='conflict') AS precedent_conflicts,
+                    (SELECT COUNT(*) FROM community_law_precedent_assessments
+                     WHERE law_version_id=? AND compatibility_verdict='unclear') AS precedent_unclear,
+                    (SELECT COUNT(*) FROM community_law_authority_assessments aa
+                     WHERE aa.law_version_id=?
+                       AND (SELECT COUNT(*) FROM community_law_precedent_assessments pa
+                            WHERE pa.law_version_id=aa.law_version_id
+                              AND pa.reviewer_user_id=aa.reviewer_user_id)=
+                           (SELECT COUNT(*) FROM community_law_authority_references ar
+                            WHERE ar.law_version_id=aa.law_version_id)
+                    ) AS completed_reviewers"
+            );
+            if (!$aggregate_stmt) throw new Exception('authority aggregate prepare failed');
+            $aggregate_stmt->bind_param(
+                'iiiiii', $version_id, $version_id, $version_id,
+                $version_id, $version_id, $version_id
+            );
+            if (!$aggregate_stmt->execute()) throw new Exception('authority aggregate failed');
+            $aggregate = $aggregate_stmt->get_result()->fetch_assoc();
+            $aggregate_stmt->close();
+
+            $authority_status = 'pending';
+            if ((int)$aggregate['completed_reviewers'] >= (int)$case['reviewer_quorum']) {
+                if (
+                    (int)$aggregate['authority_conflicts'] > 0 ||
+                    (int)$aggregate['precedent_conflicts'] > 0
+                ) $authority_status = 'conflict_found';
+                elseif (
+                    (int)$aggregate['authority_unclear'] > 0 ||
+                    (int)$aggregate['precedent_unclear'] > 0
+                ) $authority_status = 'needs_revision';
+                else $authority_status = 'confirmed';
+            }
+
+            $case_update = $conn->prepare(
+                "UPDATE community_law_authority_cases
+                 SET status=? WHERE law_version_id=? AND status='pending'"
+            );
+            if (!$case_update) throw new Exception('authority status update prepare failed');
+            $case_update->bind_param('si', $authority_status, $version_id);
+            if (!$case_update->execute()) throw new Exception('authority status update failed');
+            $case_update->close();
+
+            if (!community_law_record_history(
+                $conn, (int)$case['law_id'], $version_id, $community_id, $user_id,
+                'authority_and_precedent_assessment',
+                'ارزیابی مستقل صلاحیت و قوانین مرتبط ثبت شد؛ سطح تشخیص‌داده‌شده: ' .
+                $case['derived_jurisdiction_level'] . '؛ وضعیت: ' . $authority_status
+            )) throw new Exception('authority assessment history failed');
+
+            if (!$conn->commit()) throw new Exception('authority assessment commit failed');
+            community_laws_redirect($community_id, 'authority_assessment_saved');
+        } catch (Throwable $e) {
+            $conn->rollback();
+            if ($e instanceof RuntimeException) {
+                if ($e->getMessage() === 'authority_assessment_not_allowed') {
+                    community_laws_redirect($community_id, 'authority_assessment_not_allowed');
+                }
+                if ($e->getMessage() === 'invalid_authority_assessment') {
+                    community_laws_redirect($community_id, 'invalid_authority_assessment');
+                }
+            }
+            error_log('[Dolate Eshgh authority assessment] ' . $e->getMessage());
+            community_laws_redirect($community_id, 'save_error');
+        }
+    }
+
     if (isset($_POST['submit_law_objection'])) {
         if (!$is_member) community_laws_redirect($community_id, 'not_member');
 
