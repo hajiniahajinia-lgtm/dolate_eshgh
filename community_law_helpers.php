@@ -17,7 +17,10 @@ if (!function_exists('community_law_tables_ready')) {
             'community_law_objections',
             'community_law_implementations',
             'community_law_history',
-            'community_law_voting_rules'
+            'community_law_voting_rules',
+            'community_law_direct_electorate',
+            'community_law_direct_votes',
+            'community_law_direct_results'
         ];
 
         $placeholders = implode(',', array_fill(0, count($required), '?'));
