@@ -57,6 +57,13 @@ function cam_tables_ready(mysqli $conn): bool {
     return $count === count($required);
 }
 
+function cam_secure_shuffle(array &$values): void {
+    for ($i = count($values) - 1; $i > 0; $i--) {
+        $j = random_int(0, $i);
+        [$values[$i], $values[$j]] = [$values[$j], $values[$i]];
+    }
+}
+
 function cam_assessments(mysqli $conn, int $amendment_id): ?array {
     $stmt = $conn->prepare(
         "SELECT reviewer_user_id, verdict, rights_protection,
@@ -230,7 +237,7 @@ try {
         $version_number = (int)$number_result->fetch_assoc()['next_version'];
         $number_result->free();
 
-        $version_title = 'پیشنهاد اصلاح منشور: ' . $title;
+        $version_title = mb_substr('پیشنهاد اصلاح منشور: ' . $title, 0, 200);
         $summary = 'پیش‌نویس اصلاح منشور بنیادین؛ ' . $justification;
         $version_insert = $conn->prepare(
             "INSERT INTO community_charter_versions
@@ -377,7 +384,7 @@ try {
         if (count($candidates) < 8) {
             throw new RuntimeException('برای آغاز بررسی مستقل دست‌کم پنج ارزیاب و سه رأی‌دهنده دیگر لازم است.');
         }
-        shuffle($candidates);
+        cam_secure_shuffle($candidates);
         $reviewer_ids = array_slice($candidates, 0, 5);
         $reviewer_map = array_fill_keys($reviewer_ids, true);
 
@@ -734,7 +741,7 @@ try {
         }
         $all_users->free();
         if (count($appeal_candidates) < 3) throw new RuntimeException('برای رسیدگی مستقل به اعتراض سه ارزیاب بی‌طرف در دسترس نیست.');
-        shuffle($appeal_candidates);
+        cam_secure_shuffle($appeal_candidates);
         $assignment = $conn->prepare(
             "INSERT INTO community_charter_amendment_appeal_reviewer_assignments
                 (appeal_id,reviewer_user_id) VALUES (?,?)"
