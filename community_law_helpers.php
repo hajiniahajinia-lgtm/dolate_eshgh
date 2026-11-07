@@ -148,6 +148,7 @@ if (!function_exists('community_law_version_is_effective')) {
              FROM community_law_versions v
              JOIN community_laws l ON l.id = v.law_id
              WHERE v.id = ?
+               AND l.current_version_id = v.id
                AND v.status = 'approved'
                AND l.status = 'approved'
                AND (l.effective_at IS NULL OR l.effective_at <= NOW())
