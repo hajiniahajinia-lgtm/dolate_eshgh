@@ -9,6 +9,7 @@ on:
       - 'expertise_action.php'
       - 'votes.php'
       - 'community_laws.php'
+      - 'community_law_helpers.php'
       - 'topic_expertise_profile.php'
       - 'topic_expertise_profile_action.php'
       - '.github/workflows/php-expertise-framework-check.yml'
@@ -38,5 +39,6 @@ jobs:
           php -l expertise_action.php
           php -l votes.php
           php -l community_laws.php
+          php -l community_law_helpers.php
           php -l topic_expertise_profile.php
           php -l topic_expertise_profile_action.php
