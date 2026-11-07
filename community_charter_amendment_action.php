@@ -445,7 +445,8 @@ try {
         }
         if (!$conn->begin_transaction()) throw new RuntimeException('شروع تراکنش انجام نشد.');
         $lock = $conn->prepare(
-            "SELECT id,proposed_charter_version_id,status,review_closes_at
+            "SELECT id,proposed_charter_version_id,status,review_closes_at,
+                    (review_closes_at IS NOT NULL AND review_closes_at>=NOW()) AS review_open
              FROM community_charter_amendments WHERE id=? FOR UPDATE"
         );
         if (!$lock) throw new RuntimeException('قفل پرونده ممکن نیست.');
@@ -454,8 +455,7 @@ try {
         $amendment = $lock->get_result()->fetch_assoc();
         $lock->close();
         if (!$amendment || $amendment['status'] !== 'independent_review' ||
-            empty($amendment['review_closes_at']) ||
-            strtotime($amendment['review_closes_at']) < time()) {
+            empty($amendment['review_closes_at']) || (int)$amendment['review_open'] !== 1) {
             throw new RuntimeException('مهلت بررسی پایان یافته یا پرونده در مرحله بررسی نیست.');
         }
         $assigned = $conn->prepare(
@@ -514,7 +514,8 @@ try {
         if ($amendment_id <= 0) throw new RuntimeException('شناسه پیشنهاد معتبر نیست.');
         if (!$conn->begin_transaction()) throw new RuntimeException('شروع تراکنش انجام نشد.');
         $lock = $conn->prepare(
-            "SELECT proposed_charter_version_id,status,review_closes_at
+            "SELECT proposed_charter_version_id,status,review_closes_at,
+                    (review_closes_at IS NOT NULL AND review_closes_at<=NOW()) AS review_closed
              FROM community_charter_amendments WHERE id=? FOR UPDATE"
         );
         if (!$lock) throw new RuntimeException('قفل پرونده ممکن نیست.');
@@ -523,7 +524,7 @@ try {
         $amendment = $lock->get_result()->fetch_assoc();
         $lock->close();
         if (!$amendment || $amendment['status'] !== 'independent_review' ||
-            empty($amendment['review_closes_at']) || strtotime($amendment['review_closes_at']) > time()) {
+            empty($amendment['review_closes_at']) || (int)$amendment['review_closed'] !== 1) {
             throw new RuntimeException('جمع‌بندی فقط پس از پایان مهلت بررسی مستقل ممکن است.');
         }
         $assessments = cam_assessments($conn, $amendment_id);
@@ -556,7 +557,9 @@ try {
         }
         if (!$conn->begin_transaction()) throw new RuntimeException('شروع تراکنش انجام نشد.');
         $lock = $conn->prepare(
-            "SELECT status,voting_opens_at,voting_closes_at
+            "SELECT status,voting_opens_at,voting_closes_at,
+                    (voting_opens_at IS NOT NULL AND voting_closes_at IS NOT NULL
+                     AND voting_opens_at<=NOW() AND voting_closes_at>=NOW()) AS voting_open
              FROM community_charter_amendments WHERE id=? FOR UPDATE"
         );
         if (!$lock) throw new RuntimeException('قفل رأی‌گیری ممکن نیست.');
@@ -564,10 +567,8 @@ try {
         if (!$lock->execute()) throw new RuntimeException('خواندن رأی‌گیری انجام نشد.');
         $amendment = $lock->get_result()->fetch_assoc();
         $lock->close();
-        $now = time();
         if (!$amendment || $amendment['status'] !== 'public_voting' ||
-            empty($amendment['voting_opens_at']) || empty($amendment['voting_closes_at']) ||
-            strtotime($amendment['voting_opens_at']) > $now || strtotime($amendment['voting_closes_at']) < $now) {
+            (int)$amendment['voting_open'] !== 1) {
             throw new RuntimeException('رأی‌گیری باز نیست یا مهلت آن پایان یافته است.');
         }
         $eligible = $conn->prepare(
@@ -597,7 +598,8 @@ try {
         if ($amendment_id <= 0) throw new RuntimeException('شناسه پیشنهاد معتبر نیست.');
         if (!$conn->begin_transaction()) throw new RuntimeException('شروع تراکنش انجام نشد.');
         $lock = $conn->prepare(
-            "SELECT proposed_charter_version_id,status,voting_closes_at
+            "SELECT proposed_charter_version_id,status,voting_closes_at,
+                    (voting_closes_at IS NOT NULL AND voting_closes_at<=NOW()) AS voting_closed
              FROM community_charter_amendments WHERE id=? FOR UPDATE"
         );
         if (!$lock) throw new RuntimeException('قفل رأی‌گیری ممکن نیست.');
@@ -606,7 +608,7 @@ try {
         $amendment = $lock->get_result()->fetch_assoc();
         $lock->close();
         if (!$amendment || $amendment['status'] !== 'public_voting' ||
-            empty($amendment['voting_closes_at']) || strtotime($amendment['voting_closes_at']) > time()) {
+            empty($amendment['voting_closes_at']) || (int)$amendment['voting_closed'] !== 1) {
             throw new RuntimeException('جمع‌بندی فقط پس از پایان مهلت رأی‌گیری ممکن است.');
         }
         $count = $conn->prepare(
@@ -654,7 +656,8 @@ try {
         }
         if (!$conn->begin_transaction()) throw new RuntimeException('شروع تراکنش انجام نشد.');
         $lock = $conn->prepare(
-            "SELECT proposer_user_id,status,appeal_closes_at
+            "SELECT proposer_user_id,status,appeal_closes_at,
+                    (appeal_closes_at IS NOT NULL AND appeal_closes_at>=NOW()) AS appeal_open
              FROM community_charter_amendments WHERE id=? FOR UPDATE"
         );
         if (!$lock) throw new RuntimeException('قفل پرونده ممکن نیست.');
@@ -663,7 +666,7 @@ try {
         $amendment = $lock->get_result()->fetch_assoc();
         $lock->close();
         if (!$amendment || $amendment['status'] !== 'appeal_period' ||
-            empty($amendment['appeal_closes_at']) || strtotime($amendment['appeal_closes_at']) < time() ||
+            empty($amendment['appeal_closes_at']) || (int)$amendment['appeal_open'] !== 1 ||
             (int)$amendment['proposer_user_id'] === $user_id) {
             throw new RuntimeException('مهلت اعتراض باز نیست یا شرایط ثبت اعتراض را ندارید.');
         }
@@ -853,7 +856,8 @@ try {
         if (count($active_ids) !== 1) throw new RuntimeException('نسخه جاری منشور یکتا نیست.');
 
         $lock = $conn->prepare(
-            "SELECT base_charter_version_id,proposed_charter_version_id,status,appeal_closes_at
+            "SELECT base_charter_version_id,proposed_charter_version_id,status,appeal_closes_at,
+                    (appeal_closes_at IS NOT NULL AND appeal_closes_at<=NOW()) AS appeal_closed
              FROM community_charter_amendments WHERE id=? FOR UPDATE"
         );
         if (!$lock) throw new RuntimeException('قفل اصلاحیه ممکن نیست.');
@@ -863,7 +867,7 @@ try {
         $lock->close();
         if (!$amendment || $amendment['status'] !== 'appeal_period' ||
             (int)$amendment['base_charter_version_id'] !== $active_ids[0] ||
-            empty($amendment['appeal_closes_at']) || strtotime($amendment['appeal_closes_at']) > time()) {
+            empty($amendment['appeal_closes_at']) || (int)$amendment['appeal_closed'] !== 1) {
             throw new RuntimeException('فعال‌سازی فقط پس از پایان مهلت اعتراض و در صورت جاری بودن منشور پایه ممکن است.');
         }
 
