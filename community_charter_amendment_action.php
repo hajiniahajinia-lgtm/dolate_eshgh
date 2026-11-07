@@ -801,18 +801,19 @@ try {
         $save->close();
 
         $tally = $conn->prepare(
-            "SELECT COUNT(*) AS total,SUM(verdict='uphold') AS uphold_count,
-                    SUM(verdict='dismiss') AS dismiss_count
-             FROM community_charter_amendment_appeal_reviewers WHERE appeal_id=?"
+            "SELECT reviewer_user_id,verdict FROM community_charter_amendment_appeal_reviewers
+             WHERE appeal_id=? ORDER BY reviewer_user_id"
         );
         if (!$tally) throw new RuntimeException('جمع‌بندی ارزیابی اعتراض ممکن نیست.');
         $tally->bind_param('i', $appeal_id);
         if (!$tally->execute()) throw new RuntimeException('جمع‌بندی ارزیابی اعتراض انجام نشد.');
-        $counts = $tally->get_result()->fetch_assoc();
+        $appeal_assessments = [];
+        $tally_result = $tally->get_result();
+        while ($row = $tally_result->fetch_assoc()) $appeal_assessments[] = $row;
         $tally->close();
-        $appeal_status = 'under_review';
-        if ((int)$counts['total'] >= 3 && (int)$counts['uphold_count'] >= 2) $appeal_status = 'upheld';
-        elseif ((int)$counts['total'] >= 3 && (int)$counts['dismiss_count'] >= 2) $appeal_status = 'dismissed';
+        $appeal_status = community_charter_amendment_appeal_result($appeal_assessments);
+        if ($appeal_status === 'invalid') throw new RuntimeException('ارزیابی‌های اعتراض ناسازگار است.');
+        if ($appeal_status === 'pending') $appeal_status = 'under_review';
 
         if ($appeal_status !== 'under_review') {
             $update_appeal = $conn->prepare(
