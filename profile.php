@@ -310,14 +310,20 @@ document.addEventListener("DOMContentLoaded", function() {
 <details>
 <summary style="display:block;cursor:pointer;background:#2065d1;color:#fff;border-radius:7px;padding:12px;text-align:center;font-weight:bold;list-style:none;">🗳️ رأی‌گیری دربارهٔ جایگاه جوامع</summary>
 <div style="padding-top:10px;">
-<p style="font-size:13px;line-height:1.9;color:#596579;">هر کاربر می‌تواند برای هر جامعه یک رأی ثبت کند: جامعهٔ مستقل یا زیرمجموعهٔ یک جامعهٔ دیگر. هر رأی‌دهنده می‌تواند نظرش را تغییر دهد. جایگاه برنده فقط وقتی تغییر می‌کند که یک گزینه بیشترین رأی یکتا را داشته باشد؛ در تساوی، جایگاه فعلی حفظ می‌شود.</p>
+<p style="font-size:13px;line-height:1.9;color:#596579;">فقط اعضای هر جامعه حق رأی دارند. فهرست رأی‌دهندگان در آغاز هر دور ثابت می‌شود؛ مهلت هر دور ۷ روز است و رأی تا پایان مهلت قابل تغییر خواهد بود. تغییر جایگاه فقط با مشارکت حداقل نصف اعضا (و دست‌کم دو نفر) و موافقت حداقل دوسوم آرای معتبر انجام می‌شود.</p>
 <?php
-$hierarchy_schema_check = $conn->query("SHOW TABLES LIKE 'community_parent_votes'");
-$hierarchy_votes_ready = $hierarchy_schema_check && $hierarchy_schema_check->num_rows > 0;
-if ($hierarchy_schema_check) $hierarchy_schema_check->close();
-
+ $hierarchy_rounds_check = $conn->query("SHOW TABLES LIKE 'community_parent_vote_rounds'");
+$hierarchy_electorate_check = $conn->query("SHOW TABLES LIKE 'community_parent_vote_electorate'");
+$hierarchy_round_votes_check = $conn->query("SHOW TABLES LIKE 'community_parent_round_votes'");
+$hierarchy_votes_ready = $hierarchy_rounds_check && $hierarchy_rounds_check->num_rows > 0
+    && $hierarchy_electorate_check && $hierarchy_electorate_check->num_rows > 0
+    && $hierarchy_round_votes_check && $hierarchy_round_votes_check->num_rows > 0;
+foreach ([$hierarchy_rounds_check, $hierarchy_electorate_check, $hierarchy_round_votes_check] as $check_result) {
+    if ($check_result) $check_result->close();
+}
 $hierarchy_communities = [];
 $hierarchy_parent_map = [];
+$hierarchy_rounds = [];
 $hierarchy_vote_counts = [];
 $hierarchy_user_votes = [];
 if ($hierarchy_votes_ready) {
@@ -331,32 +337,46 @@ if ($hierarchy_votes_ready) {
         }
         $hres->free();
     }
-    $vc = $conn->query("SELECT community_id, parent_community_id, COUNT(*) AS vote_count FROM community_parent_votes GROUP BY community_id, parent_community_id");
+    $round_query = $conn->query("SELECT r.* FROM community_parent_vote_rounds r
+        INNER JOIN (SELECT community_id, MAX(id) AS latest_id FROM community_parent_vote_rounds GROUP BY community_id) latest
+        ON latest.latest_id = r.id");
+    if ($round_query) {
+        while ($rr = $round_query->fetch_assoc()) $hierarchy_rounds[(int)$rr['community_id']] = $rr;
+        $round_query->free();
+    }
+    $vc = $conn->query("SELECT v.round_id, v.parent_community_id, COUNT(*) AS vote_count
+        FROM community_parent_round_votes v
+        INNER JOIN (SELECT community_id, MAX(id) AS latest_id FROM community_parent_vote_rounds GROUP BY community_id) latest
+        ON latest.latest_id = v.round_id
+        GROUP BY v.round_id, v.parent_community_id");
     if ($vc) {
         while ($vr = $vc->fetch_assoc()) {
-            $cid = (int)$vr['community_id'];
+            $rid = (int)$vr['round_id'];
             $pid = $vr['parent_community_id'] === null ? 0 : (int)$vr['parent_community_id'];
-            $hierarchy_vote_counts[$cid][$pid] = (int)$vr['vote_count'];
+            $hierarchy_vote_counts[$rid][$pid] = (int)$vr['vote_count'];
         }
         $vc->free();
     }
-    $uv = $conn->prepare("SELECT community_id, parent_community_id FROM community_parent_votes WHERE user_id=?");
-    $uv->bind_param("i", $user_id);
-    $uv->execute();
-    $uvr = $uv->get_result();
-    while ($vr = $uvr->fetch_assoc()) {
-        $hierarchy_user_votes[(int)$vr['community_id']] = $vr['parent_community_id'] === null ? 0 : (int)$vr['parent_community_id'];
+    $uv = $conn->prepare("SELECT r.community_id, v.parent_community_id FROM community_parent_round_votes v
+        JOIN community_parent_vote_rounds r ON r.id=v.round_id
+        JOIN (SELECT community_id, MAX(id) AS latest_id FROM community_parent_vote_rounds GROUP BY community_id) latest
+          ON latest.latest_id=r.id WHERE v.user_id=?");
+    if ($uv) {
+        $uv->bind_param("i", $user_id);
+        if ($uv->execute()) {
+            $uvr = $uv->get_result();
+            while ($vr = $uvr->fetch_assoc()) $hierarchy_user_votes[(int)$vr['community_id']] = $vr['parent_community_id'] === null ? 0 : (int)$vr['parent_community_id'];
+        }
+        $uv->close();
     }
-    $uv->close();
 }
-?>
 <?php if (!$hierarchy_votes_ready): ?>
-<p style="font-size:13px;line-height:1.9;color:#b42318;">برای فعال‌شدن رأی‌گیری، فایل <strong>community_parent_votes.sql</strong> را یک‌بار در پایگاه دادهٔ هاست اجرا کنید. این فایل فقط جدول رأی‌ها را اضافه می‌کند و داده‌های موجود را حذف نمی‌کند.</p>
+<p style="font-size:13px;line-height:1.9;color:#b42318;">ساختار دورهای رأی‌گیری هنوز در پایگاه داده نصب نشده است. پس از اجرای migration مربوط به رأی‌گیری جایگاه جوامع، این بخش فعال می‌شود.</p>
 <?php elseif (empty($hierarchy_communities)): ?>
 <p>هنوز جامعه‌ای برای رأی‌گیری وجود ندارد.</p>
 <?php else: ?>
 <?php if (($_GET['hierarchy_status'] ?? '') === 'voted'): ?>
-<p style="color:#18794e;font-size:13px;">رأی شما ثبت شد. جایگاه جامعه بر اساس بیشترین رأی یکتا به‌روزرسانی می‌شود.</p>
+<p style="color:#18794e;font-size:13px;">رأی شما در دور جاری ثبت شد. نتیجه فقط پس از پایان مهلت و بررسی حدنصاب اعمال می‌شود.</p>
 <?php elseif (($_GET['hierarchy_status'] ?? '') === 'cycle'): ?>
 <p style="color:#b42318;font-size:13px;">این گزینه می‌تواند چرخه در ساختار جوامع ایجاد کند و قابل رأی‌دادن نیست.</p>
 <?php elseif (($_GET['hierarchy_status'] ?? '') === 'schema'): ?>
