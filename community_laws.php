@@ -411,6 +411,390 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    if (isset($_POST['submit_law_voting_rules'])) {
+        if (!$is_member) community_laws_redirect($community_id, 'not_member');
+
+        $law_id = (int)($_POST['law_id'] ?? 0);
+        $version_id = (int)($_POST['version_id'] ?? 0);
+        $individual_quorum = $_POST['individual_quorum_percent'] ?? '';
+        $individual_approval = $_POST['individual_approval_percent'] ?? '';
+        $require_community = (string)($_POST['require_community_approval'] ?? '');
+        $community_quorum = $_POST['community_quorum_percent'] ?? '';
+        $community_approval = $_POST['community_approval_percent'] ?? '';
+        $aggregate_quorum = $_POST['community_aggregate_quorum_percent'] ?? '';
+        $aggregate_approval = $_POST['community_aggregate_approval_percent'] ?? '';
+        $rationale = trim((string)($_POST['rules_rationale'] ?? ''));
+
+        $percent_valid = static function ($value, float $minimum): bool {
+            return $value !== '' && is_numeric($value)
+                && (float)$value >= $minimum && (float)$value <= 100;
+        };
+        if (
+            $law_id <= 0 || $version_id <= 0 ||
+            !$percent_valid($individual_quorum, 1) ||
+            !$percent_valid($individual_approval, 50) ||
+            !in_array($require_community, ['0','1'], true) ||
+            mb_strlen($rationale) < 20 || mb_strlen($rationale) > 20000 ||
+            ($require_community === '1' && (
+                !$percent_valid($community_quorum, 1) ||
+                !$percent_valid($community_approval, 50) ||
+                !$percent_valid($aggregate_quorum, 1) ||
+                !$percent_valid($aggregate_approval, 50)
+            ))
+        ) community_laws_redirect($community_id, 'invalid_voting_rules');
+
+        if (!$conn->begin_transaction()) community_laws_redirect($community_id, 'save_error');
+        try {
+            $lock = $conn->prepare(
+                "SELECT l.status AS law_status, l.current_version_id, l.originating_community_id,
+                        v.status AS version_status, v.proposed_by, ac.status AS authority_status,
+                        ac.derived_jurisdiction_level
+                 FROM community_laws l
+                 JOIN community_law_versions v ON v.law_id=l.id
+                 JOIN community_law_authority_cases ac ON ac.law_version_id=v.id
+                 WHERE l.id=? AND v.id=? FOR UPDATE"
+            );
+            if (!$lock) throw new Exception('rule proposal lock prepare failed');
+            $lock->bind_param('ii', $law_id, $version_id);
+            if (!$lock->execute()) throw new Exception('rule proposal lock failed');
+            $law = $lock->get_result()->fetch_assoc();
+            $lock->close();
+            if (
+                !$law || (int)$law['originating_community_id'] !== $community_id ||
+                $law['law_status'] !== 'proposed' || $law['version_status'] !== 'proposed' ||
+                (int)$law['current_version_id'] !== $version_id ||
+                $law['authority_status'] !== 'confirmed' ||
+                (int)$law['proposed_by'] === $user_id
+            ) throw new RuntimeException('voting_rules_not_configurable');
+
+            $existing = $conn->prepare(
+                "SELECT status FROM community_law_voting_rules
+                 WHERE law_version_id=? LIMIT 1 FOR UPDATE"
+            );
+            if (!$existing) throw new Exception('existing rule lookup prepare failed');
+            $existing->bind_param('i', $version_id);
+            if (!$existing->execute()) throw new Exception('existing rule lookup failed');
+            $existing_row = $existing->get_result()->fetch_assoc();
+            $existing->close();
+            if ($existing_row && $existing_row['status'] === 'approved') {
+                throw new RuntimeException('voting_rules_already_approved');
+            }
+
+            $pending = $conn->prepare(
+                "SELECT id FROM community_law_voting_rule_proposals
+                 WHERE law_version_id=? AND status='pending_review' LIMIT 1 FOR UPDATE"
+            );
+            if (!$pending) throw new Exception('pending rule lookup prepare failed');
+            $pending->bind_param('i', $version_id);
+            if (!$pending->execute()) throw new Exception('pending rule lookup failed');
+            $has_pending = (bool)$pending->get_result()->fetch_row();
+            $pending->close();
+            if ($has_pending) throw new RuntimeException('voting_rules_review_pending');
+
+            $scope_ids = community_law_scope_community_ids($conn, $version_id);
+            if (!$scope_ids) throw new RuntimeException('invalid_law_scope');
+
+            $number_stmt = $conn->prepare(
+                "SELECT COALESCE(MAX(proposal_number),0)+1 AS next_number
+                 FROM community_law_voting_rule_proposals WHERE law_version_id=?"
+            );
+            if (!$number_stmt) throw new Exception('rule proposal number prepare failed');
+            $number_stmt->bind_param('i', $version_id);
+            if (!$number_stmt->execute()) throw new Exception('rule proposal number failed');
+            $proposal_number = (int)$number_stmt->get_result()->fetch_assoc()['next_number'];
+            $number_stmt->close();
+
+            $individual_basis = 'count';
+            $community_basis = $require_community === '1' ? 'one_community_one_vote' : null;
+            $community_quorum_value = $require_community === '1' ? (float)$community_quorum : null;
+            $community_approval_value = $require_community === '1' ? (float)$community_approval : null;
+            $aggregate_quorum_value = $require_community === '1' ? (float)$aggregate_quorum : null;
+            $aggregate_approval_value = $require_community === '1' ? (float)$aggregate_approval : null;
+            $individual_quorum_value = (float)$individual_quorum;
+            $individual_approval_value = (float)$individual_approval;
+            $require_community_value = (int)$require_community;
+            $jurisdiction = $law['derived_jurisdiction_level'];
+
+            $insert = $conn->prepare(
+                "INSERT INTO community_law_voting_rule_proposals
+                    (law_version_id, proposal_number, jurisdiction_level,
+                     individual_quorum_percent, individual_approval_percent,
+                     community_quorum_percent, community_approval_percent,
+                     community_aggregate_quorum_percent, community_aggregate_approval_percent,
+                     require_community_approval, individual_vote_basis, community_vote_basis,
+                     rationale, configured_by, review_deadline)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 7 DAY))"
+            );
+            if (!$insert) throw new Exception('rule proposal insert prepare failed');
+            $insert->bind_param(
+                'iisddddddisssi',
+                $version_id, $proposal_number, $jurisdiction,
+                $individual_quorum_value, $individual_approval_value,
+                $community_quorum_value, $community_approval_value,
+                $aggregate_quorum_value, $aggregate_approval_value,
+                $require_community_value, $individual_basis, $community_basis,
+                $rationale, $user_id
+            );
+            if (!$insert->execute()) throw new Exception('rule proposal insert failed');
+            $proposal_id = (int)$conn->insert_id;
+            $insert->close();
+
+            $elector_insert = $conn->prepare(
+                "INSERT IGNORE INTO community_law_voting_rule_electorate (proposal_id, user_id)
+                 SELECT ?, cm.user_id
+                 FROM community_members cm
+                 WHERE cm.community_id=? AND cm.user_id<>?
+                   AND cm.user_id<>(SELECT proposed_by FROM community_law_versions WHERE id=?)
+                   AND NOT EXISTS (
+                       SELECT 1 FROM community_law_review_assessments ra
+                       WHERE ra.law_version_id=? AND ra.reviewer_user_id=cm.user_id
+                   )
+                   AND NOT EXISTS (
+                       SELECT 1 FROM community_law_authority_assessments aa
+                       WHERE aa.law_version_id=? AND aa.reviewer_user_id=cm.user_id
+                   )"
+            );
+            if (!$elector_insert) throw new Exception('rule electorate insert prepare failed');
+            foreach ($scope_ids as $scope_id) {
+                $elector_insert->bind_param(
+                    'iiiiii', $proposal_id, $scope_id, $user_id,
+                    $version_id, $version_id, $version_id
+                );
+                if (!$elector_insert->execute()) throw new Exception('rule electorate insert failed');
+            }
+            $elector_insert->close();
+
+            $count_stmt = $conn->prepare(
+                "SELECT COUNT(*) AS total FROM community_law_voting_rule_electorate WHERE proposal_id=?"
+            );
+            if (!$count_stmt) throw new Exception('rule electorate count prepare failed');
+            $count_stmt->bind_param('i', $proposal_id);
+            if (!$count_stmt->execute()) throw new Exception('rule electorate count failed');
+            $electorate_count = (int)$count_stmt->get_result()->fetch_assoc()['total'];
+            $count_stmt->close();
+            if ($electorate_count < 3) throw new RuntimeException('insufficient_rule_reviewers');
+
+            if (!community_law_record_history(
+                $conn, $law_id, $version_id, $community_id, $user_id,
+                'voting_rules_proposed',
+                'پیشنهاد قواعد رأی‌گیری شماره ' . $proposal_number . ' برای بررسی مستقل هفت‌روزه ثبت شد؛ ارزیابان قبلی و پیشنهاددهنده از پنل کنار گذاشته شدند.'
+            )) throw new Exception('rule proposal history failed');
+
+            if (!$conn->commit()) throw new Exception('rule proposal commit failed');
+            community_laws_redirect($community_id, 'voting_rules_submitted');
+        } catch (Throwable $e) {
+            $conn->rollback();
+            if ($e instanceof RuntimeException) {
+                if ($e->getMessage() === 'voting_rules_not_configurable') community_laws_redirect($community_id, 'voting_rules_not_configurable');
+                if ($e->getMessage() === 'voting_rules_already_approved') community_laws_redirect($community_id, 'voting_rules_already_approved');
+                if ($e->getMessage() === 'voting_rules_review_pending') community_laws_redirect($community_id, 'voting_rules_review_pending');
+                if ($e->getMessage() === 'insufficient_rule_reviewers') community_laws_redirect($community_id, 'insufficient_rule_reviewers');
+                if ($e->getMessage() === 'invalid_law_scope') community_laws_redirect($community_id, 'invalid_law_scope');
+            }
+            error_log('[Dolate Eshgh voting rules proposal] ' . $e->getMessage());
+            community_laws_redirect($community_id, 'save_error');
+        }
+    }
+
+    if (isset($_POST['submit_law_voting_rule_assessment'])) {
+        if (!$is_member) community_laws_redirect($community_id, 'not_member');
+        $proposal_id = (int)($_POST['proposal_id'] ?? 0);
+        $decision = (string)($_POST['rule_decision'] ?? '');
+        $reasoning = trim((string)($_POST['rule_reasoning'] ?? ''));
+        if ($proposal_id <= 0 || !in_array($decision, ['approve','reject'], true) ||
+            $reasoning === '' || mb_strlen($reasoning) > 20000) {
+            community_laws_redirect($community_id, 'invalid_voting_rule_assessment');
+        }
+
+        $proposal_lock = $conn->prepare(
+            "SELECT p.law_version_id, p.status, p.review_deadline, l.id AS law_id,
+                    l.status AS law_status, l.current_version_id, l.originating_community_id,
+                    v.status AS version_status
+             FROM community_law_voting_rule_proposals p
+             JOIN community_law_versions v ON v.id=p.law_version_id
+             JOIN community_laws l ON l.id=v.law_id
+             WHERE p.id=? LIMIT 1"
+        );
+        if (!$proposal_lock) community_laws_redirect($community_id, 'save_error');
+        $proposal_lock->bind_param('i', $proposal_id);
+        if (!$proposal_lock->execute()) {
+            $proposal_lock->close();
+            community_laws_redirect($community_id, 'save_error');
+        }
+        $proposal = $proposal_lock->get_result()->fetch_assoc();
+        $proposal_lock->close();
+        if (
+            !$proposal || $proposal['status'] !== 'pending_review' ||
+            strtotime($proposal['review_deadline']) <= time() ||
+            $proposal['law_status'] !== 'proposed' || $proposal['version_status'] !== 'proposed' ||
+            (int)$proposal['current_version_id'] !== (int)$proposal['law_version_id'] ||
+            (int)$proposal['originating_community_id'] !== $community_id
+        ) community_laws_redirect($community_id, 'voting_rule_assessment_not_allowed');
+
+        $eligible = $conn->prepare(
+            "SELECT 1 FROM community_law_voting_rule_electorate
+             WHERE proposal_id=? AND user_id=? LIMIT 1"
+        );
+        if (!$eligible) community_laws_redirect($community_id, 'save_error');
+        $eligible->bind_param('ii', $proposal_id, $user_id);
+        if (!$eligible->execute()) {
+            $eligible->close();
+            community_laws_redirect($community_id, 'save_error');
+        }
+        $is_eligible = (bool)$eligible->get_result()->fetch_row();
+        $eligible->close();
+        if (!$is_eligible) community_laws_redirect($community_id, 'voting_rule_assessment_not_allowed');
+
+        $vote_insert = $conn->prepare(
+            "INSERT INTO community_law_voting_rule_votes
+                (proposal_id, reviewer_user_id, decision, reasoning)
+             VALUES (?, ?, ?, ?)"
+        );
+        if (!$vote_insert) community_laws_redirect($community_id, 'save_error');
+        $vote_insert->bind_param('iiss', $proposal_id, $user_id, $decision, $reasoning);
+        if (!$vote_insert->execute()) {
+            $vote_insert->close();
+            community_laws_redirect($community_id, 'voting_rule_vote_duplicate');
+        }
+        $vote_insert->close();
+        community_laws_redirect($community_id, 'voting_rule_assessment_saved');
+    }
+
+    if (isset($_POST['finalize_law_voting_rules'])) {
+        if (!$is_member) community_laws_redirect($community_id, 'not_member');
+        $proposal_id = (int)($_POST['proposal_id'] ?? 0);
+        if ($proposal_id <= 0) community_laws_redirect($community_id, 'invalid_voting_rule_assessment');
+
+        if (!$conn->begin_transaction()) community_laws_redirect($community_id, 'save_error');
+        try {
+            $lock = $conn->prepare(
+                "SELECT p.*, v.id AS version_id, v.status AS version_status,
+                        l.id AS law_id, l.status AS law_status, l.current_version_id,
+                        l.originating_community_id, ac.status AS authority_status,
+                        ac.derived_jurisdiction_level
+                 FROM community_law_voting_rule_proposals p
+                 JOIN community_law_versions v ON v.id=p.law_version_id
+                 JOIN community_laws l ON l.id=v.law_id
+                 JOIN community_law_authority_cases ac ON ac.law_version_id=v.id
+                 WHERE p.id=? FOR UPDATE"
+            );
+            if (!$lock) throw new Exception('rule finalization lock prepare failed');
+            $lock->bind_param('i', $proposal_id);
+            if (!$lock->execute()) throw new Exception('rule finalization lock failed');
+            $proposal = $lock->get_result()->fetch_assoc();
+            $lock->close();
+            if (
+                !$proposal || $proposal['status'] !== 'pending_review' ||
+                strtotime($proposal['review_deadline']) > time() ||
+                $proposal['law_status'] !== 'proposed' || $proposal['version_status'] !== 'proposed' ||
+                (int)$proposal['current_version_id'] !== (int)$proposal['law_version_id'] ||
+                (int)$proposal['originating_community_id'] !== $community_id ||
+                $proposal['authority_status'] !== 'confirmed' ||
+                $proposal['jurisdiction_level'] !== $proposal['derived_jurisdiction_level']
+            ) throw new RuntimeException('voting_rules_not_finalizable');
+
+            $tally = $conn->prepare(
+                "SELECT COUNT(*) AS total,
+                        SUM(CASE WHEN decision='approve' THEN 1 ELSE 0 END) AS approvals
+                 FROM community_law_voting_rule_votes WHERE proposal_id=?"
+            );
+            if (!$tally) throw new Exception('rule tally prepare failed');
+            $tally->bind_param('i', $proposal_id);
+            if (!$tally->execute()) throw new Exception('rule tally failed');
+            $votes = $tally->get_result()->fetch_assoc();
+            $tally->close();
+            $total_votes = (int)$votes['total'];
+            $approvals = (int)$votes['approvals'];
+            if ($total_votes < (int)$proposal['reviewer_quorum']) {
+                throw new RuntimeException('insufficient_rule_votes');
+            }
+            $approved = ($approvals * 100) >= ($total_votes * (float)$proposal['approval_threshold_percent']);
+            $new_status = $approved ? 'approved' : 'rejected';
+
+            $decision_update = $conn->prepare(
+                "UPDATE community_law_voting_rule_proposals
+                 SET status=?, decided_at=NOW() WHERE id=? AND status='pending_review'"
+            );
+            if (!$decision_update) throw new Exception('rule decision update prepare failed');
+            $decision_update->bind_param('si', $new_status, $proposal_id);
+            if (!$decision_update->execute() || $decision_update->affected_rows !== 1) {
+                throw new Exception('rule decision update failed');
+            }
+            $decision_update->close();
+
+            if ($approved) {
+                $existing = $conn->prepare(
+                    "SELECT status FROM community_law_voting_rules
+                     WHERE law_version_id=? LIMIT 1 FOR UPDATE"
+                );
+                if (!$existing) throw new Exception('approved rule existence prepare failed');
+                $existing->bind_param('i', $proposal['law_version_id']);
+                if (!$existing->execute()) throw new Exception('approved rule existence lookup failed');
+                $existing_rule = $existing->get_result()->fetch_assoc();
+                $existing->close();
+                if ($existing_rule && $existing_rule['status'] === 'approved') {
+                    throw new RuntimeException('voting_rules_already_approved');
+                }
+
+                $rule_insert = $conn->prepare(
+                    "INSERT INTO community_law_voting_rules
+                        (law_version_id, jurisdiction_level,
+                         individual_quorum_percent, individual_approval_percent,
+                         community_quorum_percent, community_approval_percent,
+                         community_aggregate_quorum_percent, community_aggregate_approval_percent,
+                         require_community_approval, individual_vote_basis, community_vote_basis,
+                         status, configured_by, configured_at, approved_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'approved', ?, NOW(), NOW())
+                     ON DUPLICATE KEY UPDATE
+                        jurisdiction_level=VALUES(jurisdiction_level),
+                        individual_quorum_percent=VALUES(individual_quorum_percent),
+                        individual_approval_percent=VALUES(individual_approval_percent),
+                        community_quorum_percent=VALUES(community_quorum_percent),
+                        community_approval_percent=VALUES(community_approval_percent),
+                        community_aggregate_quorum_percent=VALUES(community_aggregate_quorum_percent),
+                        community_aggregate_approval_percent=VALUES(community_aggregate_approval_percent),
+                        require_community_approval=VALUES(require_community_approval),
+                        individual_vote_basis=VALUES(individual_vote_basis),
+                        community_vote_basis=VALUES(community_vote_basis),
+                        status='approved', configured_by=VALUES(configured_by),
+                        configured_at=VALUES(configured_at), approved_at=VALUES(approved_at)"
+                );
+                if (!$rule_insert) throw new Exception('approved rule insert prepare failed');
+                $rule_insert->bind_param(
+                    'isddddddissi',
+                    $proposal['law_version_id'], $proposal['jurisdiction_level'],
+                    $proposal['individual_quorum_percent'], $proposal['individual_approval_percent'],
+                    $proposal['community_quorum_percent'], $proposal['community_approval_percent'],
+                    $proposal['community_aggregate_quorum_percent'], $proposal['community_aggregate_approval_percent'],
+                    $proposal['require_community_approval'], $proposal['individual_vote_basis'],
+                    $proposal['community_vote_basis'], $proposal['configured_by']
+                );
+                if (!$rule_insert->execute()) throw new Exception('approved rule insert failed');
+                $rule_insert->close();
+            }
+
+            if (!community_law_record_history(
+                $conn, (int)$proposal['law_id'], (int)$proposal['law_version_id'],
+                $community_id, $user_id, 'voting_rules_' . $new_status,
+                'پیشنهاد قواعد رأی‌گیری شماره ' . (int)$proposal['proposal_number'] .
+                ' پس از پایان مهلت و ثبت ' . $total_votes . ' ارزیابی، با ' . $approvals .
+                ' رأی موافق از حدنصاب دوسوم ' . ($approved ? 'تأیید شد.' : 'عبور نکرد و رد شد.')
+            )) throw new Exception('rule decision history failed');
+
+            if (!$conn->commit()) throw new Exception('rule decision commit failed');
+            community_laws_redirect($community_id, $approved ? 'voting_rules_approved' : 'voting_rules_rejected');
+        } catch (Throwable $e) {
+            $conn->rollback();
+            if ($e instanceof RuntimeException) {
+                if ($e->getMessage() === 'voting_rules_not_finalizable') community_laws_redirect($community_id, 'voting_rules_not_finalizable');
+                if ($e->getMessage() === 'insufficient_rule_votes') community_laws_redirect($community_id, 'insufficient_rule_votes');
+                if ($e->getMessage() === 'voting_rules_already_approved') community_laws_redirect($community_id, 'voting_rules_already_approved');
+            }
+            error_log('[Dolate Eshgh voting rules finalization] ' . $e->getMessage());
+            community_laws_redirect($community_id, 'save_error');
+        }
+    }
+
     if (isset($_POST['start_law_vote'])) {
         if (!$is_member) community_laws_redirect($community_id, 'not_member');
 
@@ -3074,6 +3458,20 @@ $status_messages = [
     'not_law_elector' => 'نام شما در فهرست رأی‌دهندگان این رأی‌گیری ثبت نشده است.',
     'voting_started' => 'رأی‌گیری هفت‌روزه آغاز شد و فهرست اعضای واجد شرایط ثبت شد.',
     'voting_rules_required' => 'قواعد تصویب این نسخه هنوز تکمیل و تأیید نشده‌اند؛ برای جلوگیری از تصویب خودسرانه، آغاز رأی‌گیری متوقف شد.',
+    'invalid_voting_rules' => 'درصدها، روش رأی‌گیری یا استدلال قواعد معتبر نیستند.',
+    'voting_rules_not_configurable' => 'قواعد فقط پس از تأیید صلاحیت و برای نسخه جاریِ پیشنهادشده، توسط عضو جامعه مبدأ قابل پیشنهاد هستند.',
+    'voting_rules_already_approved' => 'قواعد این نسخه قبلاً تأیید شده‌اند و قابل جایگزینی نیستند.',
+    'voting_rules_review_pending' => 'برای این نسخه یک پیشنهاد قواعد در حال بررسی وجود دارد.',
+    'insufficient_rule_reviewers' => 'برای بررسی مستقل قواعد، دست‌کم سه عضو واجد شرایط و مستقل لازم است.',
+    'voting_rules_submitted' => 'پیشنهاد قواعد رأی‌گیری ثبت شد؛ پنل مستقل هفت روز برای بررسی فرصت دارد.',
+    'invalid_voting_rule_assessment' => 'اطلاعات ارزیابی قواعد رأی‌گیری معتبر نیست.',
+    'voting_rule_assessment_not_allowed' => 'شما عضو پنل مستقل این پیشنهاد نیستید یا مهلت ارزیابی پایان یافته است.',
+    'voting_rule_vote_duplicate' => 'ارزیابی شما قبلاً ثبت شده است و قابل تغییر نیست.',
+    'voting_rule_assessment_saved' => 'ارزیابی مستدل شما ثبت شد.',
+    'voting_rules_not_finalizable' => 'مهلت بررسی پایان نیافته یا وضعیت پیشنهاد و صلاحیت آن معتبر نیست.',
+    'insufficient_rule_votes' => 'برای تصمیم‌گیری دست‌کم سه ارزیابی مستقل لازم است.',
+    'voting_rules_approved' => 'قواعد رأی‌گیری با رأی دوسوم ارزیابان مستقل تأیید شد.',
+    'voting_rules_rejected' => 'پیشنهاد قواعد به حدنصاب دوسوم موافقت نرسید؛ می‌توان پیشنهاد تازه‌ای ثبت کرد.',
     'invalid_vote_start' => 'این پیشنهاد در وضعیت قابل رأی‌گیری نیست.',
     'invalid_law_scope' => 'دامنه شمول قانون معتبر نیست.',
     'empty_law_electorate' => 'در جوامع مشمول، عضو واجد شرایطی برای رأی‌گیری یافت نشد.',
