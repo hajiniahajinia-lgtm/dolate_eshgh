@@ -2251,6 +2251,9 @@ $position_discussions = [];
 $closed_voting_laws = [];
 $tallied_laws = [];
 $recent_objections = [];
+$passed_laws_pending_final_review = [];
+$final_review_laws = [];
+$appeals_by_version = [];
 
 if ($schema_ready) {
     $law_result = $conn->query(
@@ -2537,6 +2540,186 @@ if ($schema_ready) {
         $tallied_stmt->close();
     }
 
+
+    $passed_final_stmt = $conn->prepare(
+        "SELECT l.id AS law_id, l.law_code, v.id AS version_id, v.title,
+                fr.final_status
+         FROM community_laws l
+         JOIN community_law_versions v ON v.id=l.current_version_id
+         JOIN community_law_final_results fr ON fr.law_version_id=v.id
+         LEFT JOIN community_law_final_review_cases fc ON fc.law_version_id=v.id
+         WHERE l.originating_community_id=? AND l.status='voting'
+           AND v.status='voting' AND fr.final_status='vote_passed'
+           AND fc.law_version_id IS NULL
+         ORDER BY v.created_at DESC LIMIT 30"
+    );
+    if ($passed_final_stmt) {
+        $passed_final_stmt->bind_param('i', $community_id);
+        if ($passed_final_stmt->execute()) {
+            $passed_final_result = $passed_final_stmt->get_result();
+            while ($row = $passed_final_result->fetch_assoc()) $passed_laws_pending_final_review[] = $row;
+        }
+        $passed_final_stmt->close();
+    }
+
+    $final_review_stmt = $conn->prepare(
+        "SELECT l.id AS law_id, l.law_code, l.originating_community_id,
+                l.status AS law_status, v.id AS version_id, v.title,
+                v.status AS version_status, fc.status AS final_status,
+                fc.reviewer_quorum, fc.appeal_period_days, fc.appeal_deadline,
+                (SELECT COUNT(*) FROM community_law_final_review_assessments a
+                 WHERE a.law_version_id=v.id) AS assessment_count,
+                (SELECT COUNT(*) FROM community_law_final_review_electorate e
+                 WHERE e.law_version_id=v.id AND e.user_id=?) AS is_final_elector,
+                (SELECT COUNT(*) FROM community_law_final_review_assessments a
+                 WHERE a.law_version_id=v.id AND a.reviewer_user_id=?) AS has_final_assessed,
+                (SELECT COUNT(*) FROM community_law_appeals ap
+                 WHERE ap.law_version_id=v.id) AS appeal_count,
+                (SELECT COUNT(*) FROM community_law_appeals ap
+                 WHERE ap.law_version_id=v.id AND ap.status IN ('submitted','under_review')) AS unresolved_appeals,
+                (SELECT COUNT(*) FROM community_law_appeals ap
+                 WHERE ap.law_version_id=v.id AND ap.status='upheld') AS upheld_appeals
+         FROM community_law_final_review_cases fc
+         JOIN community_law_versions v ON v.id=fc.law_version_id
+         JOIN community_laws l ON l.id=v.law_id
+         WHERE l.current_version_id=v.id
+           AND fc.status IN ('pending','review_clear','conflict_found','needs_revision','appeal_period','appeal_hold','ready_for_enactment')
+         ORDER BY fc.opened_at DESC LIMIT 100"
+    );
+    if ($final_review_stmt) {
+        $final_review_stmt->bind_param('ii', $user_id, $user_id);
+        if ($final_review_stmt->execute()) {
+            $final_review_result = $final_review_stmt->get_result();
+            while ($row = $final_review_result->fetch_assoc()) {
+                if (
+                    (int)$row['originating_community_id'] === $community_id ||
+                    community_law_scope_matches($conn, (int)$row['version_id'], $community_id)
+                ) $final_review_laws[] = $row;
+            }
+        }
+        $final_review_stmt->close();
+    }
+
+    $appeal_stmt = $conn->prepare(
+        "SELECT ap.id AS appeal_id, ap.law_version_id, ap.community_id,
+                ap.submitted_by, ap.appeal_type, ap.description, ap.evidence,
+                ap.status AS appeal_status, ap.created_at, ap.reviewer_quorum,
+                v.title, l.law_code, l.id AS law_id,
+                (SELECT COUNT(*) FROM community_law_appeal_assessments aa
+                 WHERE aa.appeal_id=ap.id) AS assessment_count,
+                (SELECT COUNT(*) FROM community_law_appeal_electorate ae
+                 WHERE ae.appeal_id=ap.id AND ae.user_id=?) AS is_appeal_elector,
+                (SELECT COUNT(*) FROM community_law_appeal_assessments mine
+                 WHERE mine.appeal_id=ap.id AND mine.reviewer_user_id=?) AS has_appeal_assessed
+         FROM community_law_appeals ap
+         JOIN community_law_versions v ON v.id=ap.law_version_id
+         JOIN community_laws l ON l.id=v.law_id
+         ORDER BY ap.created_at DESC LIMIT 200"
+    );
+    if ($appeal_stmt) {
+        $appeal_stmt->bind_param('ii', $user_id, $user_id);
+        if ($appeal_stmt->execute()) {
+            $appeal_result = $appeal_stmt->get_result();
+            while ($appeal_row = $appeal_result->fetch_assoc()) {
+                if (
+                    (int)$appeal_row['community_id'] === $community_id ||
+                    community_law_scope_matches($conn, (int)$appeal_row['law_version_id'], $community_id)
+                ) $appeals_by_version[(int)$appeal_row['law_version_id']][] = $appeal_row;
+            }
+        }
+        $appeal_stmt->close();
+    }
+
+
+    $passed_final_stmt = $conn->prepare(
+        "SELECT l.id AS law_id, l.law_code, v.id AS version_id, v.title,
+                fr.final_status
+         FROM community_laws l
+         JOIN community_law_versions v ON v.id=l.current_version_id
+         JOIN community_law_final_results fr ON fr.law_version_id=v.id
+         LEFT JOIN community_law_final_review_cases fc ON fc.law_version_id=v.id
+         WHERE l.originating_community_id=? AND l.status='voting'
+           AND v.status='voting' AND fr.final_status='vote_passed'
+           AND fc.law_version_id IS NULL
+         ORDER BY v.created_at DESC LIMIT 30"
+    );
+    if ($passed_final_stmt) {
+        $passed_final_stmt->bind_param('i', $community_id);
+        if ($passed_final_stmt->execute()) {
+            $passed_final_result = $passed_final_stmt->get_result();
+            while ($row = $passed_final_result->fetch_assoc()) $passed_laws_pending_final_review[] = $row;
+        }
+        $passed_final_stmt->close();
+    }
+
+    $final_review_stmt = $conn->prepare(
+        "SELECT l.id AS law_id, l.law_code, l.originating_community_id,
+                l.status AS law_status, v.id AS version_id, v.title,
+                v.status AS version_status, fc.status AS final_status,
+                fc.reviewer_quorum, fc.appeal_period_days, fc.appeal_deadline,
+                (SELECT COUNT(*) FROM community_law_final_review_assessments a
+                 WHERE a.law_version_id=v.id) AS assessment_count,
+                (SELECT COUNT(*) FROM community_law_final_review_electorate e
+                 WHERE e.law_version_id=v.id AND e.user_id=?) AS is_final_elector,
+                (SELECT COUNT(*) FROM community_law_final_review_assessments a
+                 WHERE a.law_version_id=v.id AND a.reviewer_user_id=?) AS has_final_assessed,
+                (SELECT COUNT(*) FROM community_law_appeals ap
+                 WHERE ap.law_version_id=v.id) AS appeal_count,
+                (SELECT COUNT(*) FROM community_law_appeals ap
+                 WHERE ap.law_version_id=v.id AND ap.status IN ('submitted','under_review')) AS unresolved_appeals,
+                (SELECT COUNT(*) FROM community_law_appeals ap
+                 WHERE ap.law_version_id=v.id AND ap.status='upheld') AS upheld_appeals
+         FROM community_law_final_review_cases fc
+         JOIN community_law_versions v ON v.id=fc.law_version_id
+         JOIN community_laws l ON l.id=v.law_id
+         WHERE l.current_version_id=v.id
+           AND fc.status IN ('pending','review_clear','conflict_found','needs_revision','appeal_period','appeal_hold','ready_for_enactment')
+         ORDER BY fc.opened_at DESC LIMIT 100"
+    );
+    if ($final_review_stmt) {
+        $final_review_stmt->bind_param('ii', $user_id, $user_id);
+        if ($final_review_stmt->execute()) {
+            $final_review_result = $final_review_stmt->get_result();
+            while ($row = $final_review_result->fetch_assoc()) {
+                if (
+                    (int)$row['originating_community_id'] === $community_id ||
+                    community_law_scope_matches($conn, (int)$row['version_id'], $community_id)
+                ) $final_review_laws[] = $row;
+            }
+        }
+        $final_review_stmt->close();
+    }
+
+    $appeal_stmt = $conn->prepare(
+        "SELECT ap.id AS appeal_id, ap.law_version_id, ap.community_id,
+                ap.submitted_by, ap.appeal_type, ap.description, ap.evidence,
+                ap.status AS appeal_status, ap.created_at, ap.reviewer_quorum,
+                v.title, l.law_code, l.id AS law_id,
+                (SELECT COUNT(*) FROM community_law_appeal_assessments aa
+                 WHERE aa.appeal_id=ap.id) AS assessment_count,
+                (SELECT COUNT(*) FROM community_law_appeal_electorate ae
+                 WHERE ae.appeal_id=ap.id AND ae.user_id=?) AS is_appeal_elector,
+                (SELECT COUNT(*) FROM community_law_appeal_assessments mine
+                 WHERE mine.appeal_id=ap.id AND mine.reviewer_user_id=?) AS has_appeal_assessed
+         FROM community_law_appeals ap
+         JOIN community_law_versions v ON v.id=ap.law_version_id
+         JOIN community_laws l ON l.id=v.law_id
+         ORDER BY ap.created_at DESC LIMIT 200"
+    );
+    if ($appeal_stmt) {
+        $appeal_stmt->bind_param('ii', $user_id, $user_id);
+        if ($appeal_stmt->execute()) {
+            $appeal_result = $appeal_stmt->get_result();
+            while ($appeal_row = $appeal_result->fetch_assoc()) {
+                if (
+                    (int)$appeal_row['community_id'] === $community_id ||
+                    community_law_scope_matches($conn, (int)$appeal_row['law_version_id'], $community_id)
+                ) $appeals_by_version[(int)$appeal_row['law_version_id']][] = $appeal_row;
+            }
+        }
+        $appeal_stmt->close();
+    }
+
     $objection_stmt = $conn->prepare(
         "SELECT o.id, o.objection_type, o.status, o.description, o.created_at,
                 v.title, l.law_code
@@ -2572,6 +2755,42 @@ $status_messages = [
     'authority_assessment_not_allowed' => 'شما برای این ارزیابی واجد شرایط نیستید یا مرحله بررسی بسته شده است.',
     'invalid_authority_assessment' => 'اطلاعات ارزیابی صلاحیت یا تعارض قوانین معتبر نیست.',
     'invalid_law_scope' => 'ساختار سلسله‌مراتب جوامع یا دامنه شمول معتبر نیست؛ بررسی صلاحیت متوقف شد.',
+    'final_review_opened' => 'بررسی نهایی مستقل آغاز شد؛ ارزیابان این مرحله از ارزیابان قبلی جدا هستند.',
+    'final_review_not_ready' => 'نتیجه رأی‌گیری مثبت و وضعیت قانون برای آغاز بررسی نهایی آماده نیست.',
+    'final_review_already_open' => 'پرونده بررسی نهایی این نسخه قبلاً ایجاد شده است.',
+    'insufficient_final_reviewers' => 'برای بررسی نهایی دست‌کم سه ارزیاب مستقلِ جدید لازم است؛ فعلاً تعداد کافی وجود ندارد.',
+    'reference_law_changed' => 'یکی از قوانین مرجع از زمان بررسی قبلی تغییر کرده یا دیگر معتبر نیست؛ ابلاغ متوقف شد و بازبینی صلاحیت لازم است.',
+    'final_assessment_saved' => 'ارزیابی نهایی مستقل ثبت شد.',
+    'final_assessment_not_allowed' => 'شما برای این ارزیابی نهایی واجد شرایط نیستید یا مرحله بررسی بسته شده است.',
+    'invalid_final_assessment' => 'اطلاعات ارزیابی نهایی معتبر نیست.',
+    'appeal_saved' => 'اعتراض ثبت شد؛ تا پایان رسیدگی، ابلاغ قانون متوقف می‌ماند.',
+    'appeal_period_closed' => 'مهلت اعتراض به پایان رسیده یا این مرحله باز نیست.',
+    'insufficient_appeal_reviewers' => 'برای رسیدگی مستقل به این اعتراض، دست‌کم سه ارزیاب واجد شرایط لازم است.',
+    'invalid_appeal' => 'اطلاعات اعتراض معتبر نیست.',
+    'appeal_assessment_saved' => 'ارزیابی اعتراض ثبت شد.',
+    'appeal_assessment_not_allowed' => 'شما برای رسیدگی به این اعتراض واجد شرایط نیستید یا رسیدگی بسته شده است.',
+    'invalid_appeal_assessment' => 'اطلاعات ارزیابی اعتراض معتبر نیست.',
+    'enactment_not_ready' => 'مهلت اعتراض هنوز پایان نیافته یا شرایط ابلاغ قانون کامل نیست.',
+    'enactment_appeals_pending' => 'تا تعیین تکلیف همه اعتراض‌ها، قانون قابل ابلاغ نیست.',
+    'law_enacted' => 'پس از تکمیل بررسی نهایی و مهلت اعتراض، قانون رسماً ابلاغ و لازم‌الاجرا شد.',
+    'final_review_opened' => 'بررسی نهایی مستقل آغاز شد؛ ارزیابان این مرحله از ارزیابان قبلی جدا هستند.',
+    'final_review_not_ready' => 'نتیجه رأی‌گیری مثبت و وضعیت قانون برای آغاز بررسی نهایی آماده نیست.',
+    'final_review_already_open' => 'پرونده بررسی نهایی این نسخه قبلاً ایجاد شده است.',
+    'insufficient_final_reviewers' => 'برای بررسی نهایی دست‌کم سه ارزیاب مستقلِ جدید لازم است؛ فعلاً تعداد کافی وجود ندارد.',
+    'reference_law_changed' => 'یکی از قوانین مرجع از زمان بررسی قبلی تغییر کرده یا دیگر معتبر نیست؛ ابلاغ متوقف شد و بازبینی صلاحیت لازم است.',
+    'final_assessment_saved' => 'ارزیابی نهایی مستقل ثبت شد.',
+    'final_assessment_not_allowed' => 'شما برای این ارزیابی نهایی واجد شرایط نیستید یا مرحله بررسی بسته شده است.',
+    'invalid_final_assessment' => 'اطلاعات ارزیابی نهایی معتبر نیست.',
+    'appeal_saved' => 'اعتراض ثبت شد؛ تا پایان رسیدگی، ابلاغ قانون متوقف می‌ماند.',
+    'appeal_period_closed' => 'مهلت اعتراض به پایان رسیده یا این مرحله باز نیست.',
+    'insufficient_appeal_reviewers' => 'برای رسیدگی مستقل به این اعتراض، دست‌کم سه ارزیاب واجد شرایط لازم است.',
+    'invalid_appeal' => 'اطلاعات اعتراض معتبر نیست.',
+    'appeal_assessment_saved' => 'ارزیابی اعتراض ثبت شد.',
+    'appeal_assessment_not_allowed' => 'شما برای رسیدگی به این اعتراض واجد شرایط نیستید یا رسیدگی بسته شده است.',
+    'invalid_appeal_assessment' => 'اطلاعات ارزیابی اعتراض معتبر نیست.',
+    'enactment_not_ready' => 'مهلت اعتراض هنوز پایان نیافته یا شرایط ابلاغ قانون کامل نیست.',
+    'enactment_appeals_pending' => 'تا تعیین تکلیف همه اعتراض‌ها، قانون قابل ابلاغ نیست.',
+    'law_enacted' => 'پس از تکمیل بررسی نهایی و مهلت اعتراض، قانون رسماً ابلاغ و لازم‌الاجرا شد.',
     'tally_saved' => 'نتیجه مرکب رأی‌گیری طبق قواعد تأییدشده ثبت شد؛ لازم‌الاجرا شدن قانون مرحله جداگانه‌ای است.',
     'tally_already_done' => 'نتیجه این رأی‌گیری قبلاً محاسبه شده است.',
     'tally_not_ready' => 'مهلت رأی‌گیری هنوز پایان نیافته یا وضعیت پیشنهاد برای شمارش نهایی معتبر نیست.',
@@ -2761,6 +2980,181 @@ details>summary{cursor:pointer;font-weight:bold}
                     </tbody>
                 </table>
                 <p class="muted">نتیجه رأی‌گیری با ترکیب مسیرهای الزامی و حدنصاب‌های تأییدشده محاسبه شده است. حتی در صورت عبور از رأی‌گیری، قانون تا بررسی صلاحیت و تعارض احتمالی با منشور بنیادین، رسیدگی به اعتراض‌های معتبر و ابلاغ رسمی لازم‌الاجرا نمی‌شود.</p>
+            </div>
+        <?php endforeach; ?>
+    <?php endif; ?>
+</div>
+
+
+<div class="card">
+    <h3>پیشنهادهای دارای رأی مثبت؛ در انتظار بررسی نهایی</h3>
+    <?php if (!$passed_laws_pending_final_review): ?>
+        <p class="muted">پیشنهادی با رأی مثبت که هنوز پرونده بررسی نهایی آن آغاز نشده باشد وجود ندارد.</p>
+    <?php else: ?>
+        <?php foreach ($passed_laws_pending_final_review as $passed_law): ?>
+            <div class="notice">
+                <strong><?= community_laws_escape($passed_law['title']) ?></strong>
+                <div class="meta"><?= community_laws_escape($passed_law['law_code']) ?> — رأی مثبت ثبت شده؛ هنوز قانون نیست و الزام‌آور نیست.</div>
+                <form method="post">
+                    <input type="hidden" name="csrf_token" value="<?= community_laws_escape($csrf_token) ?>">
+                    <input type="hidden" name="law_id" value="<?= (int)$passed_law['law_id'] ?>">
+                    <input type="hidden" name="version_id" value="<?= (int)$passed_law['version_id'] ?>">
+                    <button type="submit" name="open_law_final_review" value="1">آغاز بررسی نهایی مستقل</button>
+                </form>
+            </div>
+        <?php endforeach; ?>
+    <?php endif; ?>
+</div>
+
+<div class="card">
+    <h3>بررسی نهایی، اعتراض‌ها و ابلاغ قوانین</h3>
+    <?php if (!$final_review_laws): ?>
+        <p class="muted">پرونده‌ای در این مرحله وجود ندارد.</p>
+    <?php else: ?>
+        <?php foreach ($final_review_laws as $final_law): ?>
+            <?php
+            $final_status_labels = [
+                'pending' => 'در انتظار ارزیابی نهایی مستقل',
+                'review_clear' => 'بررسی نهایی بدون مانع تکمیل شده',
+                'conflict_found' => 'تعارض یا آسیب جدی شناسایی شده؛ ابلاغ متوقف است',
+                'needs_revision' => 'ابهام یا نیاز به بازنگری وجود دارد',
+                'appeal_period' => 'در مهلت ثبت اعتراض',
+                'appeal_hold' => 'در انتظار رسیدگی به اعتراض',
+                'ready_for_enactment' => 'آماده ابلاغ پس از کنترل نهایی',
+                'enacted' => 'ابلاغ و لازم‌الاجرا شده'
+            ];
+            ?>
+            <div class="notice">
+                <strong><?= community_laws_escape($final_law['title']) ?></strong>
+                <div class="meta"><?= community_laws_escape($final_law['law_code']) ?> — <?= community_laws_escape($final_status_labels[$final_law['final_status']] ?? $final_law['final_status']) ?></div>
+                <?php if ($final_law['final_status'] === 'pending'): ?>
+                    <p>ارزیابی‌های ثبت‌شده: <?= (int)$final_law['assessment_count'] ?> از <?= (int)$final_law['reviewer_quorum'] ?> ارزیاب مستقل.</p>
+                    <p class="muted">ارزیابان این مرحله با ارزیابان غربالگری و صلاحیت قبلی متفاوت‌اند. همه ابعاد حقوقی، اجتماعی، زیست‌محیطی و بلندمدت باید بررسی شوند.</p>
+                    <?php if (
+                        $is_member && (int)$final_law['is_final_elector'] === 1 &&
+                        (int)$final_law['has_final_assessed'] === 0
+                    ): ?>
+                    <details>
+                        <summary>ثبت ارزیابی نهایی مستقل</summary>
+                        <form method="post">
+                            <input type="hidden" name="csrf_token" value="<?= community_laws_escape($csrf_token) ?>">
+                            <input type="hidden" name="law_version_id" value="<?= (int)$final_law['version_id'] ?>">
+                            <label>جمع‌بندی ارزیابی</label>
+                            <select name="final_verdict" required>
+                                <option value="">انتخاب کنید</option>
+                                <option value="confirm">قابل تأیید است</option>
+                                <option value="dispute">تعارض یا آسیب جدی دارد</option>
+                                <option value="unclear">اطلاعات کافی نیست</option>
+                            </select>
+                            <?php
+                            $final_dimensions = [
+                                'charter_and_rights' => 'سازگاری با اصول بنیادین و حقوق',
+                                'non_discrimination' => 'برابری و نبود تبعیض',
+                                'power_concentration' => 'پیشگیری از تمرکز و سوءاستفاده از قدرت',
+                                'human_and_social_impact' => 'پیامدهای انسانی و اجتماعی',
+                                'environmental_impact' => 'پیامدهای زیست‌محیطی',
+                                'economic_and_resource_impact' => 'عدالت اقتصادی و استفاده پایدار از منابع',
+                                'future_generations_and_other_life' => 'حقوق نسل‌های آینده و سایر جانداران',
+                                'implementation_and_accountability' => 'امکان اجرا، شفافیت و پاسخ‌گویی'
+                            ];
+                            foreach ($final_dimensions as $field => $label):
+                            ?>
+                                <label><?= community_laws_escape($label) ?></label>
+                                <select name="<?= community_laws_escape($field) ?>" required>
+                                    <option value="">انتخاب ارزیابی</option>
+                                    <option value="pass">قابل قبول</option>
+                                    <option value="conflict">تعارض یا آسیب جدی</option>
+                                    <option value="unclear">نامشخص؛ شواهد کافی نیست</option>
+                                </select>
+                            <?php endforeach; ?>
+                            <label>استدلال و دلایل (الزامی)</label>
+                            <textarea name="final_reasoning" maxlength="30000" required></textarea>
+                            <label>شواهد و منابع (اختیاری)</label>
+                            <textarea name="final_evidence" maxlength="30000"></textarea>
+                            <button type="submit" name="submit_law_final_assessment" value="1">ثبت ارزیابی نهایی</button>
+                        </form>
+                    </details>
+                    <?php endif; ?>
+                <?php elseif ($final_law['final_status'] === 'appeal_period'): ?>
+                    <p>مهلت اعتراض تا: <?= community_laws_escape($final_law['appeal_deadline']) ?></p>
+                    <p class="muted">قانون هنوز لازم‌الاجرا نیست. ثبت اعتراض در مهلت مقرر، ابلاغ را تا پایان رسیدگی متوقف می‌کند.</p>
+                    <?php if ($is_member && !empty($final_law['appeal_deadline']) && strtotime($final_law['appeal_deadline']) >= time()): ?>
+                    <details>
+                        <summary>ثبت اعتراض مستدل</summary>
+                        <form method="post">
+                            <input type="hidden" name="csrf_token" value="<?= community_laws_escape($csrf_token) ?>">
+                            <input type="hidden" name="law_version_id" value="<?= (int)$final_law['version_id'] ?>">
+                            <label>موضوع اعتراض</label>
+                            <select name="appeal_type" required>
+                                <option value="charter_conflict">تعارض با اصول بنیادین</option>
+                                <option value="jurisdiction_conflict">خروج از حدود صلاحیت</option>
+                                <option value="rights_violation">تضییع حقوق</option>
+                                <option value="discrimination">تبعیض</option>
+                                <option value="power_concentration">تمرکز قدرت</option>
+                                <option value="environmental_harm">آسیب زیست‌محیطی</option>
+                                <option value="future_generations">آسیب به نسل‌های آینده یا سایر جانداران</option>
+                                <option value="implementation_risk">خطر یا مانع اجرایی</option>
+                                <option value="new_evidence">شواهد تازه</option>
+                                <option value="other">سایر موارد</option>
+                            </select>
+                            <label>شرح و استدلال (الزامی)</label>
+                            <textarea name="appeal_description" maxlength="30000" required></textarea>
+                            <label>شواهد و منابع (اختیاری)</label>
+                            <textarea name="appeal_evidence" maxlength="30000"></textarea>
+                            <button type="submit" name="submit_law_appeal" value="1">ثبت اعتراض و درخواست رسیدگی</button>
+                        </form>
+                    </details>
+                    <?php endif; ?>
+                <?php endif; ?>
+
+                <?php if (!empty($appeals_by_version[(int)$final_law['version_id']])): ?>
+                    <details>
+                        <summary>مشاهده اعتراض‌ها و رسیدگی‌ها (<?= count($appeals_by_version[(int)$final_law['version_id']]) ?>)</summary>
+                        <?php foreach ($appeals_by_version[(int)$final_law['version_id']] as $appeal): ?>
+                            <div class="notice">
+                                <div class="meta">اعتراض #<?= (int)$appeal['appeal_id'] ?> — وضعیت: <?= community_laws_escape($appeal['appeal_status']) ?> — ارزیابی‌ها: <?= (int)$appeal['assessment_count'] ?> از <?= (int)$appeal['reviewer_quorum'] ?></div>
+                                <p><?= nl2br(community_laws_escape($appeal['description'])) ?></p>
+                                <?php if (!empty($appeal['evidence'])): ?><p class="muted">شواهد: <?= nl2br(community_laws_escape($appeal['evidence'])) ?></p><?php endif; ?>
+                                <?php if (
+                                    $is_member &&
+                                    in_array($appeal['appeal_status'], ['submitted','under_review'], true) &&
+                                    (int)$appeal['is_appeal_elector'] === 1 &&
+                                    (int)$appeal['has_appeal_assessed'] === 0
+                                ): ?>
+                                <form method="post">
+                                    <input type="hidden" name="csrf_token" value="<?= community_laws_escape($csrf_token) ?>">
+                                    <input type="hidden" name="appeal_id" value="<?= (int)$appeal['appeal_id'] ?>">
+                                    <label>نتیجه بررسی اعتراض</label>
+                                    <select name="appeal_verdict" required>
+                                        <option value="">انتخاب کنید</option>
+                                        <option value="uphold">اعتراض وارد است</option>
+                                        <option value="dismiss">اعتراض وارد نیست</option>
+                                        <option value="unclear">برای تصمیم قطعی شواهد کافی نیست</option>
+                                    </select>
+                                    <label>استدلال و دلیل تصمیم (الزامی)</label>
+                                    <textarea name="appeal_reasoning" maxlength="30000" required></textarea>
+                                    <label>شواهد تکمیلی (اختیاری)</label>
+                                    <textarea name="appeal_review_evidence" maxlength="30000"></textarea>
+                                    <button type="submit" name="submit_law_appeal_assessment" value="1">ثبت ارزیابی اعتراض</button>
+                                </form>
+                                <?php endif; ?>
+                            </div>
+                        <?php endforeach; ?>
+                    </details>
+                <?php endif; ?>
+
+                <?php if (
+                    $is_member && (int)$final_law['originating_community_id'] === $community_id &&
+                    $final_law['final_status'] === 'appeal_period' &&
+                    !empty($final_law['appeal_deadline']) && strtotime($final_law['appeal_deadline']) <= time() &&
+                    (int)$final_law['unresolved_appeals'] === 0 && (int)$final_law['upheld_appeals'] === 0
+                ): ?>
+                    <form method="post">
+                        <input type="hidden" name="csrf_token" value="<?= community_laws_escape($csrf_token) ?>">
+                        <input type="hidden" name="law_version_id" value="<?= (int)$final_law['version_id'] ?>">
+                        <button type="submit" name="enact_law" value="1">کنترل نهایی و ابلاغ قانون</button>
+                    </form>
+                <?php endif; ?>
             </div>
         <?php endforeach; ?>
     <?php endif; ?>
