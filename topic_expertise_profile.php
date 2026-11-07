@@ -3,6 +3,19 @@ session_start();
 require __DIR__ . '/db.php';
 if (!isset($_SESSION['user_id'])) { header('Location: login.php'); exit; }
 $user_id = (int)$_SESSION['user_id'];
+$profile_schema_check = $conn->query(
+    "SELECT COUNT(*) AS total FROM information_schema.tables
+     WHERE table_schema=DATABASE()
+       AND table_name IN (
+         'topic_expertise_profiles',
+         'topic_expertise_profile_domains',
+         'topic_expertise_profile_votes',
+         'topic_expertise_profile_electorate'
+       )"
+);
+$profile_schema_ready = $profile_schema_check
+    && (int)$profile_schema_check->fetch_assoc()['total'] === 4;
+if ($profile_schema_check) $profile_schema_check->free();
 if (empty($_SESSION['community_duty_csrf'])) $_SESSION['community_duty_csrf'] = bin2hex(random_bytes(32));
 $csrf = $_SESSION['community_duty_csrf'];
 
@@ -33,11 +46,11 @@ foreach ($topics as $topic) if ((int)$topic['id'] === $topic_id) $topic_exists =
 if (!$topic_exists) $topic_id = 0;
 
 $domains = [];
-$result = $conn->query("SELECT id,name FROM expertise_domains WHERE status='approved' ORDER BY name");
+$result = $profile_schema_ready ? $conn->query("SELECT id,name FROM expertise_domains WHERE status='approved' ORDER BY name") : false;
 if ($result) $domains = $result->fetch_all(MYSQLI_ASSOC);
 
 $profiles = [];
-if ($topic_id > 0) {
+if ($topic_id > 0 && $profile_schema_ready) {
     $stmt = $conn->prepare('SELECT p.*,u.username AS proposer_name FROM topic_expertise_profiles p LEFT JOIN users u ON u.id=p.proposed_by WHERE p.topic_id=? ORDER BY p.version_number DESC LIMIT 12');
     $stmt->bind_param('i', $topic_id);
     $stmt->execute();
@@ -86,7 +99,9 @@ select,input{width:100%;margin:4px 0 10px}button{background:#e5f0ff;cursor:point
 </form>
 </section>
 
-<?php if ($topic_id > 0): ?>
+<?php if (!$profile_schema_ready): ?>
+<section class="panel"><strong>زیرساخت پروفایل تخصصی هنوز نصب نشده است.</strong><p>ابتدا migration مربوط به پروفایل چندحوزه‌ای تخصصی باید در پایگاه داده اجرا شود. این صفحه تا آن زمان تغییری در اطلاعات ایجاد نمی‌کند.</p></section>
+<?php elseif ($topic_id > 0): ?>
 <?php
 $has_pending = false;
 foreach ($profiles as $p) if ($p['status']==='pending') $has_pending = true;
