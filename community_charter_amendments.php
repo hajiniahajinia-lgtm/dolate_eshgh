@@ -355,10 +355,16 @@ if($assigned_appeal){$q=$conn->prepare("SELECT 1 FROM community_charter_amendmen
    function sync(){
      const isAdd=action.value==='add', isRemove=action.value==='remove';
      // همه آرایه‌ها باید هم‌اندازه به سرور برسند؛ فیلدهای غیرمرتبط خالی می‌مانند، نه disabled.
+     const codeInput=row.querySelector('[name="article_code[]"]');
      if(!isAdd && target.value){
        const opt=target.options[target.selectedIndex];
-       row.querySelector('[name="article_code[]"]').value=opt.dataset.code||'';
-     } else if(isAdd){target.value='';}
+       codeInput.value=opt.dataset.code||'';
+       codeInput.dataset.autoFilled='1';
+     } else if(isAdd){
+       target.value='';
+       if(codeInput.dataset.autoFilled==='1')codeInput.value='';
+       codeInput.dataset.autoFilled='0';
+     }
    }
    action.addEventListener('change',sync);target.addEventListener('change',sync);
    row.querySelector('.remove-item').addEventListener('click',function(){
