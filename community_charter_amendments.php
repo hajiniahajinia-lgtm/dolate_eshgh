@@ -266,6 +266,46 @@ $item_result=$item_stmt->get_result();
 <?php endwhile; ?>
 </div>
 <?php endif; $item_stmt->close(); endif; ?>
+<?php
+if (!in_array($a['status'], ['draft','independent_review'], true)) {
+    $review_stats = $conn->prepare(
+        "SELECT COUNT(*) AS total,SUM(verdict='supports') AS supports,
+                SUM(verdict='conflict') AS conflicts,SUM(verdict='unclear') AS unclear
+         FROM community_charter_amendment_assessments WHERE amendment_id=?"
+    );
+    if ($review_stats) {
+        $review_stats->bind_param('i',$aid);
+        if($review_stats->execute()) {
+            $rs=$review_stats->get_result()->fetch_assoc();
+            echo '<p class="notice"><strong>نتیجه بررسی مستقل:</strong> '.
+                (int)$rs['total'].' ارزیابی؛ حمایت: '.(int)$rs['supports'].
+                '، تعارض: '.(int)$rs['conflicts'].'، نامشخص: '.(int)$rs['unclear'].'</p>';
+        }
+        $review_stats->close();
+    }
+}
+if (!in_array($a['status'], ['draft','independent_review','public_voting'], true)) {
+    $vote_stats = $conn->prepare(
+        "SELECT
+            (SELECT COUNT(*) FROM community_charter_amendment_electorate WHERE amendment_id=?) AS electorate,
+            SUM(vote='yes') AS yes_count,SUM(vote='no') AS no_count,
+            SUM(vote='abstain') AS abstain_count
+         FROM community_charter_amendment_votes WHERE amendment_id=?"
+    );
+    if ($vote_stats) {
+        $vote_stats->bind_param('ii',$aid,$aid);
+        if($vote_stats->execute()) {
+            $vs=$vote_stats->get_result()->fetch_assoc();
+            $cast=(int)$vs['yes_count']+(int)$vs['no_count']+(int)$vs['abstain_count'];
+            echo '<p class="notice"><strong>نتیجه رأی مستقیم:</strong> '.
+                $cast.' از '.(int)$vs['electorate'].' نفر مشارکت کردند؛ موافق: '.
+                (int)$vs['yes_count'].'، مخالف: '.(int)$vs['no_count'].
+                '، ممتنع: '.(int)$vs['abstain_count'].'</p>';
+        }
+        $vote_stats->close();
+    }
+}
+?>
 <?php if ($a['status']==='draft' && (int)$a['proposer_user_id']===$user_id): ?>
 <form method="post" action="community_charter_amendment_action.php">
 <input type="hidden" name="csrf_token" value="<?= cam_page_h($csrf) ?>"><input type="hidden" name="action" value="submit_for_review"><input type="hidden" name="amendment_id" value="<?= $aid ?>">
