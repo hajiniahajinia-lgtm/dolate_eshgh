@@ -85,3 +85,14 @@ CREATE TABLE IF NOT EXISTS community_law_expertise_weight_details (
     UNIQUE KEY uq_law_expertise_weight_detail (law_version_id, user_id, domain_id),
     KEY idx_law_expertise_weight_detail_competency (competency_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- snapshot اعضای واجد رأی هنگام ثبت هر پیشنهاد؛ اعضای جدید بعداً وارد پنل نمی‌شوند.
+CREATE TABLE IF NOT EXISTS topic_expertise_profile_electorate (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    profile_id BIGINT UNSIGNED NOT NULL,
+    user_id INT NOT NULL,
+    captured_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_topic_expertise_profile_elector (profile_id, user_id),
+    KEY idx_topic_expertise_profile_elector_user (user_id, profile_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
