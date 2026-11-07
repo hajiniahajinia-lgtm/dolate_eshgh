@@ -106,6 +106,24 @@ try {
         $profile_id = (int)$profile->insert_id;
         $profile->close();
 
+        $electorate = $conn->prepare(
+            'INSERT INTO topic_expertise_profile_electorate (profile_id,user_id)
+             SELECT ?, cm.user_id FROM community_members cm
+             WHERE cm.community_id=? AND cm.user_id<>?'
+        );
+        if (!$electorate) throw new RuntimeException('ثبت فهرست رأی‌دهندگان ممکن نیست.');
+        $electorate->bind_param('iii', $profile_id, $community_id, $user_id);
+        if (!$electorate->execute()) throw new RuntimeException('ثبت فهرست رأی‌دهندگان انجام نشد.');
+        $electorate->close();
+
+        $electorate_count_stmt = $conn->prepare('SELECT COUNT(*) AS total FROM topic_expertise_profile_electorate WHERE profile_id=?');
+        if (!$electorate_count_stmt) throw new RuntimeException('بررسی تعداد رأی‌دهندگان ممکن نیست.');
+        $electorate_count_stmt->bind_param('i', $profile_id);
+        if (!$electorate_count_stmt->execute()) throw new RuntimeException('بررسی تعداد رأی‌دهندگان انجام نشد.');
+        $eligible_count = (int)$electorate_count_stmt->get_result()->fetch_assoc()['total'];
+        $electorate_count_stmt->close();
+        if ($eligible_count < 3) throw new RuntimeException('برای رأی‌گیری مستقل، دست‌کم سه عضو دیگر غیر از پیشنهاددهنده لازم است.');
+
         $domain_insert = $conn->prepare('INSERT INTO topic_expertise_profile_domains (profile_id,domain_id,share_percent) VALUES (?,?,?)');
         if (!$domain_insert) throw new RuntimeException('ثبت سهم حوزه‌ها ممکن نیست.');
         foreach ($profile_domains as $domain_id => $share) {
@@ -134,6 +152,14 @@ try {
         if (!$profile || $profile['status'] !== 'pending' || strtotime($profile['expires_at']) <= time()) {
             throw new RuntimeException('مهلت رأی‌گیری پایان یافته یا پروفایل بسته است.');
         }
+        $eligible = $conn->prepare('SELECT 1 FROM topic_expertise_profile_electorate WHERE profile_id=? AND user_id=? LIMIT 1');
+        if (!$eligible) throw new RuntimeException('بررسی صلاحیت رأی‌دهنده ممکن نیست.');
+        $eligible->bind_param('ii', $profile_id, $user_id);
+        if (!$eligible->execute()) throw new RuntimeException('بررسی صلاحیت رأی‌دهنده انجام نشد.');
+        $is_eligible = (bool)$eligible->get_result()->fetch_row();
+        $eligible->close();
+        if (!$is_eligible) throw new RuntimeException('شما در فهرست رأی‌دهندگان این پیشنهاد قرار ندارید.');
+
         $save = $conn->prepare('INSERT INTO topic_expertise_profile_votes (profile_id,user_id,vote) VALUES (?,?,?) ON DUPLICATE KEY UPDATE vote=VALUES(vote),updated_at=CURRENT_TIMESTAMP');
         if (!$save) throw new RuntimeException('ثبت رأی ممکن نیست.');
         $save->bind_param('iis', $profile_id, $user_id, $vote);
