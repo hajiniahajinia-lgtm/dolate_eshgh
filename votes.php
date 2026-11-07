@@ -245,6 +245,30 @@ if($_SERVER['REQUEST_METHOD'] === 'POST'){
             }
         }
 
+        // وزن تخصصی هر فرد در هر موضوع فقط یک‌بار ثبت می‌شود؛ رأی به ایده‌های دیگر
+        // و تغییر بعدی شایستگی، وزن او را در همان موضوع تغییر نمی‌دهد.
+        $weight_snapshot_insert = $conn->prepare(
+            "INSERT IGNORE INTO topic_expertise_voter_weight_snapshots
+                (topic_id,user_id,vote_weight)
+             VALUES (?,?,?)"
+        );
+        if(!$weight_snapshot_insert) throw new RuntimeException("ثبت snapshot وزن رأی ممکن نیست.");
+        $weight_snapshot_insert->bind_param("iid",$topic_id,$user_id,$weight);
+        if(!$weight_snapshot_insert->execute()) throw new RuntimeException("ثبت snapshot وزن رأی انجام نشد.");
+        $weight_snapshot_insert->close();
+
+        $weight_snapshot_read = $conn->prepare(
+            "SELECT vote_weight FROM topic_expertise_voter_weight_snapshots
+             WHERE topic_id=? AND user_id=? LIMIT 1"
+        );
+        if(!$weight_snapshot_read) throw new RuntimeException("خواندن snapshot وزن رأی ممکن نیست.");
+        $weight_snapshot_read->bind_param("ii",$topic_id,$user_id);
+        if(!$weight_snapshot_read->execute()) throw new RuntimeException("خواندن snapshot وزن رأی انجام نشد.");
+        $weight_snapshot_row=$weight_snapshot_read->get_result()->fetch_assoc();
+        $weight_snapshot_read->close();
+        if(!$weight_snapshot_row) throw new RuntimeException("snapshot وزن رأی برای این موضوع پیدا نشد.");
+        $weight=min(3.00,max(1.00,(float)$weight_snapshot_row['vote_weight']));
+
         $stmt = $conn->prepare("
             INSERT INTO topic_voting_ballots (topic_id, idea_id, user_id, vote_type, vote_weight)
             VALUES (?,?,?,?,?)
