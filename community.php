@@ -164,6 +164,7 @@ textarea{resize:vertical;}
 .final-voting-toggle{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;min-height:42px;background:#4A82DA;color:#fff;border-radius:9px;padding:10px 14px;font-weight:bold;text-align:center;}
 .archive-topics-toggle{background:#2065d1;color:#fff;border-radius:8px;padding:12px 14px;font-weight:bold;}
 .finance-bank-toggle{display:block;width:100%;background:#147d64;color:#fff;border-radius:8px;padding:12px 14px;font-weight:bold;margin:8px 0 12px;}
+.community-laws-toggle{display:block;width:100%;background:#5b4b9a;color:#fff;border-radius:8px;padding:12px 14px;font-weight:bold;margin:8px 0 12px;text-align:center;box-sizing:border-box;}
 .final-voting-toggle{margin:0 0 16px;}
 .final-voting-toggle>summary{display:block;list-style:none;background:#4A82DA;color:#fff;cursor:pointer;border-radius:9px;padding:10px 14px;text-align:center;font-weight:bold;}
 .final-voting-toggle>summary::-webkit-details-marker{display:none;}
@@ -695,6 +696,7 @@ document.addEventListener('DOMContentLoaded', function () {
   </div>
   <div class="community-mobile-actions" id="communityMobileActions" aria-label="دسترسی‌های جامعه"></div>
   <a class="finance-bank-toggle" id="finance-bank-toggle" href="finance.php?community_id=<?= (int)$community_id ?>">🏦 بانک مالی و اموال جامعه</a>
+  <a class="community-laws-toggle" href="community_laws.php?community_id=<?= (int)$community_id ?>">⚖️ قوانین جامعه و قوانین بالادستی</a>
   <div style="margin:0 0 12px;text-align:right;">
     <a href="profile.php" style="display:inline-block;background:#2065d1;color:#fff;text-decoration:none;padding:9px 14px;border-radius:8px;font-weight:bold;font-size:14px;">↩ بازگشت به پروفایل</a>
   </div>
