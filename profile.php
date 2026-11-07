@@ -370,6 +370,7 @@ if ($hierarchy_votes_ready) {
         $uv->close();
     }
 }
+?>
 <?php if (!$hierarchy_votes_ready): ?>
 <p style="font-size:13px;line-height:1.9;color:#b42318;">ساختار دورهای رأی‌گیری هنوز در پایگاه داده نصب نشده است. پس از اجرای migration مربوط به رأی‌گیری جایگاه جوامع، این بخش فعال می‌شود.</p>
 <?php elseif (empty($hierarchy_communities)): ?>
