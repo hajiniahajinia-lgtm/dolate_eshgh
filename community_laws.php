@@ -71,7 +71,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $source_idea_id = (int)($_POST['source_idea_id'] ?? 0);
         $source_topic_id = $source_topic_id > 0 ? $source_topic_id : null;
         $source_idea_id = $source_idea_id > 0 ? $source_idea_id : null;
-        $include_descendants = isset($_POST['include_descendants']) ? 1 : 0;
+        // قانون مصوب هر جامعه، در صورت احراز صلاحیت، برای همه زیرشاخه‌های آن نیز لازم‌الرعایه است.
+        $include_descendants = 1;
 
         if ($title === '' || mb_strlen($title) > 200 || $law_text === '' || mb_strlen($law_text) > 50000 || mb_strlen($implementation_plan) > 30000) {
             community_laws_redirect($community_id, 'invalid');
@@ -2866,6 +2867,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $scope_check->close();
             if (!$scope_rows) throw new RuntimeException('law_revision_scope_missing');
 
+            // در نسخه اصلاحی نیز شمول قانون مادر نسبت به تمام زیرشاخه‌ها حفظ می‌شود.
+            $origin_community_id = (int)$previous['originating_community_id'];
+            $origin_scope_found = false;
+            foreach ($scope_rows as &$scope_row) {
+                if ((int)$scope_row['scope_community_id'] === $origin_community_id) {
+                    $scope_row['include_descendants'] = 1;
+                    $origin_scope_found = true;
+                }
+            }
+            unset($scope_row);
+            if (!$origin_scope_found) {
+                $scope_rows[] = [
+                    'scope_community_id' => $origin_community_id,
+                    'include_descendants' => 1,
+                    'scope_note' => 'شمول خودکار قوانین جامعه مادر در تمام زیرشاخه‌ها'
+                ];
+            }
+
             $next_version = (int)$previous['version_number'] + 1;
             $insert = $conn->prepare(
                 "INSERT INTO community_law_versions
@@ -4581,10 +4600,9 @@ details>summary{cursor:pointer;font-weight:bold}
         <input type="number" name="source_topic_id" min="1">
         <label>شناسه ایده مرتبط (اختیاری)</label>
         <input type="number" name="source_idea_id" min="1">
-        <label class="scope-check">
-            <input type="checkbox" name="include_descendants" value="1" checked>
-            <span>در صورت تصویب و با رعایت صلاحیت قانونی، این قانون در زیرشاخه‌های این جامعه نیز لازم‌الرعایه باشد.</span>
-        </label>
+        <div class="notice">
+            در صورت تصویب و پس از طی بررسی صلاحیت و مراحل نهایی، این قانون برای همه جوامع زیرشاخه نیز لازم‌الرعایه خواهد بود. دامنه شمول به‌صورت خودکار با تغییرات معتبر سلسله‌مراتب به‌روزرسانی و تاریخچه آن ثبت می‌شود.
+        </div>
         <div class="notice warning">دامنه شمول در این مرحله فقط ثبت می‌شود؛ پیش از رأی‌گیری باید صلاحیت قانون و آثار آن بررسی شود.</div>
         <button type="submit" name="create_law_draft" value="1">ثبت پیش‌نویس</button>
     </form>
