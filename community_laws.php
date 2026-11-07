@@ -183,6 +183,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if (!$conn->begin_transaction()) community_laws_redirect($community_id, 'save_error');
         try {
+            // همان ترتیب قفل مسیر تغییر والد: ابتدا کل نقشه جوامع، سپس رکورد قانون.
+            // این قفل snapshot صلاحیت و قوانین مرجع را با تغییر هم‌زمان سلسله‌مراتب هماهنگ می‌کند.
+            $hierarchy_lock = $conn->query(
+                "SELECT id, parent_community_id FROM communities ORDER BY id FOR UPDATE"
+            );
+            if (!$hierarchy_lock) throw new Exception('lock hierarchy for law review failed');
+            $hierarchy_lock->free();
+
             $lock = $conn->prepare(
                 "SELECT l.id, l.status, l.current_version_id, v.id AS version_id,
                         v.status AS version_status, v.proposed_by
