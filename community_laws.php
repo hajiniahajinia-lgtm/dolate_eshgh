@@ -2246,7 +2246,8 @@ details>summary{cursor:pointer;font-weight:bold}
                             ?>
                             <p>سطح صلاحیت تشخیص‌داده‌شده: <strong><?= community_laws_escape($authority_labels[$proposal['derived_jurisdiction_level'] ?? ''] ?? 'نامشخص') ?></strong></p>
                             <p>وضعیت: <?= community_laws_escape($authority_status_labels[$proposal['authority_status'] ?? ''] ?? 'پرونده بررسی صلاحیت موجود نیست') ?></p>
-                            <div class="meta">ارزیابی‌های مستقل ثبت‌شده: <?= (int)$proposal['authority_reviewer_count'] ?> از <?= (int)($proposal['authority_reviewer_quorum'] ?? 3) ?></div>
+                            <div class="meta">ارزیابی‌های مستقل ثبت‌شده: <?= (int)$proposal['authority_reviewer_count'] ?> از <?= (int)($proposal['authority_reviewer_quorum'] ?? 3) ?>؛ اعضای واجد شرایط از مرحله قبل snapshot شده‌اند.</div>
+                            <p class="muted">سطح «منشور جهانی» در این مرحله به هیچ جامعه‌ای خودکار داده نمی‌شود؛ ایجاد و تصویب منشور بنیادین، فرایند مستقل و جداگانه می‌خواهد. این تأیید نیز فقط جمع‌بندی بررسی اعضاست، نه حکم حقوقی نهایی.</p>
 
                             <?php $proposal_references = $authority_references_by_version[(int)$proposal['version_id']] ?? []; ?>
                             <?php if (!$authority_reference_scan_ok): ?>
