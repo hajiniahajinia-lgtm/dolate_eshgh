@@ -235,6 +235,37 @@ button.secondary{background:#58677a}button.danger{background:#8a3940}.grid{displ
 <span class="muted">پیشنهاددهنده: <?= cam_page_h($a['proposer_name'] ?? 'کاربر') ?> — نسخه پیشنهادی: <?= cam_page_h($a['proposed_version_number']) ?></span></p>
 <p><strong>دلیل:</strong> <?= nl2br(cam_page_h($a['justification'])) ?></p>
 <p><strong>ارزیابی پیامدها:</strong> <?= nl2br(cam_page_h($a['impact_assessment'])) ?></p>
+<?php
+$item_stmt=$conn->prepare(
+    "SELECT i.action,i.article_code,i.proposed_title,i.proposed_text,i.rationale,
+            old.title AS old_title,old.article_text AS old_text
+     FROM community_charter_amendment_items i
+     LEFT JOIN community_charter_articles old ON old.id=i.target_article_id
+     WHERE i.amendment_id=? ORDER BY i.id"
+);
+if($item_stmt):
+$item_stmt->bind_param('i',$aid);
+if($item_stmt->execute()):
+$item_result=$item_stmt->get_result();
+?>
+<div class="item">
+<strong>متن دقیق تغییرات پیشنهادی</strong>
+<?php while($change=$item_result->fetch_assoc()): ?>
+<div class="amendment">
+<strong><?= cam_page_h($change['article_code']) ?> — <?= cam_page_h(
+    $change['action']==='add'?'افزودن ماده':($change['action']==='replace'?'جایگزینی ماده':'حذف ماده تکمیلی')
+) ?></strong>
+<?php if($change['action']!=='add'): ?>
+<p><strong>متن فعلی:</strong> <?= cam_page_h($change['old_title'] ?? '') ?><br><?= nl2br(cam_page_h($change['old_text'] ?? '')) ?></p>
+<?php endif; ?>
+<?php if($change['action']!=='remove'): ?>
+<p><strong>متن پیشنهادی:</strong> <?= cam_page_h($change['proposed_title'] ?? '') ?><br><?= nl2br(cam_page_h($change['proposed_text'] ?? '')) ?></p>
+<?php endif; ?>
+<p><strong>دلیل این تغییر:</strong> <?= nl2br(cam_page_h($change['rationale'])) ?></p>
+</div>
+<?php endwhile; ?>
+</div>
+<?php endif; $item_stmt->close(); endif; ?>
 <?php if ($a['status']==='draft' && (int)$a['proposer_user_id']===$user_id): ?>
 <form method="post" action="community_charter_amendment_action.php">
 <input type="hidden" name="csrf_token" value="<?= cam_page_h($csrf) ?>"><input type="hidden" name="action" value="submit_for_review"><input type="hidden" name="amendment_id" value="<?= $aid ?>">
