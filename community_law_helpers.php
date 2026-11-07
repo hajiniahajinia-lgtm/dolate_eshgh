@@ -196,7 +196,7 @@ if (!function_exists('community_law_scope_match_checked')) {
             ];
         }
         $stmt->close();
-        if (!$scopes) return false;
+        if (!$scopes) return null;
 
         $parent_map = community_law_load_parent_map($conn);
         if ($parent_map === null || !community_law_parent_map_is_valid($parent_map)) return null;
