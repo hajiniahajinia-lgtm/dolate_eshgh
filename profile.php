@@ -384,6 +384,8 @@ if ($hierarchy_votes_ready) {
 <p style="color:#b42318;font-size:13px;">دور رأی‌گیری پایان یافت اما شرایط لازم برای تغییر جایگاه جامعه فراهم نشد؛ جایگاه فعلی حفظ شد.</p>
 <?php elseif (($_GET['hierarchy_status'] ?? '') === 'approved'): ?>
 <p style="color:#18794e;font-size:13px;">دور رأی‌گیری با شرایط مقرر تصویب شد و جایگاه جامعه به‌روزرسانی گردید.</p>
+<?php elseif (($_GET['hierarchy_status'] ?? '') === 'law_review_pending'): ?>
+<p style="color:#8a4b08;font-size:13px;">تغییر جایگاه فعلاً متوقف شد؛ بررسی حقوقی یک یا چند قانون مرتبط در جریان است. پس از تکمیل بررسی، می‌توانید دوباره رأی‌گیری جایگاه را نهایی کنید تا تعارض یا نقص در بررسی قوانین ایجاد نشود.</p>
 <?php elseif (($_GET['hierarchy_status'] ?? '') === 'already_finalized'): ?>
 <p style="color:#596579;font-size:13px;">این دور قبلاً نهایی شده است؛ صفحه را تازه‌سازی کنید تا وضعیت دور بعدی را ببینید.</p>
 <?php elseif (($_GET['hierarchy_status'] ?? '') === 'round_expired'): ?>
