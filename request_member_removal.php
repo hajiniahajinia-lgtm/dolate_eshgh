@@ -49,7 +49,7 @@ try {
         exit;
     }
 
-    $member = $conn->prepare("SELECT COUNT(*) AS total FROM community_members WHERE community_id=?");
+    $member = $conn->prepare("SELECT COUNT(DISTINCT user_id) AS total FROM community_members WHERE community_id=?");
     if (!$member) throw new RuntimeException("prepare member count failed");
     $member->bind_param("i", $community_id);
     if (!$member->execute()) throw new RuntimeException("read member count failed");
