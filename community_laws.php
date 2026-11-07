@@ -550,9 +550,9 @@ if ($schema_ready) {
     $voting_stmt = $conn->prepare(
         "SELECT l.id AS law_id, l.law_code, v.id AS version_id, v.title,
                 v.law_text, v.vote_deadline,
-                e.user_id AS eligible_user_id,
-                (SELECT COUNT(*) FROM community_law_votes cv
-                 WHERE cv.law_version_id=v.id AND cv.voting_community_id=?) AS cast_count
+                (SELECT cv.vote FROM community_law_votes cv
+                 WHERE cv.law_version_id=v.id AND cv.voting_community_id=? AND cv.voter_user_id=?
+                 LIMIT 1) AS current_vote
          FROM community_laws l
          JOIN community_law_versions v ON v.id=l.current_version_id
          JOIN community_law_electorate e ON e.law_version_id=v.id
@@ -742,9 +742,9 @@ details>summary{cursor:pointer;font-weight:bold}
                     <input type="hidden" name="version_id" value="<?= (int)$active_law['version_id'] ?>">
                     <label>رأی شما</label>
                     <select name="vote" required>
-                        <option value="yes">موافقم</option>
-                        <option value="no">مخالفم</option>
-                        <option value="abstain">ممتنع</option>
+                        <option value="yes" <?= ($active_law['current_vote'] ?? '') === 'yes' ? 'selected' : '' ?>>موافقم</option>
+                        <option value="no" <?= ($active_law['current_vote'] ?? '') === 'no' ? 'selected' : '' ?>>مخالفم</option>
+                        <option value="abstain" <?= ($active_law['current_vote'] ?? '') === 'abstain' ? 'selected' : '' ?>>ممتنع</option>
                     </select>
                     <label>توضیح (اختیاری)</label>
                     <textarea name="comment" maxlength="5000"></textarea>
