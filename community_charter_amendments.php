@@ -323,10 +323,7 @@ if($assigned_appeal){$q=$conn->prepare("SELECT 1 FROM community_charter_amendmen
    const action=row.querySelector('.item-action'), target=row.querySelector('.target-article');
    function sync(){
      const isAdd=action.value==='add', isRemove=action.value==='remove';
-     target.disabled=isAdd;
-     row.querySelector('[name="proposed_title[]"]').disabled=isRemove;
-     row.querySelector('[name="proposed_text[]"]').disabled=isRemove;
-     row.querySelector('[name="principle_group[]"]').disabled=isRemove;
+     // همه آرایه‌ها باید هم‌اندازه به سرور برسند؛ فیلدهای غیرمرتبط خالی می‌مانند، نه disabled.
      if(!isAdd && target.value){
        const opt=target.options[target.selectedIndex];
        row.querySelector('[name="article_code[]"]').value=opt.dataset.code||'';
