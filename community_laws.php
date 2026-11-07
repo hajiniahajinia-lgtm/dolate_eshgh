@@ -282,6 +282,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 "SELECT status, jurisdiction_level,
                         individual_quorum_percent, individual_approval_percent,
                         community_quorum_percent, community_approval_percent,
+                        community_aggregate_quorum_percent, community_aggregate_approval_percent,
                         require_community_approval, individual_vote_basis,
                         community_vote_basis
                  FROM community_law_voting_rules
@@ -305,6 +306,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     || (
                         $rules['community_quorum_percent'] !== null
                         && $rules['community_approval_percent'] !== null
+                        && $rules['community_aggregate_quorum_percent'] !== null
+                        && $rules['community_aggregate_approval_percent'] !== null
                         && $rules['community_vote_basis'] !== null
                     )
                 );
@@ -476,6 +479,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $rules_stmt = $conn->prepare(
                 "SELECT individual_quorum_percent, individual_approval_percent,
                         community_quorum_percent, community_approval_percent,
+                        community_aggregate_quorum_percent, community_aggregate_approval_percent,
                         require_community_approval, individual_vote_basis,
                         community_vote_basis
                  FROM community_law_voting_rules
@@ -702,10 +706,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $community_approval_percent = $community_decisive > 0
                     ? ($community_yes_metric / $community_decisive) * 100 : 0;
                 $community_quorum_met = $community_eligible_metric > 0
-                    && $community_turnout_percent + 0.00001 >= (float)$approved_rules['community_quorum_percent']
+                    && $community_turnout_percent + 0.00001 >= (float)$approved_rules['community_aggregate_quorum_percent']
                     && $community_decisive > 0;
                 $community_approval_met = $community_quorum_met
-                    && $community_approval_percent + 0.00001 >= (float)$approved_rules['community_approval_percent'];
+                    && $community_approval_percent + 0.00001 >= (float)$approved_rules['community_aggregate_approval_percent'];
             }
 
             $individual_quorum_met = $individual_eligible > 0
@@ -729,11 +733,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                      individual_yes, individual_no, individual_abstain,
                      individual_turnout_percent, individual_approval_percent,
                      require_community_approval, community_vote_basis,
+                     community_aggregate_quorum_percent, community_aggregate_approval_percent,
                      community_eligible, community_participating,
                      community_yes, community_no,
                      community_turnout_percent, community_approval_percent,
                      final_status, calculated_by)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
             );
             if (!$save_final_result) throw new Exception('final result insert prepare failed');
             $individual_turnout_percent = round($individual_turnout_percent, 3);
@@ -741,12 +746,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $community_turnout_percent = round($community_turnout_percent, 3);
             $community_approval_percent = round($community_approval_percent, 3);
             $save_final_result->bind_param(
-                'isdddddddisddddddsi',
+                'isdddddddisddddddddsi',
                 $version_id, $individual_basis,
                 $individual_eligible, $individual_participating,
                 $individual_yes_metric, $individual_no_metric, $individual_abstain_metric,
                 $individual_turnout_percent, $individual_approval_percent,
                 $require_community, $community_basis,
+                $approved_rules['community_aggregate_quorum_percent'],
+                $approved_rules['community_aggregate_approval_percent'],
                 $community_eligible_metric, $community_participating_metric,
                 $community_yes_metric, $community_no_metric,
                 $community_turnout_percent, $community_approval_percent,
