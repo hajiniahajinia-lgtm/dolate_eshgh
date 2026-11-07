@@ -359,6 +359,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             $review_elector_insert->close();
 
+            $reviewer_capacity_stmt = $conn->prepare(
+                "SELECT COUNT(*) AS total FROM community_law_review_electorate WHERE law_version_id=?"
+            );
+            if (!$reviewer_capacity_stmt) throw new Exception('reviewer capacity prepare failed');
+            $reviewer_capacity_stmt->bind_param('i', $version_id);
+            if (!$reviewer_capacity_stmt->execute()) throw new Exception('reviewer capacity lookup failed');
+            $reviewer_capacity = (int)$reviewer_capacity_stmt->get_result()->fetch_assoc()['total'];
+            $reviewer_capacity_stmt->close();
+            if ($reviewer_capacity < 3) throw new RuntimeException('insufficient_reviewers');
+
             if (!community_law_record_history(
                 $conn, $law_id, $version_id, $community_id, $user_id,
                 'legal_screening_opened',
@@ -382,6 +392,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             if ($e instanceof RuntimeException && $e->getMessage() === 'law_scope_exceeds_authority') {
                 community_laws_redirect($community_id, 'law_scope_exceeds_authority');
+            }
+            if ($e instanceof RuntimeException && $e->getMessage() === 'insufficient_reviewers') {
+                community_laws_redirect($community_id, 'insufficient_reviewers');
             }
             error_log('[Dolate Eshgh law submission] ' . $e->getMessage());
             community_laws_redirect($community_id, 'save_error');
@@ -1586,6 +1599,8 @@ if ($schema_ready) {
                 ac.reviewer_quorum AS authority_reviewer_quorum,
                 (SELECT COUNT(*) FROM community_law_review_assessments ra
                  WHERE ra.law_version_id=v.id) AS reviewer_count,
+                (SELECT COUNT(*) FROM community_law_review_electorate rec
+                 WHERE rec.law_version_id=v.id) AS reviewer_electorate_count,
                 (SELECT COUNT(*) FROM community_law_review_electorate re
                  WHERE re.law_version_id=v.id AND re.user_id=?) AS is_review_elector,
                 (SELECT COUNT(*) FROM community_law_review_assessments mine
@@ -1852,6 +1867,7 @@ $status_messages = [
     'population_snapshot_required' => 'وزن‌دهی بر اساس جمعیت تا زمان فراهم شدن آمار رسمی و snapshot معتبر جمعیت قابل استفاده نیست.',
     'invalid_legal_assessment' => 'اطلاعات ارزیابی حقوقی معتبر نیست.',
     'law_scope_exceeds_authority' => 'جامعه نمی‌تواند به‌تنهایی قانون الزام‌آور را به جامعه مادر یا سطح بالاتر گسترش دهد.',
+    'insufficient_reviewers' => 'برای بررسی مستقل، دست‌کم سه عضو واجد شرایط غیر از پیشنهاددهنده لازم است؛ ابتدا مشارکت اعضای بیشتری فراهم شود.',
     'authority_assessment_saved' => 'ارزیابی صلاحیت و قوانین مرتبط ثبت شد.',
     'authority_assessment_not_allowed' => 'شما برای این ارزیابی واجد شرایط نیستید یا مرحله بررسی بسته شده است.',
     'invalid_authority_assessment' => 'اطلاعات ارزیابی صلاحیت یا تعارض قوانین معتبر نیست.',
@@ -2173,7 +2189,7 @@ details>summary{cursor:pointer;font-weight:bold}
                            (($proposal['review_status'] ?? '') === 'conflict_found' ? 'تعارض احتمالی شناسایی شد؛ رأی‌گیری این نسخه متوقف است.' :
                            (($proposal['review_status'] ?? '') === 'needs_revision' ? 'ابهام یا کمبود اطلاعات وجود دارد؛ این نسخه نیازمند بازنگری است.' : 'در انتظار ارزیابی مستقل اعضا.')) ?>
                     </div>
-                    <div class="meta">ارزیابی‌های ثبت‌شده: <?= (int)$proposal['reviewer_count'] ?> از <?= (int)($proposal['reviewer_quorum'] ?? 3) ?> ارزیاب مستقل</div>
+                    <div class="meta">ارزیابی‌های ثبت‌شده: <?= (int)$proposal['reviewer_count'] ?> از <?= (int)($proposal['reviewer_quorum'] ?? 3) ?> ارزیاب مستقل؛ اعضای واجد شرایط: <?= (int)$proposal['reviewer_electorate_count'] ?></div>
                     <?php if (
                         $is_member &&
                         (int)$proposal['proposed_by'] !== $user_id &&
