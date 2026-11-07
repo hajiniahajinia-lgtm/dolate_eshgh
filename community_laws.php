@@ -3172,7 +3172,7 @@ details>summary{cursor:pointer;font-weight:bold}
 
                 <?php if ($final_law['final_status'] === 'pending'): ?>
                     <p>ارزیابی‌های ثبت‌شده: <?= (int)$final_law['assessment_count'] ?> از <?= (int)$final_law['reviewer_quorum'] ?> ارزیاب مستقل.</p>
-                    <p class="muted">ارزیابان این مرحله با ارزیابان غربالگری و صلاحیت قبلی متفاوت‌اند. همه ابعاد حقوقی، اجتماعی، زیست‌محیطی و بلندمدت باید بررسی شوند.</p>
+                    <p class="muted">ارزیابان این مرحله با ارزیابان غربالگری و صلاحیت قبلی متفاوت‌اند. همه ابعاد حقوقی، اجتماعی، زیست‌محیطی و بلندمدت باید بررسی شوند. تا زمان ایجاد و تصویب رسمی منشور بنیادین مستقل، این ارزیابی جایگزین آن منشور نیست.</p>
                     <?php if (
                         $is_member && (int)$final_law['is_final_elector'] === 1 &&
                         (int)$final_law['has_final_assessed'] === 0
