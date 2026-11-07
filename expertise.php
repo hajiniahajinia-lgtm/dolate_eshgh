@@ -138,6 +138,47 @@ if($community_id){
 }
 $domains=[];$d=$conn->query("SELECT id,name FROM expertise_domains WHERE status='approved' ORDER BY name");if($d)$domains=$d->fetch_all(MYSQLI_ASSOC);
 $mine=[];$s=$conn->prepare("SELECT a.*,d.name domain_name FROM expertise_applications a JOIN expertise_domains d ON d.id=a.domain_id WHERE a.target_user_id=? ORDER BY a.created_at DESC LIMIT 30");$s->bind_param("i",$user_id);$s->execute();$mine=$s->get_result()->fetch_all(MYSQLI_ASSOC);$s->close();
+
+$competency_versions=[];
+$history_check=$conn->query("SELECT COUNT(*) AS total FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='expertise_competency_history'");
+$history_ready=$history_check && (int)$history_check->fetch_assoc()['total']===1;
+if($history_check) $history_check->free();
+if($history_ready){
+  $history_sql="
+    SELECT d.name AS domain_name,ec.level,ec.weight,ec.valid_from,ec.valid_until,
+           c.name AS community_name,'current' AS version_status,NULL AS superseded_at
+    FROM expertise_competencies ec
+    JOIN expertise_domains d ON d.id=ec.domain_id
+    LEFT JOIN communities c ON c.id=ec.approved_in_community_id
+    WHERE ec.user_id=?
+    UNION ALL
+    SELECT d.name AS domain_name,h.level,h.weight,h.valid_from,h.valid_until,
+           c.name AS community_name,'previous' AS version_status,h.superseded_at
+    FROM expertise_competency_history h
+    JOIN expertise_domains d ON d.id=h.domain_id
+    LEFT JOIN communities c ON c.id=h.approved_in_community_id
+    WHERE h.user_id=?
+    ORDER BY domain_name,valid_from DESC";
+  $hv=$conn->prepare($history_sql);
+  if($hv){
+    $hv->bind_param("ii",$user_id,$user_id);
+    if($hv->execute()) $competency_versions=$hv->get_result()->fetch_all(MYSQLI_ASSOC);
+    $hv->close();
+  }
+}else{
+  $hv=$conn->prepare("
+    SELECT d.name AS domain_name,ec.level,ec.weight,ec.valid_from,ec.valid_until,
+           c.name AS community_name,'current' AS version_status,NULL AS superseded_at
+    FROM expertise_competencies ec
+    JOIN expertise_domains d ON d.id=ec.domain_id
+    LEFT JOIN communities c ON c.id=ec.approved_in_community_id
+    WHERE ec.user_id=? ORDER BY d.name,ec.valid_from DESC");
+  if($hv){
+    $hv->bind_param("i",$user_id);
+    if($hv->execute()) $competency_versions=$hv->get_result()->fetch_all(MYSQLI_ASSOC);
+    $hv->close();
+  }
+}
 $open=[];if($community_id){$s=$conn->prepare("SELECT a.*,d.name domain_name,u.username FROM expertise_applications a JOIN expertise_domains d ON d.id=a.domain_id JOIN users u ON u.id=a.target_user_id WHERE a.community_id=? AND a.status='pending' AND a.decision_at IS NULL ORDER BY a.created_at DESC");$s->bind_param("i",$community_id);$s->execute();$open=$s->get_result()->fetch_all(MYSQLI_ASSOC);$s->close();}
 function eh($v){return htmlspecialchars((string)$v,ENT_QUOTES,'UTF-8');}
 ?>
@@ -159,6 +200,27 @@ body{font-family:Tahoma,Arial,sans-serif;background:#f4f7fb;color:#243447;margin
 <form method="post" action="expertise_action.php"><input type="hidden" name="csrf_token" value="<?=eh($csrf)?>"><input type="hidden" name="action" value="submit"><input type="hidden" name="community_id" value="<?=$community_id?>">
 <label>حوزه تخصصی</label><select name="domain_id" required><option value="">انتخاب حوزه</option><?php foreach($domains as $d):?><option value="<?=(int)$d['id']?>"><?=eh($d['name'])?></option><?php endforeach;?></select>
 <label>سطح درخواستی</label><select name="requested_level" required><option value="1">سطح ۱ — وزن ۱٫۲۵</option><option value="2">سطح ۲ — وزن ۱٫۵</option><option value="3">سطح ۳ — وزن ۲</option><option value="4">سطح ۴ — وزن ۳</option></select><button>ثبت درخواست</button></form></section><?php endif;?>
+<section class="panel"><h3>سوابق شایستگی‌های تأییدشده</h3>
+<?php if(!$competency_versions):?><p>هنوز شایستگی تأییدشده‌ای برای نمایش وجود ندارد.</p>
+<?php else:?>
+<p class="muted">این سوابق فقط برای حساب خودتان نمایش داده می‌شوند. نسخه‌های قبلی پس از تغییر سطح یا تمدید حفظ می‌شوند.</p>
+<?php foreach($competency_versions as $cv):
+  $isCurrent=$cv['version_status']==='current';
+  $isValid=strtotime($cv['valid_until'])>time();
+?>
+<div class="item">
+  <b><?=eh($cv['domain_name'])?></b>
+  <span class="tag"><?=$isCurrent?'نسخهٔ جاری':'نسخهٔ قبلی'?></span>
+  <p>سطح <?= (int)$cv['level']?> — وزن <?=eh(number_format((float)$cv['weight'],2))?></p>
+  <p class="muted">جامعهٔ تأییدکننده: <?=eh($cv['community_name']??'نامشخص')?> | شروع اعتبار: <?=eh($cv['valid_from'])?> | پایان اعتبار: <?=eh($cv['valid_until'])?></p>
+  <?php if(!$isCurrent):?><p class="muted">تاریخ جایگزینی: <?=eh($cv['superseded_at']??'ثبت نشده')?></p>
+  <?php elseif(!$isValid):?><p class="muted">اعتبار این شایستگی پایان یافته و نیازمند تمدید است.</p>
+  <?php endif;?>
+</div>
+<?php endforeach;?>
+<?php endif;?>
+<?php if(!$history_ready):?><p class="muted">برای نمایش تاریخچهٔ نسخه‌های قبلی، Migration تاریخچه باید در آینده نصب شود؛ در حال حاضر فقط نسخهٔ جاری نمایش داده می‌شود.</p><?php endif;?>
+</section>
 <section class="panel"><h3>درخواست‌های من</h3><?php if(!$mine):?><p>هنوز درخواستی ثبت نکرده‌اید.</p><?php endif;?><?php foreach($mine as $a):?><div class="item"><b><?=eh($a['domain_name'])?></b> — سطح <?= (int)$a['requested_level']?> <span class="tag"><?=eh(['pending'=>'در انتظار رأی','approved'=>'تأییدشده','rejected'=>'ردشده','not_approved'=>'عدم تصویب؛ نرسیدن به حد نصاب','needs_renewal'=>'نیازمند تمدید','under_review'=>'در حال بررسی'][$a['status']]??$a['status'])?></span><p class="muted"><?php if(empty($a['expires_at'])):?>در انتظار تکمیل سه ارزیابی مستقل؛ پس از آن رأی‌گیری هفت‌روزه آغاز می‌شود.<?php else:?>مهلت رأی‌گیری تا <?=eh($a['expires_at'])?> است.<?php endif;?> | <?=$a['decision_at']?'رأی‌گیری بسته شده':'در انتظار رأی'?></p>
 <?php if($a['status']==='pending' && !$a['decision_at'] && (empty($a['expires_at']) || strtotime($a['expires_at'])>time())):?><form method="post" action="expertise_action.php"><input type="hidden" name="csrf_token" value="<?=eh($csrf)?>"><input type="hidden" name="action" value="evidence"><input type="hidden" name="application_id" value="<?=(int)$a['id']?>"><label>عنوان مدرک</label><input name="title" required maxlength="200"><label>شرح و توضیح</label><textarea name="description" required rows="3"></textarea><label>پیوند مرجع (اختیاری)</label><input name="reference_url" type="url"><button>افزودن مدرک</button></form><?php endif;?>
 <?php $ev=$conn->prepare("SELECT e.title,e.description,e.reference_url,u.username AS submitted_by_name
