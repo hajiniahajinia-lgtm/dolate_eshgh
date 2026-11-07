@@ -697,6 +697,7 @@ document.addEventListener('DOMContentLoaded', function () {
   <div class="community-mobile-actions" id="communityMobileActions" aria-label="دسترسی‌های جامعه"></div>
   <a class="finance-bank-toggle" id="finance-bank-toggle" href="finance.php?community_id=<?= (int)$community_id ?>">🏦 بانک مالی و اموال جامعه</a>
   <a class="community-laws-toggle" href="community_laws.php?community_id=<?= (int)$community_id ?>">⚖️ قوانین جامعه و قوانین بالادستی</a>
+  <a class="community-laws-toggle" href="community_charter_amendments.php">📜 منشور بنیادین و اصلاح آن</a>
   <div style="margin:0 0 12px;text-align:right;">
     <a href="profile.php" style="display:inline-block;background:#2065d1;color:#fff;text-decoration:none;padding:9px 14px;border-radius:8px;font-weight:bold;font-size:14px;">↩ بازگشت به پروفایل</a>
   </div>
