@@ -2042,6 +2042,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if (!$conn->begin_transaction()) community_laws_redirect($community_id, 'save_error');
         try {
+            // قفل نقشه سلسله‌مراتب پیش از پرونده قانون؛ هم‌راستا با مسیر تغییر والد.
+            // این ترتیب، snapshot قوانین مرجع را با تغییرات هم‌زمان والد/فرزند سریالی می‌کند.
+            $hierarchy_lock = $conn->query(
+                "SELECT id, parent_community_id FROM communities ORDER BY id FOR UPDATE"
+            );
+            if (!$hierarchy_lock) throw new Exception('lock hierarchy for final review failed');
+            $hierarchy_lock->free();
+
             $lock = $conn->prepare(
                 "SELECT l.status, l.current_version_id, l.originating_community_id,
                         v.status AS version_status, v.proposed_by, fr.final_status
@@ -2627,6 +2635,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($version_id <= 0) community_laws_redirect($community_id, 'enactment_not_ready');
         if (!$conn->begin_transaction()) community_laws_redirect($community_id, 'save_error');
         try {
+            // اعتبار snapshot مرجع‌ها تا پایان بررسی نهایی حفظ می‌شود؛
+            // ابتدا نقشه جوامع قفل می‌شود تا با تغییر والد هم‌زمان نشود.
+            $hierarchy_lock = $conn->query(
+                "SELECT id, parent_community_id FROM communities ORDER BY id FOR UPDATE"
+            );
+            if (!$hierarchy_lock) throw new Exception('lock hierarchy for enactment failed');
+            $hierarchy_lock->free();
+
             $lock = $conn->prepare(
                 "SELECT l.id AS law_id, l.status AS law_status, l.current_version_id,
                         l.originating_community_id, v.status AS version_status,
