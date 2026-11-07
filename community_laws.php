@@ -652,6 +652,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $approved_rules = $rules_stmt->get_result()->fetch_assoc();
             $rules_stmt->close();
             if (!$approved_rules) throw new RuntimeException('tally_rules_missing');
+            if (
+                (int)$approved_rules['require_community_approval'] === 1 &&
+                $approved_rules['community_vote_basis'] === 'population_weighted'
+            ) throw new RuntimeException('population_snapshot_required');
 
             $aggregate = $conn->prepare(
                 "SELECT e.voting_community_id,
@@ -830,18 +834,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $community_approval_met = true;
 
             if ($require_community === 1) {
-                if (!in_array($community_basis, ['one_community_one_vote','population_weighted'], true)) {
-                    throw new RuntimeException('invalid_community_vote_basis');
+                if ($community_basis !== 'one_community_one_vote') {
+                    throw new RuntimeException('population_snapshot_required');
                 }
                 $community_metrics_stmt = $conn->prepare(
                     "SELECT COUNT(*) AS eligible_communities,
-                            COALESCE(SUM(electorate_count),0) AS eligible_population,
                             SUM(CASE WHEN position_result IN ('approve','reject') THEN 1 ELSE 0 END) AS participating_communities,
-                            COALESCE(SUM(CASE WHEN position_result IN ('approve','reject') THEN electorate_count ELSE 0 END),0) AS participating_population,
                             SUM(CASE WHEN position_result='approve' THEN 1 ELSE 0 END) AS yes_communities,
-                            SUM(CASE WHEN position_result='reject' THEN 1 ELSE 0 END) AS no_communities,
-                            COALESCE(SUM(CASE WHEN position_result='approve' THEN electorate_count ELSE 0 END),0) AS yes_population,
-                            COALESCE(SUM(CASE WHEN position_result='reject' THEN electorate_count ELSE 0 END),0) AS no_population
+                            SUM(CASE WHEN position_result='reject' THEN 1 ELSE 0 END) AS no_communities
                      FROM community_law_positions WHERE law_version_id=?"
                 );
                 if (!$community_metrics_stmt) throw new Exception('community metrics prepare failed');
@@ -850,17 +850,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $community_metrics = $community_metrics_stmt->get_result()->fetch_assoc();
                 $community_metrics_stmt->close();
 
-                if ($community_basis === 'one_community_one_vote') {
-                    $community_eligible_metric = (float)$community_metrics['eligible_communities'];
-                    $community_participating_metric = (float)$community_metrics['participating_communities'];
-                    $community_yes_metric = (float)$community_metrics['yes_communities'];
-                    $community_no_metric = (float)$community_metrics['no_communities'];
-                } else {
-                    $community_eligible_metric = (float)$community_metrics['eligible_population'];
-                    $community_participating_metric = (float)$community_metrics['participating_population'];
-                    $community_yes_metric = (float)$community_metrics['yes_population'];
-                    $community_no_metric = (float)$community_metrics['no_population'];
-                }
+                $community_eligible_metric = (float)$community_metrics['eligible_communities'];
+                $community_participating_metric = (float)$community_metrics['participating_communities'];
+                $community_yes_metric = (float)$community_metrics['yes_communities'];
+                $community_no_metric = (float)$community_metrics['no_communities'];
                 $community_decisive = $community_yes_metric + $community_no_metric;
                 $community_turnout_percent = $community_eligible_metric > 0
                     ? ($community_participating_metric / $community_eligible_metric) * 100 : 0;
@@ -941,6 +934,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             if ($e instanceof RuntimeException && $e->getMessage() === 'tally_already_done') {
                 community_laws_redirect($community_id, 'tally_already_done');
+            }
+            if ($e instanceof RuntimeException && $e->getMessage() === 'population_snapshot_required') {
+                community_laws_redirect($community_id, 'population_snapshot_required');
             }
             error_log('[Dolate Eshgh law tally] ' . $e->getMessage());
             community_laws_redirect($community_id, 'save_error');
