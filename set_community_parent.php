@@ -75,17 +75,20 @@ try {
         }
     }
 
-    if ($parent_community_id === $community_id) throw new RuntimeException('cycle');
-    if ($parent_community_id > 0 && !array_key_exists($parent_community_id, $parents)) {
-        throw new RuntimeException('invalid parent');
-    }
-    if ($parent_community_id > 0) {
-        $cursor = $parent_community_id;
-        $visited = [];
-        while ($cursor > 0) {
-            if ($cursor === $community_id || isset($visited[$cursor])) throw new RuntimeException('cycle');
-            $visited[$cursor] = true;
-            $cursor = $parents[$cursor] ?? 0;
+    // در درخواست نهایی‌سازی، گزینه ارسالی فرم نقشی ندارد و نباید مانع نهایی‌شدن دور شود.
+    if ($action === 'vote') {
+        if ($parent_community_id === $community_id) throw new RuntimeException('cycle');
+        if ($parent_community_id > 0 && !array_key_exists($parent_community_id, $parents)) {
+            throw new RuntimeException('invalid parent');
+        }
+        if ($parent_community_id > 0) {
+            $cursor = $parent_community_id;
+            $visited = [];
+            while ($cursor > 0) {
+                if ($cursor === $community_id || isset($visited[$cursor])) throw new RuntimeException('cycle');
+                $visited[$cursor] = true;
+                $cursor = $parents[$cursor] ?? 0;
+            }
         }
     }
 
