@@ -40,7 +40,11 @@ try {
         if($exists) throw new RuntimeException("برای این حوزه یک درخواست در حال بررسی دارید.");
         $old=$conn->prepare("SELECT level, valid_until FROM expertise_competencies WHERE user_id=? AND domain_id=? LIMIT 1");
         $old->bind_param("ii",$user_id,$domain_id); $old->execute(); $prior=$old->get_result()->fetch_assoc(); $old->close();
-        $type=(!$prior || strtotime($prior['valid_until'])<=time())?'initial':($level>(int)$prior['level']?'upgrade':'renewal');
+        $type=(!$prior || strtotime($prior['valid_until'])<=time())
+            ? 'initial'
+            : ($level>(int)$prior['level']
+                ? 'upgrade'
+                : ($level<(int)$prior['level'] ? 'reduction' : 'renewal'));
         $code=bin2hex(random_bytes(16));
         // استفاده از ستون‌های مرجع در migration اصلی؛ بدون وابستگی به ستون‌های قدیمی user_id و level
         $s=$conn->prepare("INSERT INTO expertise_applications (application_code,community_id,domain_id,target_user_id,created_by,request_type,requested_level,status,expires_at) VALUES (?,?,?,?,?,?,?,'pending',NULL)");

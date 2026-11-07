@@ -44,6 +44,12 @@ if($expired){$expired->bind_param("i",$user_id);$expired->execute();$ids=$expire
         elseif($score<80){$level=2;$weight=1.50;}
         elseif($score<90){$level=3;$weight=2.00;}
         else{$level=4;$weight=3.00;}
+        // در درخواست کاهش سطح، ارزیابی می‌تواند سطح درخواستی را تأیید یا پایین‌تر تعیین کند؛
+        // اما نباید برخلاف درخواست، سطح بالاتری ثبت شود.
+        if(($a['request_type']??'')==='reduction'){
+          $level=min($level,(int)$a['requested_level']);
+          $weight=[1=>1.25,2=>1.50,3=>2.00,4=>3.00][$level]??1.25;
+        }
         // ردیف شایستگی جاری را قفل می‌کنیم تا دو نهایی‌سازی هم‌زمان تاریخچهٔ تکراری نسازند.
         $competency_lock=$conn->prepare(
           "SELECT id FROM expertise_competencies
