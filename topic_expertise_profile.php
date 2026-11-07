@@ -142,8 +142,8 @@ foreach ($profiles as $p) if ($p['status']==='pending') $has_pending = true;
 $pid=(int)$p['id'];
 $ds=$conn->prepare('SELECT d.name,pd.share_percent FROM topic_expertise_profile_domains pd JOIN expertise_domains d ON d.id=pd.domain_id WHERE pd.profile_id=? ORDER BY d.name');
 $ds->bind_param('i',$pid);$ds->execute();$profile_domains=$ds->get_result()->fetch_all(MYSQLI_ASSOC);$ds->close();
-$vs=$conn->prepare("SELECT COUNT(*) total,SUM(vote='yes') yes_count,SUM(vote='no') no_count,(SELECT vote FROM topic_expertise_profile_votes WHERE profile_id=? AND user_id=? LIMIT 1) my_vote FROM topic_expertise_profile_votes WHERE profile_id=?");
-$vs->bind_param('iii',$pid,$user_id,$pid);$vs->execute();$votes=$vs->get_result()->fetch_assoc();$vs->close();
+$vs=$conn->prepare("SELECT COUNT(*) total,SUM(vote='yes') yes_count,SUM(vote='no') no_count,(SELECT vote FROM topic_expertise_profile_votes WHERE profile_id=? AND user_id=? LIMIT 1) my_vote,(SELECT COUNT(*) FROM topic_expertise_profile_electorate WHERE profile_id=? AND user_id=?) AS is_elector FROM topic_expertise_profile_votes WHERE profile_id=?");
+$vs->bind_param('iiiii',$pid,$user_id,$pid,$user_id,$pid);$vs->execute();$votes=$vs->get_result()->fetch_assoc();$vs->close();
 $ec=$conn->prepare('SELECT COUNT(*) AS total FROM topic_expertise_profile_electorate WHERE profile_id=?');
 $ec->bind_param('i',$pid);$ec->execute();$eligible_count=(int)$ec->get_result()->fetch_assoc()['total'];$ec->close();
 $expired=strtotime($p['expires_at'])<=time();
@@ -154,13 +154,15 @@ $expired=strtotime($p['expires_at'])<=time();
 <ul><?php foreach ($profile_domains as $pd): ?><li><?= tep_escape($pd['name']) ?>: <?= number_format((float)$pd['share_percent'],2) ?>٪</li><?php endforeach; ?></ul>
 <?php if ($p['status']==='pending'): ?>
 <p>رأی‌دهندگان مستقل: <?= $eligible_count ?> | موافق: <?= (int)$votes['yes_count'] ?> | مخالف: <?= (int)$votes['no_count'] ?> | پایان: <?= tep_escape($p['expires_at']) ?></p>
-<?php if (!$expired): ?>
+<?php if (!$expired && (int)$votes['is_elector'] === 1): ?>
 <form method="post" action="topic_expertise_profile_action.php" class="actions">
 <input type="hidden" name="csrf_token" value="<?= tep_escape($csrf) ?>"><input type="hidden" name="action" value="vote">
 <input type="hidden" name="community_id" value="<?= $community_id ?>"><input type="hidden" name="topic_id" value="<?= $topic_id ?>"><input type="hidden" name="profile_id" value="<?= $pid ?>">
 <button name="vote" value="yes" class="good"><?= $votes['my_vote']==='yes'?'✓ رأی موافق ثبت‌شده':'موافق' ?></button>
 <button name="vote" value="no" class="danger"><?= $votes['my_vote']==='no'?'✓ رأی مخالف ثبت‌شده':'مخالف' ?></button>
 </form>
+<?php elseif (!$expired): ?>
+<p class="muted">شما در فهرست ثابت رأی‌دهندگان این پیشنهاد نیستید؛ پیشنهاددهنده و اعضایی که پس از ثبت پیشنهاد عضو شده‌اند، در این دور رأی نمی‌دهند.</p>
 <?php else: ?>
 <p class="muted">مهلت تمام شده است؛ هر عضو جامعه می‌تواند نتیجه را جمع‌بندی کند.</p>
 <form method="post" action="topic_expertise_profile_action.php">
