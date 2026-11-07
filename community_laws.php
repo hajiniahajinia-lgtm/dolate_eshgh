@@ -546,8 +546,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                  WHERE cm.community_id=? AND cm.user_id<>?
                    AND cm.user_id<>(SELECT proposed_by FROM community_law_versions WHERE id=?)
                    AND NOT EXISTS (
-                       SELECT 1 FROM community_law_review_assessments ra
-                       WHERE ra.law_version_id=? AND ra.reviewer_user_id=cm.user_id
+                       SELECT 1 FROM community_law_review_electorate re
+                       WHERE re.law_version_id=? AND re.user_id=cm.user_id
                    )
                    AND NOT EXISTS (
                        SELECT 1 FROM community_law_authority_assessments aa
@@ -2954,6 +2954,44 @@ if ($schema_ready) {
         $proposed_stmt->close();
     }
 
+    $voting_rule_proposals_by_version = [];
+    $voting_rule_votes_by_proposal = [];
+    $rule_proposal_result = $conn->query(
+        "SELECT rp.*,
+                (SELECT COUNT(*) FROM community_law_voting_rule_electorate re
+                 WHERE re.proposal_id=rp.id) AS electorate_count,
+                (SELECT COUNT(*) FROM community_law_voting_rule_votes rv
+                 WHERE rv.proposal_id=rp.id) AS vote_count,
+                (SELECT SUM(CASE WHEN rv.decision='approve' THEN 1 ELSE 0 END)
+                 FROM community_law_voting_rule_votes rv WHERE rv.proposal_id=rp.id) AS approval_count
+         FROM community_law_voting_rule_proposals rp
+         JOIN community_law_versions v ON v.id=rp.law_version_id
+         JOIN community_laws l ON l.id=v.law_id
+         WHERE l.status='proposed' AND v.status='proposed'
+         ORDER BY rp.id DESC"
+    );
+    if ($rule_proposal_result) {
+        while ($rule_row = $rule_proposal_result->fetch_assoc()) {
+            $voting_rule_proposals_by_version[(int)$rule_row['law_version_id']][] = $rule_row;
+        }
+        $rule_proposal_result->free();
+    }
+    $rule_vote_result = $conn->query(
+        "SELECT rv.proposal_id, rv.reviewer_user_id, rv.decision, rv.reasoning, rv.voted_at
+         FROM community_law_voting_rule_votes rv
+         JOIN community_law_voting_rule_proposals rp ON rp.id=rv.proposal_id
+         JOIN community_law_versions v ON v.id=rp.law_version_id
+         JOIN community_laws l ON l.id=v.law_id
+         WHERE l.status='proposed' AND v.status='proposed'
+         ORDER BY rv.voted_at ASC"
+    );
+    if ($rule_vote_result) {
+        while ($rule_vote = $rule_vote_result->fetch_assoc()) {
+            $voting_rule_votes_by_proposal[(int)$rule_vote['proposal_id']][] = $rule_vote;
+        }
+        $rule_vote_result->free();
+    }
+
     $legal_assessments_by_version = [];
     $legal_assessment_stmt = $conn->query(
         "SELECT a.law_version_id, a.reviewer_user_id,
@@ -4180,6 +4218,150 @@ details>summary{cursor:pointer;font-weight:bold}
                             <?php endif; ?>
                         </div>
                     <?php endif; ?>
+                    <?php
+                    $rule_proposals = $voting_rule_proposals_by_version[(int)$proposal['version_id']] ?? [];
+                    $latest_rule_proposal = $rule_proposals[0] ?? null;
+                    $approved_rule_stmt = $conn->prepare(
+                        "SELECT status FROM community_law_voting_rules WHERE law_version_id=? LIMIT 1"
+                    );
+                    $approved_rule_status = null;
+                    if ($approved_rule_stmt) {
+                        $rule_version_id = (int)$proposal['version_id'];
+                        $approved_rule_stmt->bind_param('i', $rule_version_id);
+                        if ($approved_rule_stmt->execute()) {
+                            $approved_rule_status = $approved_rule_stmt->get_result()->fetch_assoc()['status'] ?? null;
+                        }
+                        $approved_rule_stmt->close();
+                    }
+                    ?>
+                    <div class="notice">
+                        <strong>تعیین و تصویب قواعد رأی‌گیری</strong>
+                        <?php if ($approved_rule_status === 'approved'): ?>
+                            <p>قواعد این نسخه با فرایند مستقل تأیید شده‌اند. آغاز رأی‌گیری همچنان پس از کنترل سایر شرایط انجام می‌شود.</p>
+                        <?php else: ?>
+                            <?php if ($latest_rule_proposal): ?>
+                                <?php
+                                $rule_status_labels = [
+                                    'pending_review' => 'در انتظار بررسی مستقل',
+                                    'approved' => 'تأییدشده',
+                                    'rejected' => 'به حدنصاب تصویب نرسید'
+                                ];
+                                ?>
+                                <div class="meta">پیشنهاد شماره <?= (int)$latest_rule_proposal['proposal_number'] ?> — <?= community_laws_escape($rule_status_labels[$latest_rule_proposal['status']] ?? $latest_rule_proposal['status']) ?></div>
+                                <div class="meta">پنل مستقل: <?= (int)$latest_rule_proposal['electorate_count'] ?> نفر — ارزیابی ثبت‌شده: <?= (int)$latest_rule_proposal['vote_count'] ?> نفر — موافقت: <?= (int)$latest_rule_proposal['approval_count'] ?> نفر — مهلت: <?= community_laws_escape($latest_rule_proposal['review_deadline']) ?></div>
+                                <p><?= nl2br(community_laws_escape($latest_rule_proposal['rationale'])) ?></p>
+                                <p class="muted">حدنصاب بررسی دست‌کم سه ارزیابی و تصویب با موافقت حداقل دوسوم ارزیابان شرکت‌کننده است. مهلت هر دور هفت روز است.</p>
+                                <?php if (!empty($voting_rule_votes_by_proposal[(int)$latest_rule_proposal['id']])): ?>
+                                    <details>
+                                        <summary>مشاهده استدلال‌های ارزیابان قواعد</summary>
+                                        <?php foreach ($voting_rule_votes_by_proposal[(int)$latest_rule_proposal['id']] as $rule_vote): ?>
+                                            <div class="notice">
+                                                <div class="meta">ارزیاب #<?= (int)$rule_vote['reviewer_user_id'] ?> — <?= $rule_vote['decision'] === 'approve' ? 'موافق' : 'مخالف' ?> — <?= community_laws_escape($rule_vote['voted_at']) ?></div>
+                                                <p><?= nl2br(community_laws_escape($rule_vote['reasoning'])) ?></p>
+                                            </div>
+                                        <?php endforeach; ?>
+                                    </details>
+                                <?php endif; ?>
+                                <?php if (
+                                    $latest_rule_proposal['status'] === 'pending_review' &&
+                                    $is_member &&
+                                    (int)$proposal['originating_community_id'] === $community_id &&
+                                    strtotime($latest_rule_proposal['review_deadline']) <= time()
+                                ): ?>
+                                    <form method="post">
+                                        <input type="hidden" name="csrf_token" value="<?= community_laws_escape($csrf_token) ?>">
+                                        <input type="hidden" name="proposal_id" value="<?= (int)$latest_rule_proposal['id'] ?>">
+                                        <button type="submit" name="finalize_law_voting_rules" value="1">جمع‌بندی و ثبت نتیجه بررسی قواعد</button>
+                                    </form>
+                                <?php endif; ?>
+                                <?php if (
+                                    $latest_rule_proposal['status'] === 'pending_review' &&
+                                    $is_member &&
+                                    (int)$latest_rule_proposal['configured_by'] !== $user_id &&
+                                    strtotime($latest_rule_proposal['review_deadline']) > time()
+                                ): ?>
+                                    <?php
+                                    $my_rule_elector_stmt = $conn->prepare(
+                                        "SELECT 1 FROM community_law_voting_rule_electorate
+                                         WHERE proposal_id=? AND user_id=? LIMIT 1"
+                                    );
+                                    $my_rule_elector = false;
+                                    $rule_proposal_id = (int)$latest_rule_proposal['id'];
+                                    if ($my_rule_elector_stmt) {
+                                        $my_rule_elector_stmt->bind_param('ii', $rule_proposal_id, $user_id);
+                                        if ($my_rule_elector_stmt->execute()) $my_rule_elector = (bool)$my_rule_elector_stmt->get_result()->fetch_row();
+                                        $my_rule_elector_stmt->close();
+                                    }
+                                    $my_rule_vote_stmt = $conn->prepare(
+                                        "SELECT 1 FROM community_law_voting_rule_votes
+                                         WHERE proposal_id=? AND reviewer_user_id=? LIMIT 1"
+                                    );
+                                    $my_rule_voted = false;
+                                    if ($my_rule_vote_stmt) {
+                                        $my_rule_vote_stmt->bind_param('ii', $rule_proposal_id, $user_id);
+                                        if ($my_rule_vote_stmt->execute()) $my_rule_voted = (bool)$my_rule_vote_stmt->get_result()->fetch_row();
+                                        $my_rule_vote_stmt->close();
+                                    }
+                                    ?>
+                                    <?php if ($my_rule_elector && !$my_rule_voted): ?>
+                                        <details>
+                                            <summary>ثبت ارزیابی مستقل قواعد رأی‌گیری</summary>
+                                            <form method="post">
+                                                <input type="hidden" name="csrf_token" value="<?= community_laws_escape($csrf_token) ?>">
+                                                <input type="hidden" name="proposal_id" value="<?= $rule_proposal_id ?>">
+                                                <label>نظر شما</label>
+                                                <select name="rule_decision" required>
+                                                    <option value="">انتخاب کنید</option>
+                                                    <option value="approve">موافق قواعد پیشنهادی هستم</option>
+                                                    <option value="reject">با قواعد پیشنهادی مخالفم</option>
+                                                </select>
+                                                <label>استدلال و دلیل تصمیم (الزامی)</label>
+                                                <textarea name="rule_reasoning" maxlength="20000" required></textarea>
+                                                <button type="submit" name="submit_law_voting_rule_assessment" value="1">ثبت ارزیابی</button>
+                                            </form>
+                                        </details>
+                                    <?php endif; ?>
+                                <?php endif; ?>
+                            <?php endif; ?>
+                            <?php if (
+                                $is_member &&
+                                (int)$proposal['originating_community_id'] === $community_id &&
+                                ($proposal['authority_status'] ?? '') === 'confirmed' &&
+                                (!$latest_rule_proposal || $latest_rule_proposal['status'] === 'rejected')
+                            ): ?>
+                                <details>
+                                    <summary><?= $latest_rule_proposal ? 'ثبت پیشنهاد تازه قواعد رأی‌گیری' : 'پیشنهاد قواعد رأی‌گیری' ?></summary>
+                                    <p class="muted">پیشنهاددهنده قواعد، ارزیابان غربالگری و ارزیابان صلاحیت در پنل بررسی این قواعد شرکت نمی‌کنند. حداقل سه ارزیاب مستقل، هفت روز فرصت بررسی دارند و تصویب نیازمند دوسوم موافقت است. در این نسخه فعلاً رأی فردی بر مبنای شمارش یکسان و رأی جوامع بر مبنای یک جامعه، یک رأی است؛ وزن‌دهی تا تکمیل و اعتبارسنجی سازوکارهای مربوط فعال نمی‌شود.</p>
+                                    <form method="post">
+                                        <input type="hidden" name="csrf_token" value="<?= community_laws_escape($csrf_token) ?>">
+                                        <input type="hidden" name="law_id" value="<?= (int)$proposal['law_id'] ?>">
+                                        <input type="hidden" name="version_id" value="<?= (int)$proposal['version_id'] ?>">
+                                        <label>حدنصاب مشارکت رأی مستقیم (درصد)</label>
+                                        <input type="number" name="individual_quorum_percent" min="1" max="100" step="0.01" required>
+                                        <label>درصد موافقت لازم در رأی مستقیم (حداقل ۵۰)</label>
+                                        <input type="number" name="individual_approval_percent" min="50" max="100" step="0.01" required>
+                                        <label>آیا تأیید جداگانه جوامع نیز لازم است؟</label>
+                                        <select name="require_community_approval" required>
+                                            <option value="">انتخاب کنید</option>
+                                            <option value="1">بله</option>
+                                            <option value="0">خیر</option>
+                                        </select>
+                                        <label>حدنصاب مشارکت در هر جامعه (در صورت انتخاب بله)</label>
+                                        <input type="number" name="community_quorum_percent" min="1" max="100" step="0.01">
+                                        <label>درصد موافقت لازم در هر جامعه (در صورت انتخاب بله)</label>
+                                        <input type="number" name="community_approval_percent" min="50" max="100" step="0.01">
+                                        <label>حدنصاب مشارکت مجموع جوامع (در صورت انتخاب بله)</label>
+                                        <input type="number" name="community_aggregate_quorum_percent" min="1" max="100" step="0.01">
+                                        <label>درصد موافقت لازم در مجموع جوامع (در صورت انتخاب بله)</label>
+                                        <input type="number" name="community_aggregate_approval_percent" min="50" max="100" step="0.01">
+                                        <label>توضیح و استدلال برای انتخاب این قواعد (الزامی)</label>
+                                        <textarea name="rules_rationale" maxlength="20000" required></textarea>
+                                        <button type="submit" name="submit_law_voting_rules" value="1">ارسال قواعد برای بررسی مستقل</button>
+                                    </form>
+                                </details>
+                            <?php endif; ?>
+                        <?php endif; ?>
+                    </div>
                     <?php if (!empty($legal_assessments_by_version[(int)$proposal['version_id']])): ?>
                         <details style="margin-top:10px">
                             <summary>مشاهده ارزیابی‌ها و استدلال‌ها</summary>
