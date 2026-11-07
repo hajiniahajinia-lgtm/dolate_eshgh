@@ -289,6 +289,9 @@ try {
     if (!$conn->commit()) throw new Exception('commit hierarchy vote failed');
 } catch (Throwable $e) {
     $conn->rollback();
+    if ($e instanceof RuntimeException && $e->getMessage() === 'law_review_dependency_pending') {
+        return_to_community($community_id, 'law_review_pending');
+    }
     return_to_community($community_id, 'invalid');
 }
 
