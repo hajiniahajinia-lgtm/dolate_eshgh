@@ -453,7 +453,7 @@ try {
         if (!$conn->begin_transaction()) throw new RuntimeException('شروع تراکنش انجام نشد.');
         $lock = $conn->prepare(
             "SELECT id,proposed_charter_version_id,status,review_closes_at,
-                    (review_closes_at IS NOT NULL AND review_closes_at>=NOW()) AS review_open
+                    (review_closes_at IS NOT NULL AND review_closes_at>NOW()) AS review_open
              FROM community_charter_amendments WHERE id=? FOR UPDATE"
         );
         if (!$lock) throw new RuntimeException('قفل پرونده ممکن نیست.');
@@ -566,7 +566,7 @@ try {
         $lock = $conn->prepare(
             "SELECT status,voting_opens_at,voting_closes_at,
                     (voting_opens_at IS NOT NULL AND voting_closes_at IS NOT NULL
-                     AND voting_opens_at<=NOW() AND voting_closes_at>=NOW()) AS voting_open
+                     AND voting_opens_at<=NOW() AND voting_closes_at>NOW()) AS voting_open
              FROM community_charter_amendments WHERE id=? FOR UPDATE"
         );
         if (!$lock) throw new RuntimeException('قفل رأی‌گیری ممکن نیست.');
@@ -664,7 +664,7 @@ try {
         if (!$conn->begin_transaction()) throw new RuntimeException('شروع تراکنش انجام نشد.');
         $lock = $conn->prepare(
             "SELECT proposer_user_id,status,appeal_closes_at,
-                    (appeal_closes_at IS NOT NULL AND appeal_closes_at>=NOW()) AS appeal_open
+                    (appeal_closes_at IS NOT NULL AND appeal_closes_at>NOW()) AS appeal_open
              FROM community_charter_amendments WHERE id=? FOR UPDATE"
         );
         if (!$lock) throw new RuntimeException('قفل پرونده ممکن نیست.');
