@@ -1631,7 +1631,7 @@ if ($schema_ready) {
          JOIN community_laws rl ON rl.id=ar.reference_law_id
          JOIN community_law_versions rv ON rv.id=ar.reference_law_version_id
          JOIN communities c ON c.id=ar.reference_origin_community_id
-         ORDER BY ar.relation_type, rl.law_code LIMIT 500"
+         ORDER BY ar.relation_type, rl.law_code"
     );
     if ($authority_reference_result) {
         $authority_reference_scan_ok = true;
@@ -2218,7 +2218,9 @@ details>summary{cursor:pointer;font-weight:bold}
                             <div class="meta">ارزیابی‌های مستقل ثبت‌شده: <?= (int)$proposal['authority_reviewer_count'] ?> از <?= (int)($proposal['authority_reviewer_quorum'] ?? 3) ?></div>
 
                             <?php $proposal_references = $authority_references_by_version[(int)$proposal['version_id']] ?? []; ?>
-                            <?php if (!$proposal_references): ?>
+                            <?php if (!$authority_reference_scan_ok): ?>
+                                <p class="notice warning">فهرست قوانین مرتبط قابل بازیابی نیست؛ تا رفع مشکل، ثبت ارزیابی و عبور از این مرحله متوقف می‌ماند.</p>
+                            <?php elseif (!$proposal_references): ?>
                                 <p class="muted">در زمان ثبت پیشنهاد، قانون معتبر دیگری که بر دامنه آن اثر داشته باشد پیدا نشد. این موضوع به‌معنای تأیید خودکار منشور یا صلاحیت نیست.</p>
                             <?php else: ?>
                                 <p class="muted">قوانین معتبر مرتبط که در زمان ارسال پیشنهاد شناسایی شده‌اند:</p>
