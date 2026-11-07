@@ -129,4 +129,22 @@ check_charter_amendment(
     'duplicate appeal reviewer identities are rejected'
 );
 
+
+$action_source = file_get_contents(__DIR__ . '/../community_charter_amendment_action.php');
+check_charter_amendment(
+    is_string($action_source) && strpos($action_source, 'review_closes_at>NOW()') !== false &&
+    strpos($action_source, 'review_closes_at<=NOW()') !== false,
+    'review deadline open and closed conditions meet only at the exact boundary'
+);
+check_charter_amendment(
+    is_string($action_source) && strpos($action_source, 'voting_closes_at>NOW()') !== false &&
+    strpos($action_source, 'voting_closes_at<=NOW()') !== false,
+    'public voting deadline has mutually exclusive open and closed conditions'
+);
+check_charter_amendment(
+    is_string($action_source) && strpos($action_source, 'appeal_closes_at>NOW()') !== false &&
+    strpos($action_source, 'appeal_closes_at<=NOW()') !== false,
+    'appeal deadline has mutually exclusive open and closed conditions'
+);
+
 fwrite(STDOUT, "OK: {$checks} charter amendment checks passed.\n");
