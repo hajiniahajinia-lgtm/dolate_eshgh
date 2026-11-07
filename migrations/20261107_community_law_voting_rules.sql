@@ -26,13 +26,5 @@ CREATE TABLE IF NOT EXISTS community_law_voting_rules (
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     UNIQUE KEY uq_law_voting_rules_version (law_version_id),
-    KEY idx_law_voting_rules_status (status, updated_at),
-    CONSTRAINT chk_law_individual_quorum
-        CHECK (individual_quorum_percent IS NULL OR individual_quorum_percent BETWEEN 0 AND 100),
-    CONSTRAINT chk_law_individual_approval
-        CHECK (individual_approval_percent IS NULL OR individual_approval_percent BETWEEN 0 AND 100),
-    CONSTRAINT chk_law_community_quorum
-        CHECK (community_quorum_percent IS NULL OR community_quorum_percent BETWEEN 0 AND 100),
-    CONSTRAINT chk_law_community_approval
-        CHECK (community_approval_percent IS NULL OR community_approval_percent BETWEEN 0 AND 100)
+    KEY idx_law_voting_rules_status (status, updated_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
