@@ -113,8 +113,13 @@ if (!function_exists('community_law_is_descendant_or_same')) {
 
 if (!function_exists('community_law_parent_map_is_valid')) {
     function community_law_parent_map_is_valid(array $parent_map): bool {
-        foreach ($parent_map as $community_id => $_parent_id) {
-            $cursor = (int)$community_id;
+        foreach ($parent_map as $community_id => $parent_id) {
+            $community_id = (int)$community_id;
+            $parent_id = (int)$parent_id;
+            if ($community_id <= 0 || $parent_id < 0) return false;
+            if ($parent_id > 0 && !array_key_exists($parent_id, $parent_map)) return false;
+
+            $cursor = $community_id;
             $visited = [];
             while ($cursor > 0) {
                 if (isset($visited[$cursor]) || !array_key_exists($cursor, $parent_map)) {
@@ -166,6 +171,13 @@ if (!function_exists('community_law_scope_match_checked')) {
 
         $parent_map = community_law_load_parent_map($conn);
         if ($parent_map === null || !community_law_parent_map_is_valid($parent_map)) return null;
+        foreach ($scopes as $scope) {
+            if (
+                $scope['community_id'] <= 0 ||
+                !in_array((int)$scope['include_descendants'], [0, 1], true) ||
+                !array_key_exists($scope['community_id'], $parent_map)
+            ) return null;
+        }
 
         foreach ($scopes as $scope) {
             if ($target_community_id === $scope['community_id']) return true;
@@ -207,6 +219,13 @@ if (!function_exists('community_law_scope_community_ids')) {
 
         $parent_map = community_law_load_parent_map($conn);
         if ($parent_map === null || !community_law_parent_map_is_valid($parent_map)) return null;
+        foreach ($scopes as $scope) {
+            if (
+                $scope['id'] <= 0 ||
+                !in_array((int)$scope['descendants'], [0, 1], true) ||
+                !array_key_exists($scope['id'], $parent_map)
+            ) return null;
+        }
 
         $included = [];
         foreach ($parent_map as $candidate_id => $_parent_id) {
@@ -257,6 +276,13 @@ if (!function_exists('community_law_scope_ids_for_parent_map')) {
         }
         $stmt->close();
         if (!$scopes) return null;
+        foreach ($scopes as $scope) {
+            if (
+                $scope['id'] <= 0 ||
+                !in_array((int)$scope['descendants'], [0, 1], true) ||
+                !array_key_exists($scope['id'], $parent_map)
+            ) return null;
+        }
 
         $included = [];
         foreach ($parent_map as $candidate_id => $_parent_id) {
