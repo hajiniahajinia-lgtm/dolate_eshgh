@@ -337,7 +337,7 @@ if ($hierarchy_votes_ready) {
         }
         $hres->free();
     }
-    $round_query = $conn->query("SELECT r.* FROM community_parent_vote_rounds r
+    $round_query = $conn->query("SELECT r.*, (r.deadline <= NOW()) AS is_expired FROM community_parent_vote_rounds r
         INNER JOIN (SELECT community_id, MAX(id) AS latest_id FROM community_parent_vote_rounds GROUP BY community_id) latest
         ON latest.latest_id = r.id");
     if ($round_query) {
@@ -379,8 +379,12 @@ if ($hierarchy_votes_ready) {
 <p style="color:#18794e;font-size:13px;">رأی شما در دور جاری ثبت شد. نتیجه فقط پس از پایان مهلت و بررسی حدنصاب اعمال می‌شود.</p>
 <?php elseif (($_GET['hierarchy_status'] ?? '') === 'cycle'): ?>
 <p style="color:#b42318;font-size:13px;">این گزینه می‌تواند چرخه در ساختار جوامع ایجاد کند و قابل رأی‌دادن نیست.</p>
+<?php elseif (in_array(($_GET['hierarchy_status'] ?? ''), ['insufficient', 'rejected'], true)): ?>
+<p style="color:#b42318;font-size:13px;">دور رأی‌گیری پایان یافت اما شرایط لازم برای تغییر جایگاه جامعه فراهم نشد؛ جایگاه فعلی حفظ شد.</p>
+<?php elseif (($_GET['hierarchy_status'] ?? '') === 'approved'): ?>
+<p style="color:#18794e;font-size:13px;">دور رأی‌گیری با شرایط مقرر تصویب شد و جایگاه جامعه به‌روزرسانی گردید.</p>
 <?php elseif (($_GET['hierarchy_status'] ?? '') === 'schema'): ?>
-<p style="color:#b42318;font-size:13px;">جدول رأی‌گیری هنوز در پایگاه داده آماده نیست.</p>
+<p style="color:#b42318;font-size:13px;">ساختار جدید رأی‌گیری در پایگاه داده نصب نشده است.</p>
 <?php endif; ?>
 <?php foreach ($hierarchy_communities as $hc): ?>
 <?php
@@ -389,7 +393,7 @@ $round_info = $hierarchy_rounds[$cid] ?? null;
 $round_id = $round_info ? (int)$round_info['id'] : 0;
 $counts_for_community = $round_id > 0 ? ($hierarchy_vote_counts[$round_id] ?? []) : [];
 $total_community_votes = array_sum($counts_for_community);
-$round_is_open = $round_info && $round_info['status'] === 'open' && strtotime($round_info['deadline']) > time();
+$round_is_open = $round_info && $round_info['status'] === 'open' && (int)$round_info['is_expired'] === 0;
 $current_vote = ($round_is_open && array_key_exists($cid, $hierarchy_user_votes))
     ? $hierarchy_user_votes[$cid] : $hc['parent_community_id'];
 $current_parent_id = $hc['parent_community_id'];
