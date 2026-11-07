@@ -58,9 +58,12 @@ try {
         $url=trim((string)($_POST['reference_url']??''));
         if($app_id<1 || $title==='' || $description==='') throw new RuntimeException("عنوان و شرح مدرک الزامی است.");
         if($url!=='' && (!filter_var($url,FILTER_VALIDATE_URL) || !preg_match('~^https?://~i',$url))) throw new RuntimeException("نشانی مرجع معتبر نیست.");
-        $s=$conn->prepare("SELECT community_id FROM expertise_applications WHERE id=? AND target_user_id=? AND status='pending' AND decision_at IS NULL");
-        $s->bind_param("ii",$app_id,$user_id); $s->execute(); $a=$s->get_result()->fetch_assoc(); $s->close();
-        if(!$a || !expertise_member($conn,(int)$a['community_id'],$user_id)) throw new RuntimeException("درخواست در دسترس نیست.");
+        // همه اعضای جامعه می‌توانند برای هر متقاضی مدرک ارائه کنند؛ پس از پایان مهلت، پرونده بسته است.
+        $s=$conn->prepare("SELECT community_id FROM expertise_applications
+                           WHERE id=? AND status='pending' AND decision_at IS NULL
+                             AND (expires_at IS NULL OR expires_at>NOW())");
+        $s->bind_param("i",$app_id); $s->execute(); $a=$s->get_result()->fetch_assoc(); $s->close();
+        if(!$a || !expertise_member($conn,(int)$a['community_id'],$user_id)) throw new RuntimeException("فقط اعضای جامعه می‌توانند برای پروندهٔ فعال مدرک ارائه کنند.");
         $ev=$conn->prepare("INSERT INTO expertise_application_evidence (application_id,submitted_by,title,description,reference_url) VALUES (?,?,?,?,NULLIF(?,''))");
         $ev->bind_param("iisss",$app_id,$user_id,$title,$description,$url); $ev->execute(); $ev->close();
         expertise_redirect((int)$a['community_id']);

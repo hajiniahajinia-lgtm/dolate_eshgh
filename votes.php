@@ -170,7 +170,7 @@ if($_SERVER['REQUEST_METHOD'] === 'POST'){
             $competency->execute();
             $cr = $competency->get_result()->fetch_assoc();
             $competency->close();
-            if ($cr) { $weight = max(1.00, (float)$cr['weight']); }
+            if ($cr) { $weight = min(3.00, max(1.00, (float)$cr['weight'])); }
         }
 
         $stmt = $conn->prepare("
