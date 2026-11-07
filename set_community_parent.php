@@ -187,7 +187,7 @@ try {
         );
         if (!$finalize) throw new Exception('prepare round finalization failed');
         $winner_db = ($status === 'approved' && $winner !== null && $winner > 0) ? $winner : null;
-        $finalize->bind_param("siii", $status, $winner_db, $winner_count, $round_id);
+        $finalize->bind_param("ssii", $status, $winner_db, $winner_count, $round_id);
         if (!$finalize->execute()) throw new Exception('finalize round failed');
         $finalize->close();
         if (!$conn->commit()) throw new Exception('commit finalized round failed');
@@ -209,7 +209,7 @@ try {
              VALUES (?, ?, ?, DATE_ADD(NOW(), INTERVAL 7 DAY))"
         );
         if (!$create_round) throw new Exception('prepare create round failed');
-        $create_round->bind_param("iii", $community_id, $next_round, $current_parent);
+        $create_round->bind_param("iis", $community_id, $next_round, $current_parent);
         if (!$create_round->execute()) throw new Exception('create round failed');
         $round_id = (int)$create_round->insert_id;
         $create_round->close();
