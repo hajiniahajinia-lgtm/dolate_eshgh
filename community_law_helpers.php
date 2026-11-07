@@ -229,6 +229,209 @@ if (!function_exists('community_law_scope_community_ids')) {
     }
 }
 
+if (!function_exists('community_law_scope_ids_for_parent_map')) {
+    function community_law_scope_ids_for_parent_map(
+        mysqli $conn,
+        int $law_version_id,
+        array $parent_map
+    ): ?array {
+        if ($law_version_id <= 0 || !community_law_parent_map_is_valid($parent_map)) return null;
+
+        $stmt = $conn->prepare(
+            "SELECT scope_community_id, include_descendants
+             FROM community_law_scopes WHERE law_version_id=?"
+        );
+        if (!$stmt) return null;
+        $stmt->bind_param('i', $law_version_id);
+        if (!$stmt->execute()) {
+            $stmt->close();
+            return null;
+        }
+        $scopes = [];
+        $result = $stmt->get_result();
+        while ($row = $result->fetch_assoc()) {
+            $scopes[] = [
+                'id' => (int)$row['scope_community_id'],
+                'descendants' => (int)$row['include_descendants'] === 1
+            ];
+        }
+        $stmt->close();
+        if (!$scopes) return null;
+
+        $included = [];
+        foreach ($parent_map as $candidate_id => $_parent_id) {
+            foreach ($scopes as $scope) {
+                if (
+                    (int)$candidate_id === $scope['id'] ||
+                    ($scope['descendants'] && community_law_is_descendant_or_same(
+                        $parent_map, (int)$candidate_id, $scope['id']
+                    ))
+                ) {
+                    $included[(int)$candidate_id] = true;
+                    break;
+                }
+            }
+        }
+        $ids = array_keys($included);
+        sort($ids, SORT_NUMERIC);
+        return $ids;
+    }
+}
+
+if (!function_exists('community_law_hierarchy_path')) {
+    function community_law_hierarchy_path(array $parent_map, int $community_id): ?array {
+        if ($community_id <= 0 || !array_key_exists($community_id, $parent_map)) return null;
+        $path = [];
+        $cursor = $community_id;
+        while ($cursor > 0) {
+            if (in_array($cursor, $path, true) || !array_key_exists($cursor, $parent_map)) return null;
+            $path[] = $cursor;
+            $cursor = (int)$parent_map[$cursor];
+        }
+        return $path;
+    }
+}
+
+if (!function_exists('community_law_record_hierarchy_scope_changes')) {
+    function community_law_record_hierarchy_scope_changes(
+        mysqli $conn,
+        array $old_parent_map,
+        array $new_parent_map,
+        int $changed_community_id,
+        int $actor_user_id
+    ): bool {
+        if (
+            !community_law_parent_map_is_valid($old_parent_map) ||
+            !community_law_parent_map_is_valid($new_parent_map)
+        ) return false;
+
+        // اگر چارچوب قوانین هنوز نصب نشده، رویداد شمولی برای ثبت وجود ندارد.
+        $law_table = $conn->query(
+            "SELECT COUNT(*) AS total FROM information_schema.tables
+             WHERE table_schema=DATABASE() AND table_name='community_laws'"
+        );
+        if (!$law_table) return false;
+        $has_law_table = (int)($law_table->fetch_assoc()['total'] ?? 0) > 0;
+        $law_table->close();
+        if (!$has_law_table) return true;
+
+        // وجود ناقص جداول قوانین نباید باعث تغییر سلسله‌مراتب بدون ثبت سابقه شود.
+        if (!community_law_tables_ready($conn)) return false;
+
+        $active = $conn->query(
+            "SELECT l.id AS law_id, l.current_version_id AS version_id
+             FROM community_laws l
+             JOIN community_law_versions v ON v.id=l.current_version_id
+             WHERE l.status='approved' AND v.status='approved'
+               AND (l.effective_at IS NULL OR l.effective_at<=NOW())
+               AND (l.expires_at IS NULL OR l.expires_at>NOW())
+               AND l.repealed_at IS NULL
+             ORDER BY l.id"
+        );
+        if (!$active) return false;
+
+        $ok = true;
+        while ($law = $active->fetch_assoc()) {
+            $law_id = (int)$law['law_id'];
+            $version_id = (int)$law['version_id'];
+            $old_ids = community_law_scope_ids_for_parent_map($conn, $version_id, $old_parent_map);
+            $new_ids = community_law_scope_ids_for_parent_map($conn, $version_id, $new_parent_map);
+            if ($old_ids === null || $new_ids === null) {
+                $ok = false;
+                break;
+            }
+
+            $old_set = array_fill_keys($old_ids, true);
+            $new_set = array_fill_keys($new_ids, true);
+            $changed_ids = array_unique(array_merge(
+                array_diff($new_ids, $old_ids),
+                array_diff($old_ids, $new_ids)
+            ));
+            sort($changed_ids, SORT_NUMERIC);
+
+            foreach ($changed_ids as $affected_id) {
+                $entered = isset($new_set[$affected_id]);
+                $old_path = community_law_hierarchy_path($old_parent_map, (int)$affected_id);
+                $new_path = community_law_hierarchy_path($new_parent_map, (int)$affected_id);
+                if ($old_path === null || $new_path === null) {
+                    $ok = false;
+                    break 2;
+                }
+
+                $scope_stmt = $conn->prepare(
+                    "SELECT scope_community_id, include_descendants
+                     FROM community_law_scopes WHERE law_version_id=?
+                     ORDER BY scope_community_id"
+                );
+                if (!$scope_stmt) {
+                    $ok = false;
+                    break 2;
+                }
+                $scope_stmt->bind_param('i', $version_id);
+                if (!$scope_stmt->execute()) {
+                    $scope_stmt->close();
+                    $ok = false;
+                    break 2;
+                }
+                $scope_roots = [];
+                $scope_result = $scope_stmt->get_result();
+                while ($scope_row = $scope_result->fetch_assoc()) {
+                    $scope_roots[] = [
+                        'community_id' => (int)$scope_row['scope_community_id'],
+                        'include_descendants' => (int)$scope_row['include_descendants']
+                    ];
+                }
+                $scope_stmt->close();
+
+                if ($entered) {
+                    $implementation = $conn->prepare(
+                        "INSERT IGNORE INTO community_law_implementations
+                            (law_version_id, community_id, status)
+                         VALUES (?, ?, 'pending')"
+                    );
+                    if (!$implementation) {
+                        $ok = false;
+                        break 2;
+                    }
+                    $implementation->bind_param('ii', $version_id, $affected_id);
+                    $implementation_ok = $implementation->execute();
+                    $implementation->close();
+                    if (!$implementation_ok) {
+                        $ok = false;
+                        break 2;
+                    }
+                }
+
+                $details = json_encode([
+                    'transition' => $entered ? 'entered_scope' : 'left_scope',
+                    'trigger' => 'community_parent_changed',
+                    'changed_community_id' => $changed_community_id,
+                    'affected_community_id' => (int)$affected_id,
+                    'old_parent_id' => (int)($old_parent_map[$changed_community_id] ?? 0),
+                    'new_parent_id' => (int)($new_parent_map[$changed_community_id] ?? 0),
+                    'old_hierarchy_path' => $old_path,
+                    'new_hierarchy_path' => $new_path,
+                    'scope_roots' => $scope_roots
+                ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                if (!is_string($details) || !community_law_record_history(
+                    $conn,
+                    $law_id,
+                    $version_id,
+                    (int)$affected_id,
+                    $actor_user_id > 0 ? $actor_user_id : null,
+                    $entered ? 'scope_entered' : 'scope_left',
+                    $details
+                )) {
+                    $ok = false;
+                    break 2;
+                }
+            }
+        }
+        $active->free();
+        return $ok;
+    }
+}
+
 if (!function_exists('community_law_version_is_effective')) {
     function community_law_version_is_effective(mysqli $conn, int $law_version_id): bool {
         if ($law_version_id <= 0) return false;
