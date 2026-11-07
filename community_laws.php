@@ -1212,9 +1212,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $aggregate_stmt->close();
 
             $review_status = 'pending';
-            if ((int)$aggregate['conflict_count'] > 0) $review_status = 'conflict_found';
-            elseif ((int)$aggregate['unclear_count'] > 0) $review_status = 'needs_revision';
-            elseif ((int)$aggregate['reviewer_count'] >= (int)$case['reviewer_quorum']) $review_status = 'screening_clear';
+            if ((int)$aggregate['reviewer_count'] >= (int)$case['reviewer_quorum']) {
+                if ((int)$aggregate['conflict_count'] > 0) $review_status = 'conflict_found';
+                elseif ((int)$aggregate['unclear_count'] > 0) $review_status = 'needs_revision';
+                else $review_status = 'screening_clear';
+            }
 
             $case_update = $conn->prepare(
                 "UPDATE community_law_review_cases SET status=? WHERE law_version_id=? AND status='pending'"
@@ -1618,6 +1620,7 @@ if ($schema_ready) {
         "SELECT ar.id, ar.law_version_id, ar.reference_law_id,
                 ar.reference_law_version_id, ar.reference_origin_community_id,
                 ar.relation_type, rl.law_code, rv.title AS reference_title,
+                rv.law_text AS reference_law_text,
                 c.name AS reference_community_name
          FROM community_law_authority_references ar
          JOIN community_laws rl ON rl.id=ar.reference_law_id
@@ -2224,6 +2227,10 @@ details>summary{cursor:pointer;font-weight:bold}
                                     <div class="notice">
                                         <strong><?= community_laws_escape($reference['reference_title']) ?></strong>
                                         <div class="meta"><?= community_laws_escape($reference['law_code']) ?> — <?= community_laws_escape($reference['reference_community_name']) ?> — <?= community_laws_escape($relation_labels[$reference['relation_type']] ?? 'مرتبط') ?></div>
+                                        <details>
+                                            <summary>مشاهده متن قانون مرجع</summary>
+                                            <p><?= nl2br(community_laws_escape($reference['reference_law_text'])) ?></p>
+                                        </details>
                                         <?php if (!empty($precedent_assessments_by_reference[(int)$reference['id']])): ?>
                                             <?php foreach ($precedent_assessments_by_reference[(int)$reference['id']] as $precedent_assessment): ?>
                                                 <p class="muted">ارزیاب #<?= (int)$precedent_assessment['reviewer_user_id'] ?>:
