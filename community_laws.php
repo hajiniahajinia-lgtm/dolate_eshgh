@@ -371,6 +371,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    if (isset($_POST['cast_law_vote'])) {
+        $version_id = (int)($_POST['version_id'] ?? 0);
+        $vote = (string)($_POST['vote'] ?? '');
+        $comment = trim((string)($_POST['comment'] ?? ''));
+        if ($version_id <= 0 || !in_array($vote, ['yes','no','abstain'], true) || mb_strlen($comment) > 5000) {
+            community_laws_redirect($community_id, 'invalid_law_vote');
+        }
+
+        $eligible = $conn->prepare(
+            "SELECT e.vote_weight
+             FROM community_law_electorate e
+             JOIN community_law_versions v ON v.id=e.law_version_id
+             JOIN community_laws l ON l.id=v.law_id
+             WHERE e.law_version_id=? AND e.voting_community_id=? AND e.user_id=?
+               AND v.status='voting' AND l.status='voting'
+               AND v.vote_deadline > NOW()
+             LIMIT 1"
+        );
+        if (!$eligible) community_laws_redirect($community_id, 'save_error');
+        $eligible->bind_param('iii', $version_id, $community_id, $user_id);
+        if (!$eligible->execute()) {
+            $eligible->close();
+            community_laws_redirect($community_id, 'save_error');
+        }
+        $eligibility = $eligible->get_result()->fetch_assoc();
+        $eligible->close();
+        if (!$eligibility) community_laws_redirect($community_id, 'not_law_elector');
+
+        $vote_stmt = $conn->prepare(
+            "INSERT INTO community_law_votes
+                (law_version_id, voting_community_id, voter_user_id, vote, vote_weight, comment)
+             VALUES (?, ?, ?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE
+                vote=VALUES(vote), vote_weight=VALUES(vote_weight),
+                comment=VALUES(comment), voted_at=NOW()"
+        );
+        if (!$vote_stmt) community_laws_redirect($community_id, 'save_error');
+        $weight = (float)$eligibility['vote_weight'];
+        $vote_stmt->bind_param('iiisds', $version_id, $community_id, $user_id, $vote, $weight, $comment);
+        $saved = $vote_stmt->execute();
+        $vote_stmt->close();
+        if (!$saved) community_laws_redirect($community_id, 'save_error');
+        community_laws_redirect($community_id, 'law_vote_saved');
+    }
+
     if (isset($_POST['submit_law_objection'])) {
         if (!$is_member) community_laws_redirect($community_id, 'not_member');
 
@@ -443,6 +488,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $effective_laws = [];
 $draft_laws = [];
 $proposed_laws = [];
+$voting_laws = [];
 $recent_objections = [];
 
 if ($schema_ready) {
@@ -501,6 +547,28 @@ if ($schema_ready) {
         $proposed_stmt->close();
     }
 
+    $voting_stmt = $conn->prepare(
+        "SELECT l.id AS law_id, l.law_code, v.id AS version_id, v.title,
+                v.law_text, v.vote_deadline,
+                e.user_id AS eligible_user_id,
+                (SELECT COUNT(*) FROM community_law_votes cv
+                 WHERE cv.law_version_id=v.id AND cv.voting_community_id=?) AS cast_count
+         FROM community_laws l
+         JOIN community_law_versions v ON v.id=l.current_version_id
+         JOIN community_law_electorate e ON e.law_version_id=v.id
+             AND e.voting_community_id=? AND e.user_id=?
+         WHERE l.status='voting' AND v.status='voting' AND v.vote_deadline > NOW()
+         ORDER BY v.vote_deadline ASC LIMIT 50"
+    );
+    if ($voting_stmt) {
+        $voting_stmt->bind_param('iii', $community_id, $community_id, $user_id);
+        if ($voting_stmt->execute()) {
+            $voting_result = $voting_stmt->get_result();
+            while ($row = $voting_result->fetch_assoc()) $voting_laws[] = $row;
+        }
+        $voting_stmt->close();
+    }
+
     $objection_stmt = $conn->prepare(
         "SELECT o.id, o.objection_type, o.status, o.description, o.created_at,
                 v.title, l.law_code
@@ -524,6 +592,9 @@ $status = (string)($_GET['status'] ?? '');
 $status_messages = [
     'draft_saved' => 'پیش‌نویس قانون ثبت شد؛ این پیش‌نویس هنوز الزام‌آور نیست.',
     'submitted_for_review' => 'پیش‌نویس برای بررسی صلاحیت و دامنه شمول ارسال شد؛ هنوز رأی‌گیری یا الزام‌آوری آغاز نشده است.',
+    'law_vote_saved' => 'رأی شما ثبت شد؛ تا پایان مهلت می‌توانید آن را تغییر دهید.',
+    'invalid_law_vote' => 'رأی یا اطلاعات ارسالی معتبر نیست.',
+    'not_law_elector' => 'نام شما در فهرست رأی‌دهندگان این رأی‌گیری ثبت نشده است.',
     'voting_started' => 'رأی‌گیری هفت‌روزه آغاز شد و فهرست اعضای واجد شرایط ثبت شد.',
     'invalid_vote_start' => 'این پیشنهاد در وضعیت قابل رأی‌گیری نیست.',
     'invalid_law_scope' => 'دامنه شمول قانون معتبر نیست.',
@@ -651,6 +722,34 @@ details>summary{cursor:pointer;font-weight:bold}
                     <button type="submit" name="submit_law_for_review" value="1">ارسال برای بررسی صلاحیت و دامنه شمول</button>
                 </form>
                 <?php endif; ?>
+            </div>
+        <?php endforeach; ?>
+    <?php endif; ?>
+</div>
+
+<div class="card">
+    <h3>رأی‌گیری‌های فعال این جامعه</h3>
+    <?php if (!$voting_laws): ?>
+        <p class="muted">رأی‌گیری فعالی که شما در آن واجد شرایط باشید وجود ندارد.</p>
+    <?php else: ?>
+        <?php foreach ($voting_laws as $active_law): ?>
+            <div class="notice">
+                <strong><?= community_laws_escape($active_law['title']) ?></strong>
+                <div class="meta"><?= community_laws_escape($active_law['law_code']) ?> — پایان رأی‌گیری: <?= community_laws_escape($active_law['vote_deadline']) ?></div>
+                <div class="law-text"><?= community_laws_escape($active_law['law_text']) ?></div>
+                <form method="post">
+                    <input type="hidden" name="csrf_token" value="<?= community_laws_escape($csrf_token) ?>">
+                    <input type="hidden" name="version_id" value="<?= (int)$active_law['version_id'] ?>">
+                    <label>رأی شما</label>
+                    <select name="vote" required>
+                        <option value="yes">موافقم</option>
+                        <option value="no">مخالفم</option>
+                        <option value="abstain">ممتنع</option>
+                    </select>
+                    <label>توضیح (اختیاری)</label>
+                    <textarea name="comment" maxlength="5000"></textarea>
+                    <button type="submit" name="cast_law_vote" value="1">ثبت یا تغییر رأی</button>
+                </form>
             </div>
         <?php endforeach; ?>
     <?php endif; ?>
