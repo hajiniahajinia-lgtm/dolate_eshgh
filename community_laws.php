@@ -1522,23 +1522,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             // فهرست ارزیابان نهایی از اعضای snapshot قبلی ساخته می‌شود،
             // اما پیشنهاددهنده و همه ارزیابان مراحل قبلی کنار گذاشته می‌شوند.
+            $final_review_scope_ids = community_law_scope_community_ids($conn, $version_id);
+            if (!$final_review_scope_ids) throw new RuntimeException('final_review_not_ready');
             $electorate_insert = $conn->prepare(
                 "INSERT IGNORE INTO community_law_final_review_electorate (law_version_id, user_id)
-                 SELECT ?, re.user_id
-                 FROM community_law_review_electorate re
-                 WHERE re.law_version_id=? AND re.user_id<>?
+                 SELECT ?, cm.user_id
+                 FROM community_members cm
+                 WHERE cm.community_id=? AND cm.user_id<>?
                    AND NOT EXISTS (
                        SELECT 1 FROM community_law_review_assessments a
-                       WHERE a.law_version_id=re.law_version_id AND a.reviewer_user_id=re.user_id
+                       WHERE a.law_version_id=? AND a.reviewer_user_id=cm.user_id
                    )
                    AND NOT EXISTS (
                        SELECT 1 FROM community_law_authority_assessments a
-                       WHERE a.law_version_id=re.law_version_id AND a.reviewer_user_id=re.user_id
+                       WHERE a.law_version_id=? AND a.reviewer_user_id=cm.user_id
                    )"
             );
             if (!$electorate_insert) throw new Exception('final review electorate prepare failed');
-            $electorate_insert->bind_param('iii', $version_id, $version_id, $law['proposed_by']);
-            if (!$electorate_insert->execute()) throw new Exception('final review electorate snapshot failed');
+            foreach ($final_review_scope_ids as $review_community_id) {
+                $electorate_insert->bind_param(
+                    'iiiii', $version_id, $review_community_id, $law['proposed_by'],
+                    $version_id, $version_id
+                );
+                if (!$electorate_insert->execute()) throw new Exception('final review electorate snapshot failed');
+            }
             $electorate_insert->close();
 
             $capacity = $conn->prepare("SELECT COUNT(*) AS total FROM community_law_final_review_electorate WHERE law_version_id=?");
@@ -1854,18 +1861,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $appeal_id = (int)$conn->insert_id;
             $insert->close();
 
+            $appeal_scope_ids = community_law_scope_community_ids($conn, $version_id);
+            if (!$appeal_scope_ids) throw new RuntimeException('appeal_period_closed');
             $electorate = $conn->prepare(
                 "INSERT IGNORE INTO community_law_appeal_electorate (appeal_id, user_id)
-                 SELECT ?, e.user_id FROM community_law_final_review_electorate e
-                 WHERE e.law_version_id=? AND e.user_id<>?
+                 SELECT ?, cm.user_id FROM community_members cm
+                 WHERE cm.community_id=? AND cm.user_id<>?
                    AND NOT EXISTS (
                        SELECT 1 FROM community_law_final_review_assessments a
-                       WHERE a.law_version_id=e.law_version_id AND a.reviewer_user_id=e.user_id
+                       WHERE a.law_version_id=? AND a.reviewer_user_id=cm.user_id
                    )"
             );
             if (!$electorate) throw new Exception('appeal electorate prepare failed');
-            $electorate->bind_param('iii', $appeal_id, $version_id, $user_id);
-            if (!$electorate->execute()) throw new Exception('appeal electorate snapshot failed');
+            foreach ($appeal_scope_ids as $appeal_community_id) {
+                $electorate->bind_param(
+                    'iiii', $appeal_id, $appeal_community_id, $user_id, $version_id
+                );
+                if (!$electorate->execute()) throw new Exception('appeal electorate snapshot failed');
+            }
             $electorate->close();
             $capacity = $conn->prepare("SELECT COUNT(*) AS total FROM community_law_appeal_electorate WHERE appeal_id=?");
             if (!$capacity) throw new Exception('appeal electorate count prepare failed');
