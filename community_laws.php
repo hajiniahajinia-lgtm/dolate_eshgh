@@ -226,6 +226,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             $update_version->close();
 
+            $review_scope_ids = community_law_scope_community_ids($conn, $version_id);
+            if (!$review_scope_ids) throw new RuntimeException('invalid_law_scope');
+            $review_case = $conn->prepare(
+                "INSERT INTO community_law_review_cases
+                    (law_version_id, originating_community_id, status, reviewer_quorum, opened_by)
+                 VALUES (?, ?, 'pending', 3, ?)"
+            );
+            if (!$review_case) throw new Exception('legal review case prepare failed');
+            $review_case->bind_param('iii', $version_id, $community_id, $user_id);
+            if (!$review_case->execute()) throw new Exception('legal review case insert failed');
+            $review_case->close();
+
+            $review_elector_insert = $conn->prepare(
+                "INSERT IGNORE INTO community_law_review_electorate (law_version_id, user_id)
+                 SELECT ?, user_id FROM community_members
+                 WHERE community_id=? AND user_id<>?"
+            );
+            if (!$review_elector_insert) throw new Exception('legal review electorate prepare failed');
+            foreach ($review_scope_ids as $review_community_id) {
+                $review_elector_insert->bind_param('iii', $version_id, $review_community_id, $user_id);
+                if (!$review_elector_insert->execute()) throw new Exception('legal review electorate snapshot failed');
+            }
+            $review_elector_insert->close();
+
+            if (!community_law_record_history(
+                $conn, $law_id, $version_id, $community_id, $user_id,
+                'legal_screening_opened',
+                'غربالگری اولیه حقوقی و پیامدها آغاز شد؛ رأی‌گیری تا تکمیل بررسی مستقل مجاز نیست.'
+            )) throw new Exception('legal review case history failed');
+
             if (!community_law_record_history(
                 $conn, $law_id, $version_id, $community_id, $user_id,
                 'submitted_for_review',
@@ -275,6 +305,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 (int)$record['current_version_id'] !== $version_id
             ) {
                 throw new RuntimeException('invalid_law_vote_state');
+            }
+
+            $screening_stmt = $conn->prepare(
+                "SELECT status FROM community_law_review_cases
+                 WHERE law_version_id=? FOR UPDATE"
+            );
+            if (!$screening_stmt) throw new Exception('legal screening state prepare failed');
+            $screening_stmt->bind_param('i', $version_id);
+            if (!$screening_stmt->execute()) throw new Exception('legal screening state lookup failed');
+            $screening = $screening_stmt->get_result()->fetch_assoc();
+            $screening_stmt->close();
+            if (!$screening || $screening['status'] !== 'screening_clear') {
+                throw new RuntimeException('legal_screening_required');
             }
 
             // آغاز رأی‌گیری بدون قواعد تصویبِ تکمیل و تأییدشده مجاز نیست.
@@ -951,6 +994,139 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         community_laws_redirect($community_id, 'discussion_saved');
     }
 
+    if (isset($_POST['submit_law_legal_assessment'])) {
+        if (!$is_member) community_laws_redirect($community_id, 'not_member');
+        $version_id = (int)($_POST['law_version_id'] ?? 0);
+        $dimensions = [
+            'charter_compatibility' => (string)($_POST['charter_compatibility'] ?? ''),
+            'hierarchy_compatibility' => (string)($_POST['hierarchy_compatibility'] ?? ''),
+            'rights_impact' => (string)($_POST['rights_impact'] ?? ''),
+            'environmental_impact' => (string)($_POST['environmental_impact'] ?? ''),
+            'implementation_feasibility' => (string)($_POST['implementation_feasibility'] ?? '')
+        ];
+        $allowed_assessments = ['compliant','conflict','unclear'];
+        $reasoning = trim((string)($_POST['reasoning'] ?? ''));
+        $evidence = trim((string)($_POST['evidence'] ?? ''));
+        foreach ($dimensions as $dimension_value) {
+            if (!in_array($dimension_value, $allowed_assessments, true)) {
+                community_laws_redirect($community_id, 'invalid_legal_assessment');
+            }
+        }
+        if (
+            $version_id <= 0 || $reasoning === '' ||
+            mb_strlen($reasoning) > 30000 || mb_strlen($evidence) > 30000 ||
+            !community_law_scope_matches($conn, $version_id, $community_id)
+        ) community_laws_redirect($community_id, 'invalid_legal_assessment');
+
+        if (!$conn->begin_transaction()) community_laws_redirect($community_id, 'save_error');
+        try {
+            $case_lock = $conn->prepare(
+                "SELECT l.id AS law_id, l.status AS law_status, l.current_version_id,
+                        v.status AS version_status, v.proposed_by,
+                        rc.status AS review_status, rc.reviewer_quorum
+                 FROM community_law_versions v
+                 JOIN community_laws l ON l.id=v.law_id
+                 JOIN community_law_review_cases rc ON rc.law_version_id=v.id
+                 WHERE v.id=? FOR UPDATE"
+            );
+            if (!$case_lock) throw new Exception('legal assessment lock prepare failed');
+            $case_lock->bind_param('i', $version_id);
+            if (!$case_lock->execute()) throw new Exception('legal assessment lock failed');
+            $case = $case_lock->get_result()->fetch_assoc();
+            $case_lock->close();
+            if (
+                !$case || $case['law_status'] !== 'proposed' ||
+                $case['version_status'] !== 'proposed' ||
+                (int)$case['current_version_id'] !== $version_id ||
+                (int)$case['proposed_by'] === $user_id ||
+                $case['review_status'] !== 'pending'
+            ) throw new RuntimeException('legal_assessment_not_allowed');
+
+            $eligible_stmt = $conn->prepare(
+                "SELECT 1 FROM community_law_review_electorate
+                 WHERE law_version_id=? AND user_id=? LIMIT 1"
+            );
+            if (!$eligible_stmt) throw new Exception('legal assessor eligibility prepare failed');
+            $eligible_stmt->bind_param('ii', $version_id, $user_id);
+            if (!$eligible_stmt->execute()) throw new Exception('legal assessor eligibility lookup failed');
+            $is_eligible_reviewer = (bool)$eligible_stmt->get_result()->fetch_row();
+            $eligible_stmt->close();
+            if (!$is_eligible_reviewer) throw new RuntimeException('legal_assessment_not_allowed');
+
+            $assessment_insert = $conn->prepare(
+                "INSERT INTO community_law_review_assessments
+                    (law_version_id, reviewer_user_id, charter_compatibility,
+                     hierarchy_compatibility, rights_impact, environmental_impact,
+                     implementation_feasibility, reasoning, evidence)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            );
+            if (!$assessment_insert) throw new Exception('legal assessment insert prepare failed');
+            $assessment_insert->bind_param(
+                'iisssssss', $version_id, $user_id,
+                $dimensions['charter_compatibility'],
+                $dimensions['hierarchy_compatibility'],
+                $dimensions['rights_impact'],
+                $dimensions['environmental_impact'],
+                $dimensions['implementation_feasibility'],
+                $reasoning, $evidence
+            );
+            if (!$assessment_insert->execute()) throw new Exception('legal assessment insert failed');
+            $assessment_insert->close();
+
+            $aggregate_stmt = $conn->prepare(
+                "SELECT COUNT(*) AS reviewer_count,
+                        COALESCE(SUM(
+                            charter_compatibility='conflict' OR
+                            hierarchy_compatibility='conflict' OR
+                            rights_impact='conflict' OR
+                            environmental_impact='conflict' OR
+                            implementation_feasibility='conflict'
+                        ),0) AS conflict_count,
+                        COALESCE(SUM(
+                            charter_compatibility='unclear' OR
+                            hierarchy_compatibility='unclear' OR
+                            rights_impact='unclear' OR
+                            environmental_impact='unclear' OR
+                            implementation_feasibility='unclear'
+                        ),0) AS unclear_count
+                 FROM community_law_review_assessments WHERE law_version_id=?"
+            );
+            if (!$aggregate_stmt) throw new Exception('legal assessment aggregate prepare failed');
+            $aggregate_stmt->bind_param('i', $version_id);
+            if (!$aggregate_stmt->execute()) throw new Exception('legal assessment aggregate failed');
+            $aggregate = $aggregate_stmt->get_result()->fetch_assoc();
+            $aggregate_stmt->close();
+
+            $review_status = 'pending';
+            if ((int)$aggregate['conflict_count'] > 0) $review_status = 'conflict_found';
+            elseif ((int)$aggregate['unclear_count'] > 0) $review_status = 'needs_revision';
+            elseif ((int)$aggregate['reviewer_count'] >= (int)$case['reviewer_quorum']) $review_status = 'screening_clear';
+
+            $case_update = $conn->prepare(
+                "UPDATE community_law_review_cases SET status=? WHERE law_version_id=? AND status='pending'"
+            );
+            if (!$case_update) throw new Exception('legal review status update prepare failed');
+            $case_update->bind_param('si', $review_status, $version_id);
+            if (!$case_update->execute()) throw new Exception('legal review status update failed');
+            $case_update->close();
+
+            if (!community_law_record_history(
+                $conn, (int)$case['law_id'], $version_id, $community_id, $user_id,
+                'legal_screening_assessment',
+                'یک ارزیابی مستقل ثبت شد؛ وضعیت غربالگری: ' . $review_status
+            )) throw new Exception('legal assessment history failed');
+            if (!$conn->commit()) throw new Exception('legal assessment commit failed');
+            community_laws_redirect($community_id, 'legal_assessment_saved');
+        } catch (Throwable $e) {
+            $conn->rollback();
+            if ($e instanceof RuntimeException && $e->getMessage() === 'legal_assessment_not_allowed') {
+                community_laws_redirect($community_id, 'legal_assessment_not_allowed');
+            }
+            error_log('[Dolate Eshgh legal assessment] ' . $e->getMessage());
+            community_laws_redirect($community_id, 'save_error');
+        }
+    }
+
     if (isset($_POST['submit_law_objection'])) {
         if (!$is_member) community_laws_redirect($community_id, 'not_member');
 
@@ -1069,18 +1245,31 @@ if ($schema_ready) {
     }
 
     $proposed_stmt = $conn->prepare(
-        "SELECT l.id AS law_id, l.law_code, v.id AS version_id, v.title,
-                v.created_at, v.proposed_by
+        "SELECT l.id AS law_id, l.law_code, l.originating_community_id,
+                v.id AS version_id, v.title, v.created_at, v.proposed_by,
+                rc.status AS review_status, rc.reviewer_quorum,
+                (SELECT COUNT(*) FROM community_law_review_assessments ra
+                 WHERE ra.law_version_id=v.id) AS reviewer_count,
+                (SELECT COUNT(*) FROM community_law_review_electorate re
+                 WHERE re.law_version_id=v.id AND re.user_id=?) AS is_review_elector,
+                (SELECT COUNT(*) FROM community_law_review_assessments mine
+                 WHERE mine.law_version_id=v.id AND mine.reviewer_user_id=?) AS has_assessed
          FROM community_laws l
          JOIN community_law_versions v ON v.id=l.current_version_id
-         WHERE l.originating_community_id=? AND l.status='proposed' AND v.status='proposed'
-         ORDER BY v.created_at DESC LIMIT 30"
+         LEFT JOIN community_law_review_cases rc ON rc.law_version_id=v.id
+         WHERE l.status='proposed' AND v.status='proposed'
+         ORDER BY v.created_at DESC LIMIT 100"
     );
     if ($proposed_stmt) {
-        $proposed_stmt->bind_param('i', $community_id);
+        $proposed_stmt->bind_param('ii', $user_id, $user_id);
         if ($proposed_stmt->execute()) {
             $proposed_result = $proposed_stmt->get_result();
-            while ($row = $proposed_result->fetch_assoc()) $proposed_laws[] = $row;
+            while ($row = $proposed_result->fetch_assoc()) {
+                if (
+                    (int)$row['originating_community_id'] === $community_id ||
+                    community_law_scope_matches($conn, (int)$row['version_id'], $community_id)
+                ) $proposed_laws[] = $row;
+            }
         }
         $proposed_stmt->close();
     }
@@ -1245,7 +1434,11 @@ if ($schema_ready) {
 $status = (string)($_GET['status'] ?? '');
 $status_messages = [
     'draft_saved' => 'پیش‌نویس قانون ثبت شد؛ این پیش‌نویس هنوز الزام‌آور نیست.',
-    'submitted_for_review' => 'پیش‌نویس برای بررسی صلاحیت و دامنه شمول ارسال شد؛ هنوز رأی‌گیری یا الزام‌آوری آغاز نشده است.',
+    'submitted_for_review' => 'پیشنهاد برای غربالگری حقوقی مستقل ارسال شد؛ رأی‌گیری تا تکمیل این مرحله متوقف است.',
+    'legal_assessment_saved' => 'ارزیابی مستقل ثبت شد.',
+    'legal_assessment_not_allowed' => 'شما برای ارزیابی این پیشنهاد واجد شرایط نیستید یا مرحله بررسی بسته شده است.',
+    'legal_screening_required' => 'غربالگری حقوقی مستقل هنوز تکمیل نشده یا تعارض و ابهامی در آن ثبت شده است؛ آغاز رأی‌گیری مجاز نیست.',
+    'invalid_legal_assessment' => 'اطلاعات ارزیابی حقوقی معتبر نیست.',
     'tally_saved' => 'نتیجه مرکب رأی‌گیری طبق قواعد تأییدشده ثبت شد؛ لازم‌الاجرا شدن قانون مرحله جداگانه‌ای است.',
     'tally_already_done' => 'نتیجه این رأی‌گیری قبلاً محاسبه شده است.',
     'tally_not_ready' => 'مهلت رأی‌گیری هنوز پایان نیافته یا وضعیت پیشنهاد برای شمارش نهایی معتبر نیست.',
@@ -1555,15 +1748,56 @@ details>summary{cursor:pointer;font-weight:bold}
         <?php foreach ($proposed_laws as $proposal): ?>
             <div class="notice">
                 <strong><?= community_laws_escape($proposal['title']) ?></strong>
-                <div class="meta"><?= community_laws_escape($proposal['law_code']) ?> — آماده آغاز رأی‌گیری پس از بررسی صلاحیت و دامنه شمول</div>
-                <?php if ($is_member): ?>
-                <form method="post">
-                    <input type="hidden" name="csrf_token" value="<?= community_laws_escape($csrf_token) ?>">
-                    <input type="hidden" name="law_id" value="<?= (int)$proposal['law_id'] ?>">
-                    <input type="hidden" name="version_id" value="<?= (int)$proposal['version_id'] ?>">
-                    <button type="submit" name="start_law_vote" value="1">آغاز رأی‌گیری هفت‌روزه</button>
-                </form>
-                <?php endif; ?>
+                <div class="meta"><?= community_laws_escape($proposal['law_code']) ?> — پیشنهاد در انتظار غربالگری؛ هنوز رأی‌گیری آغاز نشده است.</div>
+                <div class="notice">
+                    <strong>غربالگری اولیه حقوقی</strong>
+                    <div>وضعیت:
+                        <?= ($proposal['review_status'] ?? '') === 'screening_clear' ? 'غربالگری اولیه تکمیل شد؛ این به‌معنای تأیید نهایی حقوقی نیست.' :
+                           (($proposal['review_status'] ?? '') === 'conflict_found' ? 'تعارض احتمالی شناسایی شد؛ رأی‌گیری این نسخه متوقف است.' :
+                           (($proposal['review_status'] ?? '') === 'needs_revision' ? 'ابهام یا کمبود اطلاعات وجود دارد؛ این نسخه نیازمند بازنگری است.' : 'در انتظار ارزیابی مستقل اعضا.')) ?>
+                    </div>
+                    <div class="meta">ارزیابی‌های ثبت‌شده: <?= (int)$proposal['reviewer_count'] ?> از <?= (int)($proposal['reviewer_quorum'] ?? 3) ?> ارزیاب مستقل</div>
+                    <?php if (
+                        $is_member &&
+                        (int)$proposal['proposed_by'] !== $user_id &&
+                        (int)$proposal['is_review_elector'] === 1 &&
+                        (int)$proposal['has_assessed'] === 0 &&
+                        ($proposal['review_status'] ?? '') === 'pending'
+                    ): ?>
+                    <details style="margin-top:10px">
+                        <summary>ثبت ارزیابی مستقل این پیشنهاد</summary>
+                        <form method="post">
+                            <input type="hidden" name="csrf_token" value="<?= community_laws_escape($csrf_token) ?>">
+                            <input type="hidden" name="law_version_id" value="<?= (int)$proposal['version_id'] ?>">
+                            <?php
+                            $review_dimensions = [
+                                'charter_compatibility' => 'سازگاری با منشور بنیادین',
+                                'hierarchy_compatibility' => 'سازگاری با قوانین بالادستی',
+                                'rights_impact' => 'رعایت حقوق انسان‌ها و جوامع',
+                                'environmental_impact' => 'پیامدهای زیست‌محیطی و حقوق نسل‌های آینده و سایر جانداران',
+                                'implementation_feasibility' => 'امکان‌پذیری و پیامدهای اجرایی'
+                            ];
+                            foreach ($review_dimensions as $field_name => $field_label):
+                            ?>
+                                <label><?= community_laws_escape($field_label) ?></label>
+                                <select name="<?= community_laws_escape($field_name) ?>" required>
+                                    <option value="">انتخاب ارزیابی</option>
+                                    <option value="compliant">تعارض یا مانع آشکاری مشاهده نکردم</option>
+                                    <option value="conflict">تعارض یا آسیب جدی مشاهده کردم</option>
+                                    <option value="unclear">اطلاعات کافی برای ارزیابی ندارم</option>
+                                </select>
+                            <?php endforeach; ?>
+                            <label>استدلال و توضیح (الزامی)</label>
+                            <textarea name="reasoning" maxlength="30000" required></textarea>
+                            <label>شواهد و منابع (اختیاری)</label>
+                            <textarea name="evidence" maxlength="30000"></textarea>
+                            <button type="submit" name="submit_law_legal_assessment" value="1">ثبت ارزیابی مستقل</button>
+                        </form>
+                    </details>
+                    <?php elseif (($proposal['review_status'] ?? '') === 'screening_clear'): ?>
+                        <p class="muted">این مرحله فقط غربالگری اولیه اعضاست؛ بررسی رسمی صلاحیت و انطباق نهایی هنوز لازم است.</p>
+                    <?php endif; ?>
+                </div>
             </div>
         <?php endforeach; ?>
     <?php endif; ?>
