@@ -463,6 +463,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 throw new RuntimeException('tally_not_ready');
             }
 
+            $rules_stmt = $conn->prepare(
+                "SELECT individual_quorum_percent, individual_approval_percent,
+                        community_quorum_percent, community_approval_percent,
+                        require_community_approval, individual_vote_basis,
+                        community_vote_basis
+                 FROM community_law_voting_rules
+                 WHERE law_version_id=? AND status='approved' LIMIT 1"
+            );
+            if (!$rules_stmt) throw new Exception('tally rules prepare failed');
+            $rules_stmt->bind_param('i', $version_id);
+            if (!$rules_stmt->execute()) throw new Exception('tally rules lookup failed');
+            $approved_rules = $rules_stmt->get_result()->fetch_assoc();
+            $rules_stmt->close();
+            if (!$approved_rules) throw new RuntimeException('tally_rules_missing');
+
             $aggregate = $conn->prepare(
                 "SELECT e.voting_community_id,
                         COUNT(v.id) AS cast_count,
@@ -499,8 +514,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $abstain = (int)$tally['abstain_count'];
                 $yes_weight = (float)$tally['yes_weight'];
                 $no_weight = (float)$tally['no_weight'];
-                $position_status = ((int)$tally['cast_count'] === 0) ? 'insufficient' : 'pending';
+                $cast_count = (int)$tally['cast_count'];
                 $affected_id = (int)$tally['voting_community_id'];
+                $position_status = 'pending';
+
+                // موضع رسمی جامعه فقط وقتی تعیین می‌شود که قواعد، الزام تصویب جامعه را مقرر کرده باشند.
+                if ((int)$approved_rules['require_community_approval'] === 1) {
+                    $community_quorum = (float)$approved_rules['community_quorum_percent'];
+                    $community_approval = (float)$approved_rules['community_approval_percent'];
+                    $turnout_percent = (int)$tally['electorate_count'] > 0
+                        ? ($cast_count / (int)$tally['electorate_count']) * 100
+                        : 0;
+                    $decisive_votes = $yes + $no;
+                    if (
+                        $cast_count === 0 ||
+                        $turnout_percent + 0.00001 < $community_quorum ||
+                        $decisive_votes === 0
+                    ) {
+                        $position_status = 'insufficient';
+                    } else {
+                        $yes_percent = ($yes / $decisive_votes) * 100;
+                        $position_status = $yes_percent + 0.00001 >= $community_approval
+                            ? 'approve'
+                            : 'reject';
+                    }
+                }
+
                 $update_position->bind_param(
                     'iiiddsii',
                     $yes, $no, $abstain, $yes_weight, $no_weight,
@@ -572,6 +611,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $conn->rollback();
             if ($e instanceof RuntimeException && $e->getMessage() === 'tally_not_ready') {
                 community_laws_redirect($community_id, 'tally_not_ready');
+            }
+            if ($e instanceof RuntimeException && $e->getMessage() === 'tally_rules_missing') {
+                community_laws_redirect($community_id, 'voting_rules_required');
             }
             error_log('[Dolate Eshgh law tally] ' . $e->getMessage());
             community_laws_redirect($community_id, 'save_error');
@@ -676,6 +718,73 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         community_laws_redirect($community_id, 'law_vote_saved');
     }
 
+    if (isset($_POST['submit_position_discussion'])) {
+        if (!$is_member) community_laws_redirect($community_id, 'not_member');
+
+        $version_id = (int)($_POST['version_id'] ?? 0);
+        $stance = (string)($_POST['stance'] ?? 'neutral');
+        $argument = trim((string)($_POST['argument'] ?? ''));
+        $evidence = trim((string)($_POST['evidence'] ?? ''));
+        if (
+            $version_id <= 0 ||
+            !in_array($stance, ['support','oppose','neutral'], true) ||
+            $argument === '' || mb_strlen($argument) > 20000 ||
+            mb_strlen($evidence) > 20000
+        ) {
+            community_laws_redirect($community_id, 'invalid_discussion');
+        }
+
+        $eligible = $conn->prepare(
+            "SELECT 1
+             FROM community_law_electorate e
+             JOIN community_law_versions v ON v.id=e.law_version_id
+             JOIN community_laws l ON l.id=v.law_id
+             WHERE e.law_version_id=? AND e.voting_community_id=? AND e.user_id=?
+               AND v.status='voting' AND l.status='voting'
+               AND v.vote_deadline > NOW()
+             LIMIT 1"
+        );
+        if (!$eligible) community_laws_redirect($community_id, 'save_error');
+        $eligible->bind_param('iii', $version_id, $community_id, $user_id);
+        if (!$eligible->execute()) {
+            $eligible->close();
+            community_laws_redirect($community_id, 'save_error');
+        }
+        $is_eligible = (bool)$eligible->get_result()->fetch_row();
+        $eligible->close();
+        if (!$is_eligible) community_laws_redirect($community_id, 'not_law_elector');
+
+        $discussion = $conn->prepare(
+            "INSERT INTO community_law_position_discussions
+                (law_version_id, community_id, author_user_id, stance, argument, evidence)
+             VALUES (?, ?, ?, ?, ?, ?)"
+        );
+        if (!$discussion) community_laws_redirect($community_id, 'save_error');
+        $discussion->bind_param(
+            'iiisss', $version_id, $community_id, $user_id, $stance, $argument, $evidence
+        );
+        $saved = $discussion->execute();
+        $discussion->close();
+        if (!$saved) community_laws_redirect($community_id, 'save_error');
+
+        $law_lookup = $conn->prepare('SELECT law_id FROM community_law_versions WHERE id=? LIMIT 1');
+        if ($law_lookup) {
+            $law_lookup->bind_param('i', $version_id);
+            if ($law_lookup->execute()) {
+                $law_ref = $law_lookup->get_result()->fetch_assoc();
+                if ($law_ref) {
+                    community_law_record_history(
+                        $conn, (int)$law_ref['law_id'], $version_id, $community_id,
+                        $user_id, 'community_position_discussion',
+                        'عضو دیدگاه مستدل خود را درباره موضع جامعه ثبت کرد.'
+                    );
+                }
+            }
+            $law_lookup->close();
+        }
+        community_laws_redirect($community_id, 'discussion_saved');
+    }
+
     if (isset($_POST['submit_law_objection'])) {
         if (!$is_member) community_laws_redirect($community_id, 'not_member');
 
@@ -749,6 +858,7 @@ $effective_laws = [];
 $draft_laws = [];
 $proposed_laws = [];
 $voting_laws = [];
+$position_discussions = [];
 $closed_voting_laws = [];
 $tallied_laws = [];
 $recent_objections = [];
@@ -832,6 +942,25 @@ if ($schema_ready) {
             while ($row = $voting_result->fetch_assoc()) $voting_laws[] = $row;
         }
         $voting_stmt->close();
+    }
+
+    if ($voting_laws) {
+        $discussion_stmt = $conn->prepare(
+            "SELECT id, law_version_id, author_user_id, stance, argument, evidence, created_at
+             FROM community_law_position_discussions
+             WHERE community_id=?
+             ORDER BY created_at ASC LIMIT 150"
+        );
+        if ($discussion_stmt) {
+            $discussion_stmt->bind_param('i', $community_id);
+            if ($discussion_stmt->execute()) {
+                $discussion_result = $discussion_stmt->get_result();
+                while ($discussion_row = $discussion_result->fetch_assoc()) {
+                    $position_discussions[(int)$discussion_row['law_version_id']][] = $discussion_row;
+                }
+            }
+            $discussion_stmt->close();
+        }
     }
 
     $closed_stmt = $conn->prepare(
@@ -933,6 +1062,8 @@ $status_messages = [
     'invalid_tally' => 'اطلاعات درخواست شمارش آرا معتبر نیست.',
     'law_vote_saved' => 'رأی شما در شکل‌گیری موضع این جامعه ثبت شد؛ تا پایان مهلت می‌توانید آن را تغییر دهید.',
     'direct_law_vote_saved' => 'رأی مستقیم شما ثبت شد؛ این رأی در کل سامانه فقط یک‌بار برای این قانون محاسبه می‌شود.',
+    'discussion_saved' => 'دیدگاه مستدل شما در گفت‌وگوی این جامعه ثبت شد.',
+    'invalid_discussion' => 'متن دیدگاه یا اطلاعات ارسالی معتبر نیست.',
     'invalid_law_vote' => 'رأی یا اطلاعات ارسالی معتبر نیست.',
     'not_law_elector' => 'نام شما در فهرست رأی‌دهندگان این رأی‌گیری ثبت نشده است.',
     'voting_started' => 'رأی‌گیری هفت‌روزه آغاز شد و فهرست اعضای واجد شرایط ثبت شد.',
@@ -1096,7 +1227,7 @@ details>summary{cursor:pointer;font-weight:bold}
                             <td><?= (int)$result_row['yes_count'] ?></td>
                             <td><?= (int)$result_row['no_count'] ?></td>
                             <td><?= (int)$result_row['abstain_count'] ?></td>
-                            <td><?= (int)$result_row['yes_count'] + (int)$result_row['no_count'] + (int)$result_row['abstain_count'] === 0 ? 'بدون رأی' : 'در انتظار قواعد تصویب' ?></td>
+                            <td><?= $result_row['position_result'] === 'approve' ? 'موضع موافق جامعه' : ($result_row['position_result'] === 'reject' ? 'موضع مخالف جامعه' : ($result_row['position_result'] === 'insufficient' ? 'حدنصاب مشارکت حاصل نشد' : ((int)$result_row['yes_count'] + (int)$result_row['no_count'] + (int)$result_row['abstain_count'] === 0 ? 'بدون رأی' : 'گزارش مشورتی؛ تصویب جامعه الزامی نیست'))) ?></td>
                         </tr>
                     <?php endforeach; ?>
                     </tbody>
@@ -1153,6 +1284,44 @@ details>summary{cursor:pointer;font-weight:bold}
                         <textarea name="direct_comment" maxlength="5000"></textarea>
                         <button type="submit" name="cast_law_direct_vote" value="1">ثبت یا تغییر رأی مستقیم</button>
                     </form>
+                </div>
+                <div class="notice">
+                    <strong>گفت‌وگوی اعضای جامعه درباره این قانون</strong>
+                    <p class="muted">پیش از شکل‌گیری موضع رسمی، اعضا می‌توانند استدلال موافق، مخالف یا بی‌طرفانه و شواهد خود را ثبت کنند. این دیدگاه‌ها جای رأی را نمی‌گیرند.</p>
+                    <?php if (!empty($position_discussions[(int)$active_law['version_id']])): ?>
+                        <?php foreach ($position_discussions[(int)$active_law['version_id']] as $discussion_row): ?>
+                            <div class="notice">
+                                <div class="meta">
+                                    عضو شماره <?= (int)$discussion_row['author_user_id'] ?> —
+                                    <?= $discussion_row['stance'] === 'support' ? 'موافق' : ($discussion_row['stance'] === 'oppose' ? 'مخالف' : 'بی‌طرف') ?> —
+                                    <?= community_laws_escape($discussion_row['created_at']) ?>
+                                </div>
+                                <p><?= nl2br(community_laws_escape($discussion_row['argument'])) ?></p>
+                                <?php if (!empty($discussion_row['evidence'])): ?>
+                                    <details><summary>مشاهده شواهد</summary><p><?= nl2br(community_laws_escape($discussion_row['evidence'])) ?></p></details>
+                                <?php endif; ?>
+                            </div>
+                        <?php endforeach; ?>
+                    <?php else: ?>
+                        <p class="muted">هنوز دیدگاهی ثبت نشده است.</p>
+                    <?php endif; ?>
+                    <?php if ($is_member): ?>
+                    <form method="post">
+                        <input type="hidden" name="csrf_token" value="<?= community_laws_escape($csrf_token) ?>">
+                        <input type="hidden" name="version_id" value="<?= (int)$active_law['version_id'] ?>">
+                        <label>جهت‌گیری دیدگاه</label>
+                        <select name="stance" required>
+                            <option value="support">استدلال موافق</option>
+                            <option value="oppose">استدلال مخالف</option>
+                            <option value="neutral">بررسی بی‌طرفانه / پیشنهاد اصلاح</option>
+                        </select>
+                        <label>استدلال</label>
+                        <textarea name="argument" maxlength="20000" required></textarea>
+                        <label>شواهد و منابع (اختیاری)</label>
+                        <textarea name="evidence" maxlength="20000"></textarea>
+                        <button type="submit" name="submit_position_discussion" value="1">ثبت دیدگاه</button>
+                    </form>
+                    <?php endif; ?>
                 </div>
                 <div class="notice">
                     <strong>۲. مشارکت در تعیین موضع این جامعه</strong>
