@@ -338,6 +338,18 @@ try {
     }
     $assignment->close();
 
+    $db->query(
+        "UPDATE community_charter_amendments
+         SET appeal_closes_at=DATE_SUB(NOW(), INTERVAL 1 SECOND)
+         WHERE id=" . $amendmentId
+    );
+    integration_check(!try_activate_amendment($db, $amendmentId),
+        'activation is refused while an appeal remains open');
+    integration_check(
+        (string)$db->query("SELECT status FROM community_charter_versions WHERE id=1")->fetch_assoc()['status'] === 'effective',
+        'an open appeal leaves the current charter untouched'
+    );
+
     $appealVotes = [
         ['reviewer_user_id'=>17,'verdict'=>'dismiss'],
         ['reviewer_user_id'=>18,'verdict'=>'dismiss'],
@@ -362,19 +374,6 @@ try {
     $db->query(
         "UPDATE community_charter_amendment_appeals
          SET status='dismissed',resolved_at=NOW() WHERE id=" . $appealId
-    );
-
-    $db->query(
-        "UPDATE community_charter_amendments
-         SET appeal_closes_at=DATE_SUB(NOW(), INTERVAL 1 SECOND)
-         WHERE id=" . $amendmentId
-    );
-
-    integration_check(!try_activate_amendment($db, $amendmentId),
-        'activation is refused while an appeal remains open');
-    integration_check(
-        (string)$db->query("SELECT status FROM community_charter_versions WHERE id=1")->fetch_assoc()['status'] === 'effective',
-        'a refused activation leaves the current charter untouched'
     );
 
     // Force a mid-transaction failure after superseding the old version; rollback must restore it.
