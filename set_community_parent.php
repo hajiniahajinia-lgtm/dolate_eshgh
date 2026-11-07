@@ -29,7 +29,7 @@ function return_to_community(int $community_id, string $status): void {
     exit;
 }
 
-if ($community_id <= 0) return_to_community(0, 'invalid');
+if ($community_id <= 0 || $parent_community_id < 0) return_to_community(0, 'invalid');
 if (empty($_SESSION['community_hierarchy_csrf']) || $csrf_token === '' ||
     !hash_equals($_SESSION['community_hierarchy_csrf'], $csrf_token)) {
     return_to_community($community_id, 'csrf');
