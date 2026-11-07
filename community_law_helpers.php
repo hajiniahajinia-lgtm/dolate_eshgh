@@ -169,6 +169,51 @@ if (!function_exists('community_law_scope_matches')) {
     }
 }
 
+if (!function_exists('community_law_scope_match_checked')) {
+    function community_law_scope_match_checked(
+        mysqli $conn,
+        int $law_version_id,
+        int $target_community_id
+    ): ?bool {
+        if ($law_version_id <= 0 || $target_community_id <= 0) return null;
+
+        $stmt = $conn->prepare(
+            "SELECT scope_community_id, include_descendants
+             FROM community_law_scopes WHERE law_version_id=?"
+        );
+        if (!$stmt) return null;
+        $stmt->bind_param('i', $law_version_id);
+        if (!$stmt->execute()) {
+            $stmt->close();
+            return null;
+        }
+        $result = $stmt->get_result();
+        $scopes = [];
+        while ($row = $result->fetch_assoc()) {
+            $scopes[] = [
+                'community_id' => (int)$row['scope_community_id'],
+                'include_descendants' => (int)$row['include_descendants'] === 1
+            ];
+        }
+        $stmt->close();
+        if (!$scopes) return false;
+
+        $parent_map = community_law_load_parent_map($conn);
+        if ($parent_map === null || !community_law_parent_map_is_valid($parent_map)) return null;
+
+        foreach ($scopes as $scope) {
+            if ($target_community_id === $scope['community_id']) return true;
+            if (
+                $scope['include_descendants'] &&
+                community_law_is_descendant_or_same(
+                    $parent_map, $target_community_id, $scope['community_id']
+                )
+            ) return true;
+        }
+        return false;
+    }
+}
+
 if (!function_exists('community_law_scope_community_ids')) {
     function community_law_scope_community_ids(mysqli $conn, int $law_version_id): ?array {
         if ($law_version_id <= 0) return null;
