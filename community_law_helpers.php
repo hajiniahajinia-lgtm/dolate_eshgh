@@ -829,3 +829,127 @@ if (!function_exists('community_law_charter_snapshot_is_current')) {
         return $captured_ids === $expected_ids;
     }
 }
+
+
+if (!function_exists('community_charter_amendment_reviewer_result')) {
+    /**
+     * پنج ارزیاب مستقل لازم است؛ دست‌کم چهار ارزیاب باید حمایت کنند.
+     * تعارض یا تضعیف هر یک از محورهای حفاظت، اصلاح را مردود می‌کند؛
+     * ابهام به معنی عدم آمادگی برای رأی‌گیری است.
+     */
+    function community_charter_amendment_reviewer_result(
+        array $assessments,
+        int $quorum = 5,
+        int $approval_numerator = 4,
+        int $approval_denominator = 5
+    ): string {
+        if ($quorum < 5 || $approval_denominator <= 0 ||
+            $approval_numerator <= 0 || $approval_numerator > $approval_denominator ||
+            count($assessments) < $quorum) {
+            return 'pending';
+        }
+
+        $seen = [];
+        $support = 0;
+        $dimensions = [
+            'rights_protection',
+            'equality_and_non_discrimination',
+            'living_beings_and_environment',
+            'power_and_accountability',
+            'future_generations'
+        ];
+
+        foreach ($assessments as $assessment) {
+            if (!is_array($assessment) || !isset($assessment['reviewer_user_id']) ||
+                (int)$assessment['reviewer_user_id'] <= 0) return 'pending';
+            $reviewer_id = (int)$assessment['reviewer_user_id'];
+            if (isset($seen[$reviewer_id])) return 'pending';
+            $seen[$reviewer_id] = true;
+
+            $verdict = $assessment['verdict'] ?? '';
+            if ($verdict === 'conflict') return 'rejected';
+            if ($verdict !== 'supports' && $verdict !== 'unclear') return 'pending';
+
+            foreach ($dimensions as $dimension) {
+                $value = $assessment[$dimension] ?? '';
+                if ($value === 'weakened') return 'rejected';
+                if ($value !== 'maintained' && $value !== 'improved') return 'pending';
+            }
+            if ($verdict === 'supports') $support++;
+        }
+
+        if (count($seen) < $quorum) return 'pending';
+        return ($support * $approval_denominator >= count($seen) * $approval_numerator)
+            ? 'approved'
+            : 'rejected';
+    }
+}
+
+if (!function_exists('community_charter_amendment_vote_result')) {
+    /**
+     * مشارکت حداقل دوسوم واجدان شرایط و موافقت حداقل سه‌چهارم آرای معتبر لازم است.
+     * رأی ممتنع در مشارکت محاسبه می‌شود، اما در نسبت موافقت/مخالفت وارد نمی‌شود.
+     */
+    function community_charter_amendment_vote_result(
+        int $electorate,
+        int $yes,
+        int $no,
+        int $abstain,
+        int $turnout_numerator = 2,
+        int $turnout_denominator = 3,
+        int $approval_numerator = 3,
+        int $approval_denominator = 4
+    ): string {
+        if ($electorate <= 0 || min($yes, $no, $abstain) < 0 ||
+            $turnout_denominator <= 0 || $approval_denominator <= 0 ||
+            $turnout_numerator <= 0 || $approval_numerator <= 0 ||
+            $turnout_numerator > $turnout_denominator ||
+            $approval_numerator > $approval_denominator) return 'invalid';
+
+        $participation = $yes + $no + $abstain;
+        if ($participation > $electorate) return 'invalid';
+        if ($participation * $turnout_denominator < $electorate * $turnout_numerator) {
+            return 'no_quorum';
+        }
+        $valid_votes = $yes + $no;
+        if ($valid_votes === 0) return 'no_quorum';
+        return ($yes * $approval_denominator >= $valid_votes * $approval_numerator)
+            ? 'approved'
+            : 'rejected';
+    }
+}
+
+if (!function_exists('community_charter_amendment_items_are_valid')) {
+    /**
+     * حذف ماده بنیادین (is_core=1) ممنوع است.
+     * اصلاح متن ماده بنیادین ممکن است، اما فقط از مسیر بررسی سخت‌گیرانه منشور.
+     */
+    function community_charter_amendment_items_are_valid(array $items): bool {
+        if (!$items) return false;
+        $seen_targets = [];
+        $seen_codes = [];
+        foreach ($items as $item) {
+            if (!is_array($item)) return false;
+            $action = $item['action'] ?? '';
+            $code = trim((string)($item['article_code'] ?? ''));
+            if (!in_array($action, ['add', 'replace', 'remove'], true) || $code === '') return false;
+            if (isset($seen_codes[$code])) return false;
+            $seen_codes[$code] = true;
+
+            if ($action === 'add') {
+                if (!empty($item['target_article_id']) || empty($item['proposed_title']) ||
+                    empty($item['proposed_text']) || empty($item['principle_group'])) return false;
+                continue;
+            }
+
+            $target = (int)($item['target_article_id'] ?? 0);
+            if ($target <= 0 || isset($seen_targets[$target])) return false;
+            $seen_targets[$target] = true;
+            if ($action === 'remove' && !empty($item['is_core'])) return false;
+            if ($action === 'replace' &&
+                (empty($item['proposed_title']) || empty($item['proposed_text']) ||
+                 empty($item['principle_group']))) return false;
+        }
+        return true;
+    }
+}
