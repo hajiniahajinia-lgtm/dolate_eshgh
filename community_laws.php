@@ -984,6 +984,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             // رأی وزن‌دار فقط با پروفایل چندحوزه‌ایِ تأییدشده و snapshot کامل مجاز است.
             if ($rules['individual_vote_basis'] === 'weighted') {
+                $expertise_schema = $conn->query(
+                    "SELECT COUNT(*) AS total FROM information_schema.tables
+                     WHERE table_schema=DATABASE()
+                       AND table_name IN (
+                         'topic_expertise_profiles',
+                         'topic_expertise_profile_domains',
+                         'community_law_expertise_profile_snapshots',
+                         'community_law_expertise_profile_domains',
+                         'community_law_expertise_voter_weights',
+                         'community_law_expertise_weight_details'
+                       )"
+                );
+                if (!$expertise_schema) throw new Exception('expertise schema check failed');
+                $expertise_tables_ready = (int)$expertise_schema->fetch_assoc()['total'] === 6;
+                $expertise_schema->free();
+                if (!$expertise_tables_ready) throw new RuntimeException('weighted_expertise_schema_missing');
+
                 $source_topic_id = (int)($record['source_topic_id'] ?? 0);
                 if ($source_topic_id <= 0) throw new RuntimeException('weighted_expertise_profile_required');
 
@@ -1143,6 +1160,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($e->getMessage() === 'invalid_law_scope') community_laws_redirect($community_id, 'invalid_law_scope');
                 if ($e->getMessage() === 'empty_law_electorate') community_laws_redirect($community_id, 'empty_law_electorate');
                 if ($e->getMessage() === 'weighted_expertise_profile_required') community_laws_redirect($community_id, 'weighted_expertise_profile_required');
+                if ($e->getMessage() === 'weighted_expertise_schema_missing') community_laws_redirect($community_id, 'weighted_expertise_schema_missing');
                 if ($e->getMessage() === 'weighted_expertise_profile_invalid') community_laws_redirect($community_id, 'weighted_expertise_profile_invalid');
             }
             error_log('[Dolate Eshgh law vote start] ' . $e->getMessage());
@@ -3575,6 +3593,7 @@ $status_messages = [
     'authority_review_required' => 'بررسی مستقل صلاحیت و انطباق با قوانین معتبر هنوز تأیید نشده است؛ آغاز رأی‌گیری مجاز نیست.',
     'population_snapshot_required' => 'وزن‌دهی بر اساس جمعیت تا زمان فراهم شدن آمار رسمی و snapshot معتبر جمعیت قابل استفاده نیست.',
     'weighted_expertise_profile_required' => 'برای رأی وزن‌دار، ابتدا باید پروفایل چندحوزه‌ای تخصصی همین موضوع پیشنهاد و با رأی جامعه تأیید شود.',
+    'weighted_expertise_schema_missing' => 'زیرساخت پروفایل و snapshot وزن تخصصی هنوز در پایگاه داده نصب نشده است؛ رأی‌گیری وزن‌دار تا اجرای migration متوقف می‌ماند.',
     'weighted_expertise_profile_invalid' => 'پروفایل تخصصی موضوع ناقص است یا سهم حوزه‌های آن دقیقاً ۱۰۰ درصد نیست؛ آغاز رأی‌گیری متوقف شد.',
     'invalid_legal_assessment' => 'اطلاعات ارزیابی حقوقی معتبر نیست.',
     'law_scope_exceeds_authority' => 'جامعه نمی‌تواند به‌تنهایی قانون الزام‌آور را به جامعه مادر یا سطح بالاتر گسترش دهد.',
