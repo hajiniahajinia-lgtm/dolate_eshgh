@@ -38,7 +38,7 @@ function community_removal_finalize_expired($conn, $community_id = 0) {
             if (!$community_exists) throw new RuntimeException("removal community no longer exists");
 
             $request_lock = $conn->prepare(
-                "SELECT status, deadline_at, target_user_id, member_count_snapshot
+                "SELECT status, (deadline_at <= NOW()) AS is_expired, target_user_id, member_count_snapshot
                  FROM community_member_removal_requests WHERE id=? FOR UPDATE"
             );
             if (!$request_lock) throw new RuntimeException("prepare removal request lock failed");
@@ -47,7 +47,7 @@ function community_removal_finalize_expired($conn, $community_id = 0) {
             $current = $request_lock->get_result()->fetch_assoc();
             $request_lock->close();
 
-            if (!$current || $current['status'] !== 'open' || strtotime($current['deadline_at']) > time()) {
+            if (!$current || $current['status'] !== 'open' || (int)$current['is_expired'] !== 1) {
                 $conn->commit();
                 continue;
             }
