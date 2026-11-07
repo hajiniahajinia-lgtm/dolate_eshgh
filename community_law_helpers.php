@@ -163,7 +163,7 @@ if (!function_exists('community_law_scope_match_checked')) {
         while ($row = $result->fetch_assoc()) {
             $scopes[] = [
                 'community_id' => (int)$row['scope_community_id'],
-                'include_descendants' => (int)$row['include_descendants'] === 1
+                'include_descendants' => (int)$row['include_descendants']
             ];
         }
         $stmt->close();
@@ -211,7 +211,7 @@ if (!function_exists('community_law_scope_community_ids')) {
         while ($row = $result->fetch_assoc()) {
             $scopes[] = [
                 'id' => (int)$row['scope_community_id'],
-                'descendants' => (int)$row['include_descendants'] === 1
+                'descendants' => (int)$row['include_descendants']
             ];
         }
         $stmt->close();
@@ -271,7 +271,7 @@ if (!function_exists('community_law_scope_ids_for_parent_map')) {
         while ($row = $result->fetch_assoc()) {
             $scopes[] = [
                 'id' => (int)$row['scope_community_id'],
-                'descendants' => (int)$row['include_descendants'] === 1
+                'descendants' => (int)$row['include_descendants']
             ];
         }
         $stmt->close();
