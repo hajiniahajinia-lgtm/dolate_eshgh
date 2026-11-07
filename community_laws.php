@@ -1484,6 +1484,696 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+
+    if (isset($_POST['open_law_final_review'])) {
+        if (!$is_member) community_laws_redirect($community_id, 'not_member');
+        $law_id = (int)($_POST['law_id'] ?? 0);
+        $version_id = (int)($_POST['version_id'] ?? 0);
+        if ($law_id <= 0 || $version_id <= 0) community_laws_redirect($community_id, 'invalid_final_review');
+
+        if (!$conn->begin_transaction()) community_laws_redirect($community_id, 'save_error');
+        try {
+            $lock = $conn->prepare(
+                "SELECT l.status, l.current_version_id, l.originating_community_id,
+                        v.status AS version_status, v.proposed_by, fr.final_status
+                 FROM community_laws l
+                 JOIN community_law_versions v ON v.law_id=l.id
+                 JOIN community_law_final_results fr ON fr.law_version_id=v.id
+                 WHERE l.id=? AND v.id=? AND l.originating_community_id=?
+                 FOR UPDATE"
+            );
+            if (!$lock) throw new Exception('final review open lock prepare failed');
+            $lock->bind_param('iii', $law_id, $version_id, $community_id);
+            if (!$lock->execute()) throw new Exception('final review open lock failed');
+            $law = $lock->get_result()->fetch_assoc();
+            $lock->close();
+            if (
+                !$law || $law['status'] !== 'voting' || $law['version_status'] !== 'voting' ||
+                (int)$law['current_version_id'] !== $version_id || $law['final_status'] !== 'vote_passed'
+            ) throw new RuntimeException('final_review_not_ready');
+
+            $exists = $conn->prepare("SELECT 1 FROM community_law_final_review_cases WHERE law_version_id=? LIMIT 1");
+            if (!$exists) throw new Exception('final review existence prepare failed');
+            $exists->bind_param('i', $version_id);
+            if (!$exists->execute()) throw new Exception('final review existence lookup failed');
+            $has_case = (bool)$exists->get_result()->fetch_row();
+            $exists->close();
+            if ($has_case) throw new RuntimeException('final_review_already_open');
+
+            // فهرست ارزیابان نهایی از اعضای snapshot قبلی ساخته می‌شود،
+            // اما پیشنهاددهنده و همه ارزیابان مراحل قبلی کنار گذاشته می‌شوند.
+            $electorate_insert = $conn->prepare(
+                "INSERT IGNORE INTO community_law_final_review_electorate (law_version_id, user_id)
+                 SELECT ?, re.user_id
+                 FROM community_law_review_electorate re
+                 WHERE re.law_version_id=? AND re.user_id<>?
+                   AND NOT EXISTS (
+                       SELECT 1 FROM community_law_review_assessments a
+                       WHERE a.law_version_id=re.law_version_id AND a.reviewer_user_id=re.user_id
+                   )
+                   AND NOT EXISTS (
+                       SELECT 1 FROM community_law_authority_assessments a
+                       WHERE a.law_version_id=re.law_version_id AND a.reviewer_user_id=re.user_id
+                   )"
+            );
+            if (!$electorate_insert) throw new Exception('final review electorate prepare failed');
+            $electorate_insert->bind_param('iii', $version_id, $version_id, $law['proposed_by']);
+            if (!$electorate_insert->execute()) throw new Exception('final review electorate snapshot failed');
+            $electorate_insert->close();
+
+            $capacity = $conn->prepare("SELECT COUNT(*) AS total FROM community_law_final_review_electorate WHERE law_version_id=?");
+            if (!$capacity) throw new Exception('final review capacity prepare failed');
+            $capacity->bind_param('i', $version_id);
+            if (!$capacity->execute()) throw new Exception('final review capacity lookup failed');
+            $reviewer_count = (int)$capacity->get_result()->fetch_assoc()['total'];
+            $capacity->close();
+            if ($reviewer_count < 3) throw new RuntimeException('insufficient_final_reviewers');
+
+            // نسخه قوانین مرجع باید هنوز همان نسخه معتبر زمان بررسی صلاحیت باشد.
+            $references = $conn->prepare(
+                "SELECT ar.reference_law_id, ar.reference_law_version_id,
+                        rl.current_version_id, rl.status AS reference_status,
+                        rv.status AS reference_version_status,
+                        rl.effective_at, rl.expires_at, rl.repealed_at
+                 FROM community_law_authority_references ar
+                 JOIN community_laws rl ON rl.id=ar.reference_law_id
+                 JOIN community_law_versions rv ON rv.id=ar.reference_law_version_id
+                 WHERE ar.law_version_id=?"
+            );
+            if (!$references) throw new Exception('final review references prepare failed');
+            $references->bind_param('i', $version_id);
+            if (!$references->execute()) throw new Exception('final review references lookup failed');
+            $reference_rows = $references->get_result();
+            $reference_insert = $conn->prepare(
+                "INSERT INTO community_law_final_review_references
+                    (law_version_id, reference_law_id, reference_law_version_id,
+                     reference_origin_community_id, relation_type, scope_fingerprint)
+                 SELECT ?, ar.reference_law_id, ar.reference_law_version_id,
+                        ar.reference_origin_community_id, ar.relation_type, ?
+                 FROM community_law_authority_references ar
+                 WHERE ar.law_version_id=? AND ar.reference_law_version_id=?"
+            );
+            if (!$reference_insert) throw new Exception('final review reference insert prepare failed');
+            while ($reference = $reference_rows->fetch_assoc()) {
+                if (
+                    (int)$reference['current_version_id'] !== (int)$reference['reference_law_version_id'] ||
+                    $reference['reference_status'] !== 'approved' ||
+                    $reference['reference_version_status'] !== 'approved' ||
+                    !empty($reference['repealed_at']) ||
+                    (!empty($reference['effective_at']) && strtotime($reference['effective_at']) > time()) ||
+                    (!empty($reference['expires_at']) && strtotime($reference['expires_at']) <= time())
+                ) throw new RuntimeException('reference_law_changed');
+                $scope_stmt = $conn->prepare(
+                    "SELECT scope_community_id, include_descendants
+                     FROM community_law_scopes WHERE law_version_id=?
+                     ORDER BY scope_community_id"
+                );
+                if (!$scope_stmt) throw new Exception('reference scope fingerprint prepare failed');
+                $reference_version_id = (int)$reference['reference_law_version_id'];
+                $scope_stmt->bind_param('i', $reference_version_id);
+                if (!$scope_stmt->execute()) throw new Exception('reference scope fingerprint lookup failed');
+                $scope_rows = [];
+                $scope_result = $scope_stmt->get_result();
+                while ($scope_row = $scope_result->fetch_assoc()) $scope_rows[] = $scope_row;
+                $scope_stmt->close();
+                if (!$scope_rows) throw new RuntimeException('reference_law_changed');
+                $fingerprint = hash('sha256', json_encode($scope_rows));
+                $reference_law_id = (int)$reference['reference_law_id'];
+                $reference_insert->bind_param('isii', $version_id, $fingerprint, $version_id, $reference_version_id);
+                if (!$reference_insert->execute()) throw new Exception('final review reference snapshot failed');
+            }
+            $references->close();
+            $reference_insert->close();
+
+            $case_insert = $conn->prepare(
+                "INSERT INTO community_law_final_review_cases
+                    (law_version_id, status, reviewer_quorum, appeal_period_days, opened_by)
+                 VALUES (?, 'pending', 3, 7, ?)"
+            );
+            if (!$case_insert) throw new Exception('final review case insert prepare failed');
+            $case_insert->bind_param('ii', $version_id, $user_id);
+            if (!$case_insert->execute()) throw new Exception('final review case insert failed');
+            $case_insert->close();
+
+            $law_update = $conn->prepare(
+                "UPDATE community_laws SET status='pending_final_review' WHERE id=? AND status='voting'"
+            );
+            $version_update = $conn->prepare(
+                "UPDATE community_law_versions SET status='pending_final_review' WHERE id=? AND status='voting'"
+            );
+            if (!$law_update || !$version_update) throw new Exception('final review status prepare failed');
+            $law_update->bind_param('i', $law_id);
+            $version_update->bind_param('i', $version_id);
+            if (!$law_update->execute() || $law_update->affected_rows !== 1) throw new Exception('final review law status update failed');
+            if (!$version_update->execute() || $version_update->affected_rows !== 1) throw new Exception('final review version status update failed');
+            $law_update->close();
+            $version_update->close();
+
+            if (!community_law_record_history(
+                $conn, $law_id, $version_id, $community_id, $user_id,
+                'final_review_opened',
+                'نتیجه رأی‌گیری مثبت بود؛ بررسی نهایی مستقل با ارزیابانی جدا از مراحل قبلی آغاز شد.'
+            )) throw new Exception('final review history failed');
+            if (!$conn->commit()) throw new Exception('final review open commit failed');
+            community_laws_redirect($community_id, 'final_review_opened');
+        } catch (Throwable $e) {
+            $conn->rollback();
+            if ($e instanceof RuntimeException) {
+                if ($e->getMessage() === 'final_review_not_ready') community_laws_redirect($community_id, 'final_review_not_ready');
+                if ($e->getMessage() === 'final_review_already_open') community_laws_redirect($community_id, 'final_review_already_open');
+                if ($e->getMessage() === 'insufficient_final_reviewers') community_laws_redirect($community_id, 'insufficient_final_reviewers');
+                if ($e->getMessage() === 'reference_law_changed') community_laws_redirect($community_id, 'reference_law_changed');
+            }
+            error_log('[Dolate Eshgh final review open] ' . $e->getMessage());
+            community_laws_redirect($community_id, 'save_error');
+        }
+    }
+
+    if (isset($_POST['submit_law_final_assessment'])) {
+        if (!$is_member) community_laws_redirect($community_id, 'not_member');
+        $version_id = (int)($_POST['law_version_id'] ?? 0);
+        $verdict = (string)($_POST['final_verdict'] ?? '');
+        $reasoning = trim((string)($_POST['final_reasoning'] ?? ''));
+        $evidence = trim((string)($_POST['final_evidence'] ?? ''));
+        $dimensions = [
+            'charter_and_rights' => (string)($_POST['charter_and_rights'] ?? ''),
+            'non_discrimination' => (string)($_POST['non_discrimination'] ?? ''),
+            'power_concentration' => (string)($_POST['power_concentration'] ?? ''),
+            'human_and_social_impact' => (string)($_POST['human_and_social_impact'] ?? ''),
+            'environmental_impact' => (string)($_POST['environmental_impact'] ?? ''),
+            'economic_and_resource_impact' => (string)($_POST['economic_and_resource_impact'] ?? ''),
+            'future_generations_and_other_life' => (string)($_POST['future_generations_and_other_life'] ?? ''),
+            'implementation_and_accountability' => (string)($_POST['implementation_and_accountability'] ?? '')
+        ];
+        if (
+            $version_id <= 0 || !in_array($verdict, ['confirm','dispute','unclear'], true) ||
+            $reasoning === '' || mb_strlen($reasoning) > 30000 || mb_strlen($evidence) > 30000
+        ) community_laws_redirect($community_id, 'invalid_final_assessment');
+        foreach ($dimensions as $value) {
+            if (!in_array($value, ['pass','conflict','unclear'], true)) {
+                community_laws_redirect($community_id, 'invalid_final_assessment');
+            }
+        }
+
+        if (!$conn->begin_transaction()) community_laws_redirect($community_id, 'save_error');
+        try {
+            $case_lock = $conn->prepare(
+                "SELECT l.id AS law_id, l.status AS law_status, l.current_version_id,
+                        v.status AS version_status, v.proposed_by,
+                        fc.status AS final_status, fc.reviewer_quorum, fc.appeal_period_days
+                 FROM community_law_versions v
+                 JOIN community_laws l ON l.id=v.law_id
+                 JOIN community_law_final_review_cases fc ON fc.law_version_id=v.id
+                 WHERE v.id=? FOR UPDATE"
+            );
+            if (!$case_lock) throw new Exception('final assessment lock prepare failed');
+            $case_lock->bind_param('i', $version_id);
+            if (!$case_lock->execute()) throw new Exception('final assessment lock failed');
+            $case = $case_lock->get_result()->fetch_assoc();
+            $case_lock->close();
+            if (
+                !$case || $case['law_status'] !== 'pending_final_review' ||
+                $case['version_status'] !== 'pending_final_review' ||
+                (int)$case['current_version_id'] !== $version_id ||
+                $case['final_status'] !== 'pending' ||
+                (int)$case['proposed_by'] === $user_id
+            ) throw new RuntimeException('final_assessment_not_allowed');
+
+            $eligible = $conn->prepare(
+                "SELECT 1 FROM community_law_final_review_electorate
+                 WHERE law_version_id=? AND user_id=? LIMIT 1"
+            );
+            if (!$eligible) throw new Exception('final assessment eligibility prepare failed');
+            $eligible->bind_param('ii', $version_id, $user_id);
+            if (!$eligible->execute()) throw new Exception('final assessment eligibility lookup failed');
+            $is_eligible = (bool)$eligible->get_result()->fetch_row();
+            $eligible->close();
+            if (!$is_eligible) throw new RuntimeException('final_assessment_not_allowed');
+
+            $insert = $conn->prepare(
+                "INSERT INTO community_law_final_review_assessments
+                    (law_version_id, reviewer_user_id, verdict, charter_and_rights,
+                     non_discrimination, power_concentration, human_and_social_impact,
+                     environmental_impact, economic_and_resource_impact,
+                     future_generations_and_other_life, implementation_and_accountability,
+                     reasoning, evidence)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            );
+            if (!$insert) throw new Exception('final assessment insert prepare failed');
+            $insert->bind_param(
+                'iisssssssssss',
+                $version_id, $user_id, $verdict,
+                $dimensions['charter_and_rights'], $dimensions['non_discrimination'],
+                $dimensions['power_concentration'], $dimensions['human_and_social_impact'],
+                $dimensions['environmental_impact'], $dimensions['economic_and_resource_impact'],
+                $dimensions['future_generations_and_other_life'],
+                $dimensions['implementation_and_accountability'], $reasoning, $evidence
+            );
+            if (!$insert->execute()) throw new Exception('final assessment insert failed');
+            $insert->close();
+
+            $aggregate = $conn->prepare(
+                "SELECT COUNT(*) AS total,
+                        SUM(CASE WHEN verdict='dispute' OR
+                            charter_and_rights='conflict' OR non_discrimination='conflict' OR
+                            power_concentration='conflict' OR human_and_social_impact='conflict' OR
+                            environmental_impact='conflict' OR economic_and_resource_impact='conflict' OR
+                            future_generations_and_other_life='conflict' OR
+                            implementation_and_accountability='conflict' THEN 1 ELSE 0 END) AS conflicts,
+                        SUM(CASE WHEN verdict='unclear' OR
+                            charter_and_rights='unclear' OR non_discrimination='unclear' OR
+                            power_concentration='unclear' OR human_and_social_impact='unclear' OR
+                            environmental_impact='unclear' OR economic_and_resource_impact='unclear' OR
+                            future_generations_and_other_life='unclear' OR
+                            implementation_and_accountability='unclear' THEN 1 ELSE 0 END) AS unclear_count
+                 FROM community_law_final_review_assessments WHERE law_version_id=?"
+            );
+            if (!$aggregate) throw new Exception('final assessment aggregate prepare failed');
+            $aggregate->bind_param('i', $version_id);
+            if (!$aggregate->execute()) throw new Exception('final assessment aggregate failed');
+            $totals = $aggregate->get_result()->fetch_assoc();
+            $aggregate->close();
+
+            $new_status = 'pending';
+            $appeal_deadline = null;
+            if ((int)$totals['total'] >= (int)$case['reviewer_quorum']) {
+                if ((int)$totals['conflicts'] > 0) $new_status = 'conflict_found';
+                elseif ((int)$totals['unclear_count'] > 0) $new_status = 'needs_revision';
+                else {
+                    $new_status = 'appeal_period';
+                    $appeal_deadline = date('Y-m-d H:i:s', time() + ((int)$case['appeal_period_days'] * 86400));
+                }
+            }
+            $case_update = $conn->prepare(
+                "UPDATE community_law_final_review_cases
+                 SET status=?, appeal_deadline=?, review_completed_at=CASE WHEN ?='pending' THEN NULL ELSE NOW() END
+                 WHERE law_version_id=? AND status='pending'"
+            );
+            if (!$case_update) throw new Exception('final review status update prepare failed');
+            $case_update->bind_param('sssi', $new_status, $appeal_deadline, $new_status, $version_id);
+            if (!$case_update->execute()) throw new Exception('final review status update failed');
+            $case_update->close();
+
+            if ($new_status === 'appeal_period') {
+                $law_update = $conn->prepare("UPDATE community_laws SET status='appeal_period' WHERE id=? AND status='pending_final_review'");
+                $version_update = $conn->prepare("UPDATE community_law_versions SET status='appeal_period' WHERE id=? AND status='pending_final_review'");
+                if (!$law_update || !$version_update) throw new Exception('appeal period status prepare failed');
+                $law_update->bind_param('i', $case['law_id']);
+                $version_update->bind_param('i', $version_id);
+                if (!$law_update->execute() || !$version_update->execute()) throw new Exception('appeal period status update failed');
+                $law_update->close();
+                $version_update->close();
+            }
+
+            if (!community_law_record_history(
+                $conn, (int)$case['law_id'], $version_id, $community_id, $user_id,
+                'final_review_assessment',
+                'ارزیابی نهایی مستقل ثبت شد؛ وضعیت پرونده: ' . $new_status
+            )) throw new Exception('final assessment history failed');
+            if (!$conn->commit()) throw new Exception('final assessment commit failed');
+            community_laws_redirect($community_id, 'final_assessment_saved');
+        } catch (Throwable $e) {
+            $conn->rollback();
+            if ($e instanceof RuntimeException && $e->getMessage() === 'final_assessment_not_allowed') {
+                community_laws_redirect($community_id, 'final_assessment_not_allowed');
+            }
+            error_log('[Dolate Eshgh final assessment] ' . $e->getMessage());
+            community_laws_redirect($community_id, 'save_error');
+        }
+    }
+
+    if (isset($_POST['submit_law_appeal'])) {
+        if (!$is_member) community_laws_redirect($community_id, 'not_member');
+        $version_id = (int)($_POST['law_version_id'] ?? 0);
+        $appeal_type = (string)($_POST['appeal_type'] ?? 'other');
+        $description = trim((string)($_POST['appeal_description'] ?? ''));
+        $evidence = trim((string)($_POST['appeal_evidence'] ?? ''));
+        $allowed = [
+            'charter_conflict','jurisdiction_conflict','rights_violation','discrimination',
+            'power_concentration','environmental_harm','future_generations',
+            'implementation_risk','new_evidence','other'
+        ];
+        if (
+            $version_id <= 0 || !in_array($appeal_type, $allowed, true) ||
+            $description === '' || mb_strlen($description) > 30000 || mb_strlen($evidence) > 30000 ||
+            !community_law_scope_matches($conn, $version_id, $community_id)
+        ) community_laws_redirect($community_id, 'invalid_appeal');
+
+        if (!$conn->begin_transaction()) community_laws_redirect($community_id, 'save_error');
+        try {
+            $lock = $conn->prepare(
+                "SELECT l.id AS law_id, l.status, l.current_version_id,
+                        v.status AS version_status, fc.status AS final_status,
+                        fc.appeal_deadline
+                 FROM community_laws l
+                 JOIN community_law_versions v ON v.law_id=l.id
+                 JOIN community_law_final_review_cases fc ON fc.law_version_id=v.id
+                 WHERE v.id=? FOR UPDATE"
+            );
+            if (!$lock) throw new Exception('appeal lock prepare failed');
+            $lock->bind_param('i', $version_id);
+            if (!$lock->execute()) throw new Exception('appeal lock failed');
+            $law = $lock->get_result()->fetch_assoc();
+            $lock->close();
+            if (
+                !$law || $law['status'] !== 'appeal_period' ||
+                $law['version_status'] !== 'appeal_period' ||
+                $law['final_status'] !== 'appeal_period' ||
+                (int)$law['current_version_id'] !== $version_id ||
+                empty($law['appeal_deadline']) || strtotime($law['appeal_deadline']) < time()
+            ) throw new RuntimeException('appeal_period_closed');
+
+            $insert = $conn->prepare(
+                "INSERT INTO community_law_appeals
+                    (law_version_id, community_id, submitted_by, appeal_type, description, evidence)
+                 VALUES (?, ?, ?, ?, ?, ?)"
+            );
+            if (!$insert) throw new Exception('appeal insert prepare failed');
+            $insert->bind_param('iiisss', $version_id, $community_id, $user_id, $appeal_type, $description, $evidence);
+            if (!$insert->execute()) throw new Exception('appeal insert failed');
+            $appeal_id = (int)$conn->insert_id;
+            $insert->close();
+
+            $electorate = $conn->prepare(
+                "INSERT IGNORE INTO community_law_appeal_electorate (appeal_id, user_id)
+                 SELECT ?, e.user_id FROM community_law_final_review_electorate e
+                 WHERE e.law_version_id=? AND e.user_id<>?
+                   AND NOT EXISTS (
+                       SELECT 1 FROM community_law_final_review_assessments a
+                       WHERE a.law_version_id=e.law_version_id AND a.reviewer_user_id=e.user_id
+                   )"
+            );
+            if (!$electorate) throw new Exception('appeal electorate prepare failed');
+            $electorate->bind_param('iii', $appeal_id, $version_id, $user_id);
+            if (!$electorate->execute()) throw new Exception('appeal electorate snapshot failed');
+            $electorate->close();
+            $capacity = $conn->prepare("SELECT COUNT(*) AS total FROM community_law_appeal_electorate WHERE appeal_id=?");
+            if (!$capacity) throw new Exception('appeal electorate count prepare failed');
+            $capacity->bind_param('i', $appeal_id);
+            if (!$capacity->execute()) throw new Exception('appeal electorate count failed');
+            $appeal_capacity = (int)$capacity->get_result()->fetch_assoc()['total'];
+            $capacity->close();
+            if ($appeal_capacity < 3) throw new RuntimeException('insufficient_appeal_reviewers');
+
+            $hold = $conn->prepare(
+                "UPDATE community_law_final_review_cases SET status='appeal_hold'
+                 WHERE law_version_id=? AND status='appeal_period'"
+            );
+            if (!$hold) throw new Exception('appeal hold prepare failed');
+            $hold->bind_param('i', $version_id);
+            if (!$hold->execute() || $hold->affected_rows !== 1) throw new Exception('appeal hold update failed');
+            $hold->close();
+
+            $version_law_stmt = $conn->prepare("SELECT law_id FROM community_law_versions WHERE id=?");
+            if (!$version_law_stmt) throw new Exception('appeal history law lookup prepare failed');
+            $version_law_stmt->bind_param('i', $version_id);
+            if (!$version_law_stmt->execute()) throw new Exception('appeal history law lookup failed');
+            $law_id_row = $version_law_stmt->get_result()->fetch_assoc();
+            $version_law_stmt->close();
+            if (!community_law_record_history(
+                $conn, (int)$law_id_row['law_id'], $version_id, $community_id, $user_id,
+                'law_appeal_submitted', $description
+            )) throw new Exception('appeal history failed');
+            if (!$conn->commit()) throw new Exception('appeal commit failed');
+            community_laws_redirect($community_id, 'appeal_saved');
+        } catch (Throwable $e) {
+            $conn->rollback();
+            if ($e instanceof RuntimeException) {
+                if ($e->getMessage() === 'appeal_period_closed') community_laws_redirect($community_id, 'appeal_period_closed');
+                if ($e->getMessage() === 'insufficient_appeal_reviewers') community_laws_redirect($community_id, 'insufficient_appeal_reviewers');
+            }
+            error_log('[Dolate Eshgh law appeal] ' . $e->getMessage());
+            community_laws_redirect($community_id, 'save_error');
+        }
+    }
+
+    if (isset($_POST['submit_law_appeal_assessment'])) {
+        if (!$is_member) community_laws_redirect($community_id, 'not_member');
+        $appeal_id = (int)($_POST['appeal_id'] ?? 0);
+        $verdict = (string)($_POST['appeal_verdict'] ?? '');
+        $reasoning = trim((string)($_POST['appeal_reasoning'] ?? ''));
+        $evidence = trim((string)($_POST['appeal_review_evidence'] ?? ''));
+        if (
+            $appeal_id <= 0 || !in_array($verdict, ['uphold','dismiss','unclear'], true) ||
+            $reasoning === '' || mb_strlen($reasoning) > 30000 || mb_strlen($evidence) > 30000
+        ) community_laws_redirect($community_id, 'invalid_appeal_assessment');
+
+        if (!$conn->begin_transaction()) community_laws_redirect($community_id, 'save_error');
+        try {
+            $lock = $conn->prepare(
+                "SELECT a.law_version_id, a.status AS appeal_status, a.submitted_by,
+                        a.reviewer_quorum, v.law_id, l.status AS law_status,
+                        l.current_version_id, v.status AS version_status,
+                        fc.status AS final_status
+                 FROM community_law_appeals a
+                 JOIN community_law_versions v ON v.id=a.law_version_id
+                 JOIN community_laws l ON l.id=v.law_id
+                 JOIN community_law_final_review_cases fc ON fc.law_version_id=v.id
+                 WHERE a.id=? FOR UPDATE"
+            );
+            if (!$lock) throw new Exception('appeal assessment lock prepare failed');
+            $lock->bind_param('i', $appeal_id);
+            if (!$lock->execute()) throw new Exception('appeal assessment lock failed');
+            $appeal = $lock->get_result()->fetch_assoc();
+            $lock->close();
+            if (
+                !$appeal || !in_array($appeal['appeal_status'], ['submitted','under_review'], true) ||
+                !in_array($appeal['final_status'], ['appeal_hold','appeal_period'], true) ||
+                (int)$appeal['submitted_by'] === $user_id ||
+                (int)$appeal['current_version_id'] !== (int)$appeal['law_version_id'] ||
+                $appeal['law_status'] !== 'appeal_period' || $appeal['version_status'] !== 'appeal_period'
+            ) throw new RuntimeException('appeal_assessment_not_allowed');
+
+            $eligible = $conn->prepare(
+                "SELECT 1 FROM community_law_appeal_electorate WHERE appeal_id=? AND user_id=? LIMIT 1"
+            );
+            if (!$eligible) throw new Exception('appeal assessor eligibility prepare failed');
+            $eligible->bind_param('ii', $appeal_id, $user_id);
+            if (!$eligible->execute()) throw new Exception('appeal assessor eligibility lookup failed');
+            $is_eligible = (bool)$eligible->get_result()->fetch_row();
+            $eligible->close();
+            if (!$is_eligible) throw new RuntimeException('appeal_assessment_not_allowed');
+
+            $insert = $conn->prepare(
+                "INSERT INTO community_law_appeal_assessments
+                    (appeal_id, reviewer_user_id, verdict, reasoning, evidence)
+                 VALUES (?, ?, ?, ?, ?)"
+            );
+            if (!$insert) throw new Exception('appeal assessment insert prepare failed');
+            $insert->bind_param('iisss', $appeal_id, $user_id, $verdict, $reasoning, $evidence);
+            if (!$insert->execute()) throw new Exception('appeal assessment insert failed');
+            $insert->close();
+
+            $aggregate = $conn->prepare(
+                "SELECT COUNT(*) AS total,
+                        SUM(CASE WHEN verdict='uphold' THEN 1 ELSE 0 END) AS upheld,
+                        SUM(CASE WHEN verdict='unclear' THEN 1 ELSE 0 END) AS unclear_count
+                 FROM community_law_appeal_assessments WHERE appeal_id=?"
+            );
+            if (!$aggregate) throw new Exception('appeal assessment aggregate prepare failed');
+            $aggregate->bind_param('i', $appeal_id);
+            if (!$aggregate->execute()) throw new Exception('appeal assessment aggregate failed');
+            $totals = $aggregate->get_result()->fetch_assoc();
+            $aggregate->close();
+
+            $appeal_status = 'under_review';
+            if ((int)$totals['total'] >= (int)$appeal['reviewer_quorum']) {
+                if ((int)$totals['upheld'] > 0) $appeal_status = 'upheld';
+                elseif ((int)$totals['unclear_count'] === 0) $appeal_status = 'dismissed';
+            }
+            $appeal_update = $conn->prepare(
+                "UPDATE community_law_appeals SET status=?, decision_note=?, decided_at=IF(? IN ('upheld','dismissed'), NOW(), NULL)
+                 WHERE id=? AND status IN ('submitted','under_review')"
+            );
+            if (!$appeal_update) throw new Exception('appeal status update prepare failed');
+            $appeal_update->bind_param('sssi', $appeal_status, $reasoning, $appeal_status, $appeal_id);
+            if (!$appeal_update->execute()) throw new Exception('appeal status update failed');
+            $appeal_update->close();
+
+            if ($appeal_status === 'upheld') {
+                $case_update = $conn->prepare(
+                    "UPDATE community_law_final_review_cases SET status='needs_revision'
+                     WHERE law_version_id=? AND status IN ('appeal_hold','appeal_period')"
+                );
+                if (!$case_update) throw new Exception('upheld appeal case update prepare failed');
+                $case_update->bind_param('i', $appeal['law_version_id']);
+                if (!$case_update->execute()) throw new Exception('upheld appeal case update failed');
+                $case_update->close();
+                $law_update = $conn->prepare("UPDATE community_laws SET status='pending_final_review' WHERE id=? AND status='appeal_period'");
+                $version_update = $conn->prepare("UPDATE community_law_versions SET status='pending_final_review' WHERE id=? AND status='appeal_period'");
+                if (!$law_update || !$version_update) throw new Exception('upheld appeal law status prepare failed');
+                $law_update->bind_param('i', $appeal['law_id']);
+                $version_update->bind_param('i', $appeal['law_version_id']);
+                if (!$law_update->execute() || !$version_update->execute()) throw new Exception('upheld appeal law status update failed');
+                $law_update->close();
+                $version_update->close();
+            } elseif ($appeal_status === 'dismissed') {
+                $open_appeals = $conn->prepare(
+                    "SELECT COUNT(*) AS total FROM community_law_appeals
+                     WHERE law_version_id=? AND status IN ('submitted','under_review')"
+                );
+                if (!$open_appeals) throw new Exception('open appeals count prepare failed');
+                $open_appeals->bind_param('i', $appeal['law_version_id']);
+                if (!$open_appeals->execute()) throw new Exception('open appeals count failed');
+                $open_count = (int)$open_appeals->get_result()->fetch_assoc()['total'];
+                $open_appeals->close();
+                if ($open_count === 0) {
+                    $case_update = $conn->prepare(
+                        "UPDATE community_law_final_review_cases SET status='appeal_period'
+                         WHERE law_version_id=? AND status='appeal_hold'"
+                    );
+                    if (!$case_update) throw new Exception('dismissed appeal case update prepare failed');
+                    $case_update->bind_param('i', $appeal['law_version_id']);
+                    if (!$case_update->execute()) throw new Exception('dismissed appeal case update failed');
+                    $case_update->close();
+                }
+            }
+
+            if (!community_law_record_history(
+                $conn, (int)$appeal['law_id'], (int)$appeal['law_version_id'],
+                $community_id, $user_id, 'law_appeal_assessed',
+                'نتیجه رسیدگی به اعتراض: ' . $appeal_status . '؛ ' . $reasoning
+            )) throw new Exception('appeal assessment history failed');
+            if (!$conn->commit()) throw new Exception('appeal assessment commit failed');
+            community_laws_redirect($community_id, 'appeal_assessment_saved');
+        } catch (Throwable $e) {
+            $conn->rollback();
+            if ($e instanceof RuntimeException && $e->getMessage() === 'appeal_assessment_not_allowed') {
+                community_laws_redirect($community_id, 'appeal_assessment_not_allowed');
+            }
+            error_log('[Dolate Eshgh appeal assessment] ' . $e->getMessage());
+            community_laws_redirect($community_id, 'save_error');
+        }
+    }
+
+    if (isset($_POST['enact_law'])) {
+        if (!$is_member) community_laws_redirect($community_id, 'not_member');
+        $version_id = (int)($_POST['law_version_id'] ?? 0);
+        if ($version_id <= 0) community_laws_redirect($community_id, 'enactment_not_ready');
+        if (!$conn->begin_transaction()) community_laws_redirect($community_id, 'save_error');
+        try {
+            $lock = $conn->prepare(
+                "SELECT l.id AS law_id, l.status AS law_status, l.current_version_id,
+                        l.originating_community_id, v.status AS version_status,
+                        fc.status AS final_status, fc.appeal_deadline
+                 FROM community_law_versions v
+                 JOIN community_laws l ON l.id=v.law_id
+                 JOIN community_law_final_review_cases fc ON fc.law_version_id=v.id
+                 WHERE v.id=? FOR UPDATE"
+            );
+            if (!$lock) throw new Exception('enactment lock prepare failed');
+            $lock->bind_param('i', $version_id);
+            if (!$lock->execute()) throw new Exception('enactment lock failed');
+            $law = $lock->get_result()->fetch_assoc();
+            $lock->close();
+            if (
+                !$law || (int)$law['originating_community_id'] !== $community_id ||
+                (int)$law['current_version_id'] !== $version_id ||
+                $law['law_status'] !== 'appeal_period' ||
+                $law['version_status'] !== 'appeal_period' ||
+                !in_array($law['final_status'], ['appeal_period','appeal_hold'], true) ||
+                empty($law['appeal_deadline']) || strtotime($law['appeal_deadline']) > time()
+            ) throw new RuntimeException('enactment_not_ready');
+
+            $appeal_check = $conn->prepare(
+                "SELECT
+                    SUM(CASE WHEN status IN ('submitted','under_review') THEN 1 ELSE 0 END) AS unresolved,
+                    SUM(CASE WHEN status='upheld' THEN 1 ELSE 0 END) AS upheld
+                 FROM community_law_appeals WHERE law_version_id=?"
+            );
+            if (!$appeal_check) throw new Exception('enactment appeal check prepare failed');
+            $appeal_check->bind_param('i', $version_id);
+            if (!$appeal_check->execute()) throw new Exception('enactment appeal check failed');
+            $appeal_totals = $appeal_check->get_result()->fetch_assoc();
+            $appeal_check->close();
+            if ((int)$appeal_totals['unresolved'] > 0 || (int)$appeal_totals['upheld'] > 0) {
+                throw new RuntimeException('enactment_appeals_pending');
+            }
+
+            // بازبینی نسخه و دامنه همه قوانین مرجعِ snapshotشده؛ هر تغییر، ابلاغ را متوقف می‌کند.
+            $reference_check = $conn->prepare(
+                "SELECT fr.reference_law_id, fr.reference_law_version_id, fr.scope_fingerprint,
+                        l.current_version_id, l.status AS law_status, l.effective_at,
+                        l.expires_at, l.repealed_at, v.status AS version_status
+                 FROM community_law_final_review_references fr
+                 JOIN community_laws l ON l.id=fr.reference_law_id
+                 JOIN community_law_versions v ON v.id=fr.reference_law_version_id
+                 WHERE fr.law_version_id=?"
+            );
+            if (!$reference_check) throw new Exception('enactment references prepare failed');
+            $reference_check->bind_param('i', $version_id);
+            if (!$reference_check->execute()) throw new Exception('enactment references lookup failed');
+            $reference_rows = $reference_check->get_result();
+            while ($reference = $reference_rows->fetch_assoc()) {
+                if (
+                    (int)$reference['current_version_id'] !== (int)$reference['reference_law_version_id'] ||
+                    $reference['law_status'] !== 'approved' || $reference['version_status'] !== 'approved' ||
+                    !empty($reference['repealed_at']) ||
+                    (!empty($reference['effective_at']) && strtotime($reference['effective_at']) > time()) ||
+                    (!empty($reference['expires_at']) && strtotime($reference['expires_at']) <= time())
+                ) throw new RuntimeException('reference_law_changed');
+                $scope_stmt = $conn->prepare(
+                    "SELECT scope_community_id, include_descendants
+                     FROM community_law_scopes WHERE law_version_id=?
+                     ORDER BY scope_community_id"
+                );
+                if (!$scope_stmt) throw new Exception('enactment scope prepare failed');
+                $ref_version = (int)$reference['reference_law_version_id'];
+                $scope_stmt->bind_param('i', $ref_version);
+                if (!$scope_stmt->execute()) throw new Exception('enactment scope lookup failed');
+                $scope_rows = [];
+                $scope_result = $scope_stmt->get_result();
+                while ($scope_row = $scope_result->fetch_assoc()) $scope_rows[] = $scope_row;
+                $scope_stmt->close();
+                if (!$scope_rows || !hash_equals((string)$reference['scope_fingerprint'], hash('sha256', json_encode($scope_rows)))) {
+                    throw new RuntimeException('reference_law_changed');
+                }
+            }
+            $reference_check->close();
+
+            $law_update = $conn->prepare(
+                "UPDATE community_laws
+                 SET status='approved', effective_at=NOW()
+                 WHERE id=? AND status='appeal_period' AND current_version_id=?"
+            );
+            $version_update = $conn->prepare(
+                "UPDATE community_law_versions SET status='approved', approved_at=NOW()
+                 WHERE id=? AND status='appeal_period'"
+            );
+            $case_update = $conn->prepare(
+                "UPDATE community_law_final_review_cases SET status='enacted', enacted_at=NOW()
+                 WHERE law_version_id=? AND status IN ('appeal_period','appeal_hold')"
+            );
+            if (!$law_update || !$version_update || !$case_update) throw new Exception('enactment update prepare failed');
+            $law_update->bind_param('ii', $law['law_id'], $version_id);
+            $version_update->bind_param('i', $version_id);
+            $case_update->bind_param('i', $version_id);
+            if (!$law_update->execute() || $law_update->affected_rows !== 1) throw new Exception('enactment law update failed');
+            if (!$version_update->execute() || $version_update->affected_rows !== 1) throw new Exception('enactment version update failed');
+            if (!$case_update->execute() || $case_update->affected_rows !== 1) throw new Exception('enactment case update failed');
+            $law_update->close();
+            $version_update->close();
+            $case_update->close();
+
+            if (!community_law_record_history(
+                $conn, (int)$law['law_id'], $version_id, $community_id, $user_id,
+                'law_enacted',
+                'پس از رأی مثبت، بررسی نهایی مستقل، پایان مهلت اعتراض و رسیدگی به همه اعتراض‌ها، قانون ابلاغ و لازم‌الاجرا شد.'
+            )) throw new Exception('enactment history failed');
+            if (!$conn->commit()) throw new Exception('enactment commit failed');
+            community_laws_redirect($community_id, 'law_enacted');
+        } catch (Throwable $e) {
+            $conn->rollback();
+            if ($e instanceof RuntimeException) {
+                if ($e->getMessage() === 'enactment_not_ready') community_laws_redirect($community_id, 'enactment_not_ready');
+                if ($e->getMessage() === 'enactment_appeals_pending') community_laws_redirect($community_id, 'enactment_appeals_pending');
+                if ($e->getMessage() === 'reference_law_changed') community_laws_redirect($community_id, 'reference_law_changed');
+            }
+            error_log('[Dolate Eshgh enactment] ' . $e->getMessage());
+            community_laws_redirect($community_id, 'save_error');
+        }
+    }
+
     if (isset($_POST['submit_law_objection'])) {
         if (!$is_member) community_laws_redirect($community_id, 'not_member');
 
