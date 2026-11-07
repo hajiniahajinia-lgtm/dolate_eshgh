@@ -101,6 +101,23 @@ if (!function_exists('community_law_is_descendant_or_same')) {
     }
 }
 
+if (!function_exists('community_law_parent_map_is_valid')) {
+    function community_law_parent_map_is_valid(array $parent_map): bool {
+        foreach ($parent_map as $community_id => $_parent_id) {
+            $cursor = (int)$community_id;
+            $visited = [];
+            while ($cursor > 0) {
+                if (isset($visited[$cursor]) || !array_key_exists($cursor, $parent_map)) {
+                    return false;
+                }
+                $visited[$cursor] = true;
+                $cursor = (int)$parent_map[$cursor];
+            }
+        }
+        return true;
+    }
+}
+
 if (!function_exists('community_law_scope_matches')) {
     function community_law_scope_matches(mysqli $conn, int $law_version_id, int $target_community_id): bool {
         if ($law_version_id <= 0 || $target_community_id <= 0) return false;
