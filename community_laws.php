@@ -511,6 +511,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $update_position->close();
             $aggregate->close();
 
+            // شمارش مسیر مستقیم افراد؛ هر کاربر فقط یک‌بار در این جدول حضور دارد.
+            $direct_aggregate = $conn->prepare(
+                "SELECT COUNT(e.user_id) AS electorate_count,
+                        SUM(CASE WHEN v.vote='yes' THEN 1 ELSE 0 END) AS yes_count,
+                        SUM(CASE WHEN v.vote='no' THEN 1 ELSE 0 END) AS no_count,
+                        SUM(CASE WHEN v.vote='abstain' THEN 1 ELSE 0 END) AS abstain_count,
+                        COALESCE(SUM(CASE WHEN v.vote='yes' THEN v.vote_weight ELSE 0 END),0) AS yes_weight,
+                        COALESCE(SUM(CASE WHEN v.vote='no' THEN v.vote_weight ELSE 0 END),0) AS no_weight
+                 FROM community_law_direct_electorate e
+                 LEFT JOIN community_law_direct_votes v
+                   ON v.law_version_id=e.law_version_id
+                  AND v.voter_user_id=e.user_id
+                 WHERE e.law_version_id=?"
+            );
+            if (!$direct_aggregate) throw new Exception('direct tally prepare failed');
+            $direct_aggregate->bind_param('i', $version_id);
+            if (!$direct_aggregate->execute()) throw new Exception('direct tally failed');
+            $direct_result = $direct_aggregate->get_result()->fetch_assoc();
+            $direct_aggregate->close();
+
+            $save_direct_result = $conn->prepare(
+                "INSERT INTO community_law_direct_results
+                    (law_version_id, electorate_count, yes_count, no_count, abstain_count,
+                     yes_weight, no_weight, counted_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
+                 ON DUPLICATE KEY UPDATE
+                    electorate_count=VALUES(electorate_count),
+                    yes_count=VALUES(yes_count),
+                    no_count=VALUES(no_count),
+                    abstain_count=VALUES(abstain_count),
+                    yes_weight=VALUES(yes_weight),
+                    no_weight=VALUES(no_weight),
+                    counted_at=NOW()"
+            );
+            if (!$save_direct_result) throw new Exception('direct result save prepare failed');
+            $direct_electorate = (int)$direct_result['electorate_count'];
+            $direct_yes = (int)$direct_result['yes_count'];
+            $direct_no = (int)$direct_result['no_count'];
+            $direct_abstain = (int)$direct_result['abstain_count'];
+            $direct_yes_weight = (float)$direct_result['yes_weight'];
+            $direct_no_weight = (float)$direct_result['no_weight'];
+            $save_direct_result->bind_param(
+                'iiiiidd',
+                $version_id, $direct_electorate, $direct_yes, $direct_no,
+                $direct_abstain, $direct_yes_weight, $direct_no_weight
+            );
+            if (!$save_direct_result->execute()) throw new Exception('direct result save failed');
+            $save_direct_result->close();
+
             if (!community_law_record_history(
                 $conn, $law_id, $version_id, $community_id, $user_id,
                 'voting_tallied',
@@ -802,11 +851,18 @@ if ($schema_ready) {
         "SELECT l.id AS law_id, l.law_code, v.id AS version_id, v.title,
                 v.vote_deadline, p.community_id, c.name AS community_name,
                 p.electorate_count, p.yes_count, p.no_count, p.abstain_count,
-                p.yes_weight, p.no_weight, p.position_result
+                p.yes_weight, p.no_weight, p.position_result,
+                dr.electorate_count AS direct_electorate_count,
+                dr.yes_count AS direct_yes_count,
+                dr.no_count AS direct_no_count,
+                dr.abstain_count AS direct_abstain_count,
+                dr.yes_weight AS direct_yes_weight,
+                dr.no_weight AS direct_no_weight
          FROM community_laws l
          JOIN community_law_versions v ON v.id=l.current_version_id
          JOIN community_law_positions p ON p.law_version_id=v.id
          JOIN communities c ON c.id=p.community_id
+         LEFT JOIN community_law_direct_results dr ON dr.law_version_id=v.id
          WHERE l.originating_community_id=?
            AND l.status='voting' AND v.status='voting'
            AND v.vote_deadline <= NOW()
@@ -824,6 +880,14 @@ if ($schema_ready) {
                         'law_code' => $row['law_code'],
                         'version_id' => (int)$row['version_id'],
                         'vote_deadline' => $row['vote_deadline'],
+                        'direct_result' => [
+                            'electorate_count' => (int)($row['direct_electorate_count'] ?? 0),
+                            'yes_count' => (int)($row['direct_yes_count'] ?? 0),
+                            'no_count' => (int)($row['direct_no_count'] ?? 0),
+                            'abstain_count' => (int)($row['direct_abstain_count'] ?? 0),
+                            'yes_weight' => (float)($row['direct_yes_weight'] ?? 0),
+                            'no_weight' => (float)($row['direct_no_weight'] ?? 0)
+                        ],
                         'communities' => []
                     ];
                 }
@@ -1005,6 +1069,13 @@ details>summary{cursor:pointer;font-weight:bold}
             <div class="notice">
                 <strong><?= community_laws_escape($tallied_law['title']) ?></strong>
                 <div class="meta"><?= community_laws_escape($tallied_law['law_code']) ?> — پایان مهلت: <?= community_laws_escape($tallied_law['vote_deadline']) ?></div>
+                <div class="notice">
+                    <strong>نتیجه رأی مستقیم افراد (مستقل از عضویت چندگانه)</strong>
+                    <div>واجدان: <?= (int)$tallied_law['direct_result']['electorate_count'] ?> —
+                    موافق: <?= (int)$tallied_law['direct_result']['yes_count'] ?> —
+                    مخالف: <?= (int)$tallied_law['direct_result']['no_count'] ?> —
+                    ممتنع: <?= (int)$tallied_law['direct_result']['abstain_count'] ?></div>
+                </div>
                 <table style="width:100%;border-collapse:collapse;margin-top:10px;font-size:13px">
                     <thead><tr>
                         <th>جامعه</th><th>واجدان</th><th>موافق</th><th>مخالف</th><th>ممتنع</th><th>وضعیت</th>
