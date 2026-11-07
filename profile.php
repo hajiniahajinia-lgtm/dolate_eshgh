@@ -405,6 +405,18 @@ if ($member_stmt) {
     if ($member_stmt->execute()) $is_hierarchy_member = (bool)$member_stmt->get_result()->fetch_row();
     $member_stmt->close();
 }
+$is_hierarchy_voter = $is_hierarchy_member;
+if ($round_info && $round_info['status'] === 'open' && (int)$round_info['is_expired'] === 0) {
+    $elector_check = $conn->prepare(
+        "SELECT 1 FROM community_parent_vote_electorate WHERE round_id=? AND user_id=? LIMIT 1"
+    );
+    $is_hierarchy_voter = false;
+    if ($elector_check) {
+        $elector_check->bind_param("ii", $round_id, $user_id);
+        if ($elector_check->execute()) $is_hierarchy_voter = (bool)$elector_check->get_result()->fetch_row();
+        $elector_check->close();
+    }
+}
 $current_parent_name = 'مستقل';
 foreach ($hierarchy_communities as $candidate_row) {
     if ((int)$candidate_row['id'] === $current_parent_id && $current_parent_id > 0) {
@@ -429,7 +441,7 @@ foreach ($hierarchy_communities as $candidate_row) {
 <?php else: ?>
 <p style="font-size:12px;color:#596579;">برای آغاز دور بعدی، یکی از اعضا می‌تواند رأی خود را ثبت کند؛ مهلت دور جدید ۷ روز خواهد بود.</p>
 <?php endif; ?>
-<?php if ($is_hierarchy_member || ($round_info && $round_info['status'] === 'open' && (int)$round_info['is_expired'] === 1)): ?>
+<?php if ($is_hierarchy_voter || ($round_info && $round_info['status'] === 'open' && (int)$round_info['is_expired'] === 1)): ?>
 <form method="post" action="set_community_parent.php" style="margin:0;">
 <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($community_hierarchy_csrf, ENT_QUOTES, 'UTF-8') ?>">
 <input type="hidden" name="community_id" value="<?= $cid ?>">
@@ -457,7 +469,13 @@ if ($is_descendant) continue;
 <button type="submit" style="margin-top:7px;background:#facc15;color:#3b2f00;"><?= ($round_info && $round_info['status'] === 'open' && (int)$round_info['is_expired'] === 1) ? 'بررسی و نهایی‌کردن دور پایان‌یافته' : 'ثبت / تغییر رأی' ?></button>
 </form>
 <?php else: ?>
-<p style="font-size:12px;color:#8a4b08;">ثبت رأی فقط برای اعضای این جامعه امکان‌پذیر است؛ پس از پایان مهلت، هر کاربر واردشده می‌تواند نتیجه را نهایی کند.</p>
+<p style="font-size:12px;color:#8a4b08;">
+<?php if ($is_hierarchy_member && $round_info && $round_info['status'] === 'open'): ?>
+عضویت شما پس از آغاز این دور ثبت شده است؛ می‌توانید در دور بعدی رأی بدهید.
+<?php else: ?>
+ثبت رأی فقط برای اعضای جامعه امکان‌پذیر است.
+<?php endif; ?>
+</p>
 <?php endif; ?>
 </div>
 <?php endforeach; ?>
