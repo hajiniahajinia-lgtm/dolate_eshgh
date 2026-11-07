@@ -44,31 +44,49 @@ if (!$column_check || $column_check->num_rows === 0 || !$table_check || $table_c
 $column_check->close();
 $table_check->close();
 
-$parents = [];
-$all_result = $conn->query("SELECT id, parent_community_id FROM communities");
-if (!$all_result) return_to_community($community_id, 'invalid');
-while ($row = $all_result->fetch_assoc()) {
-    $id = (int)$row['id'];
-    $parents[$id] = $row['parent_community_id'] === null ? 0 : (int)$row['parent_community_id'];
-}
-$all_result->close();
-
-if (!array_key_exists($community_id, $parents)) return_to_community($community_id, 'invalid');
-if ($parent_community_id === $community_id) return_to_community($community_id, 'cycle');
-if ($parent_community_id > 0 && !array_key_exists($parent_community_id, $parents)) return_to_community($community_id, 'invalid');
-
-if ($parent_community_id > 0) {
-    $cursor = $parent_community_id;
-    $visited = [];
-    while ($cursor > 0) {
-        if ($cursor === $community_id || isset($visited[$cursor])) return_to_community($community_id, 'cycle');
-        $visited[$cursor] = true;
-        $cursor = $parents[$cursor] ?? 0;
-    }
-}
-
 try {
-    $conn->begin_transaction();
+    if (!$conn->begin_transaction()) throw new Exception('begin transaction failed');
+
+    // قفل همه ردیف‌های جوامع و خواندن ساختار داخل همان تراکنش؛
+    // مانع تصمیم‌گیری هم‌زمان بر اساس دو تصویر قدیمی و ناسازگار از درخت می‌شود.
+    $all_result = $conn->query(
+        "SELECT id, parent_community_id FROM communities ORDER BY id FOR UPDATE"
+    );
+    if (!$all_result) throw new Exception('lock community hierarchy failed');
+    $parents = [];
+    while ($row = $all_result->fetch_assoc()) {
+        $id = (int)$row['id'];
+        $parents[$id] = $row['parent_community_id'] === null ? 0 : (int)$row['parent_community_id'];
+    }
+    $all_result->close();
+
+    if (!array_key_exists($community_id, $parents)) throw new RuntimeException('invalid community');
+    // ساختار موجود باید پیش از هر تغییر، کاملاً معتبر باشد.
+    foreach ($parents as $node_id => $_parent_id) {
+        $cursor = (int)$node_id;
+        $visited = [];
+        while ($cursor > 0) {
+            if (isset($visited[$cursor]) || !array_key_exists($cursor, $parents)) {
+                throw new RuntimeException('invalid existing hierarchy');
+            }
+            $visited[$cursor] = true;
+            $cursor = (int)$parents[$cursor];
+        }
+    }
+
+    if ($parent_community_id === $community_id) throw new RuntimeException('cycle');
+    if ($parent_community_id > 0 && !array_key_exists($parent_community_id, $parents)) {
+        throw new RuntimeException('invalid parent');
+    }
+    if ($parent_community_id > 0) {
+        $cursor = $parent_community_id;
+        $visited = [];
+        while ($cursor > 0) {
+            if ($cursor === $community_id || isset($visited[$cursor])) throw new RuntimeException('cycle');
+            $visited[$cursor] = true;
+            $cursor = $parents[$cursor] ?? 0;
+        }
+    }
 
     if ($parent_community_id > 0) {
         $vote = $conn->prepare("INSERT INTO community_parent_votes (community_id, user_id, parent_community_id) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE parent_community_id = VALUES(parent_community_id), voted_at = CURRENT_TIMESTAMP");
@@ -86,7 +104,7 @@ try {
     $counts = $conn->prepare("SELECT parent_community_id, COUNT(*) AS vote_count FROM community_parent_votes WHERE community_id = ? GROUP BY parent_community_id ORDER BY vote_count DESC");
     if (!$counts) throw new Exception('prepare count failed');
     $counts->bind_param("i", $community_id);
-    $counts->execute();
+    if (!$counts->execute()) throw new Exception('count hierarchy votes failed');
     $res = $counts->get_result();
     $top = [];
     $max_votes = -1;
@@ -114,17 +132,19 @@ try {
         if ($valid_winner) {
             if ($winner > 0) {
                 $apply = $conn->prepare("UPDATE communities SET parent_community_id = ? WHERE id = ?");
+                if (!$apply) throw new Exception('prepare hierarchy update failed');
                 $apply->bind_param("ii", $winner, $community_id);
             } else {
                 $apply = $conn->prepare("UPDATE communities SET parent_community_id = NULL WHERE id = ?");
+                if (!$apply) throw new Exception('prepare hierarchy update failed');
                 $apply->bind_param("i", $community_id);
             }
-            if (!$apply->execute()) throw new Exception('apply winner failed');
+            if (!$apply->execute() || $apply->affected_rows > 1) throw new Exception('apply winner failed');
             $apply->close();
         }
     }
 
-    $conn->commit();
+    if (!$conn->commit()) throw new Exception('commit hierarchy vote failed');
 } catch (Throwable $e) {
     $conn->rollback();
     return_to_community($community_id, 'invalid');
