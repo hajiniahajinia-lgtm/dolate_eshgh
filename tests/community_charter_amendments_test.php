@@ -101,4 +101,32 @@ check_charter_amendment(
     'duplicate target articles are rejected'
 );
 
+
+$appeal_three = [
+    ['reviewer_user_id' => 21, 'verdict' => 'uphold'],
+    ['reviewer_user_id' => 22, 'verdict' => 'uphold'],
+    ['reviewer_user_id' => 23, 'verdict' => 'dismiss']
+];
+check_charter_amendment(
+    community_charter_amendment_appeal_result($appeal_three) === 'upheld',
+    'two of three independent appeal reviewers can uphold an appeal'
+);
+$appeal_three[0]['verdict'] = 'dismiss';
+$appeal_three[1]['verdict'] = 'dismiss';
+check_charter_amendment(
+    community_charter_amendment_appeal_result($appeal_three) === 'dismissed',
+    'two of three independent appeal reviewers can dismiss an appeal'
+);
+$appeal_three[0]['verdict'] = 'unclear';
+$appeal_three[1]['verdict'] = 'unclear';
+check_charter_amendment(
+    community_charter_amendment_appeal_result($appeal_three) === 'pending',
+    'an appeal without a two-reviewer majority remains open'
+);
+$appeal_three[2]['reviewer_user_id'] = 22;
+check_charter_amendment(
+    community_charter_amendment_appeal_result($appeal_three) === 'invalid',
+    'duplicate appeal reviewer identities are rejected'
+);
+
 fwrite(STDOUT, "OK: {$checks} charter amendment checks passed.\n");
