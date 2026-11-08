@@ -315,6 +315,7 @@ if (!function_exists('community_law_submit_amendment_for_vote')) {
                         base.status AS base_status,base.version_number,
                         proposed.status AS proposed_status,
                         c.status AS conformity_status,c.parent_community_id,c.parent_law_version_id,
+                        child.parent_community_id AS current_parent_community_id,
                         pl.status AS parent_law_status,pl.current_version_id AS parent_current_version_id,
                         pl.effective_at AS parent_effective_at,pl.expires_at AS parent_expires_at,
                         pl.repealed_at AS parent_repealed_at,pv.status AS parent_version_status
@@ -323,6 +324,7 @@ if (!function_exists('community_law_submit_amendment_for_vote')) {
                  JOIN community_law_versions base ON base.id=a.base_version_id AND base.law_id=a.law_id
                  JOIN community_law_versions proposed ON proposed.id=a.proposed_version_id AND proposed.law_id=a.law_id
                  JOIN community_law_conformity_cases c ON c.id=a.conformity_case_id
+                 JOIN communities child ON child.id=c.community_id
                  JOIN community_laws pl ON pl.id=c.parent_law_id
                  JOIN community_law_versions pv ON pv.id=c.parent_law_version_id AND pv.law_id=pl.id
                  WHERE a.id=? FOR UPDATE"
@@ -334,6 +336,7 @@ if (!function_exists('community_law_submit_amendment_for_vote')) {
             $lock->close();
             if (!$row || (int)$row['community_id']!==$community_id ||
                 (int)$row['originating_community_id']!==$community_id ||
+                (int)$row['current_parent_community_id']!==(int)$row['parent_community_id'] ||
                 $row['status']!=='draft' || $row['law_status']!=='approved' ||
                 (int)$row['current_version_id']!==(int)$row['base_version_id'] ||
                 $row['base_status']!=='approved' || $row['proposed_status']!=='draft' ||
