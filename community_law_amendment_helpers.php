@@ -1245,6 +1245,20 @@ if (!function_exists('community_law_open_amendment_final_review')) {
             $references->close();
             $reference_insert->close();
             if ($reference_count<1) throw new RuntimeException('amendment has no final review authority references');
+            $parent_reference=$conn->prepare(
+                "SELECT 1 FROM community_law_final_review_references
+                 WHERE law_version_id=? AND reference_law_id=? AND reference_law_version_id=? AND relation_type='higher'
+                 LIMIT 1"
+            );
+            if (!$parent_reference) throw new RuntimeException('amendment parent final reference prepare failed');
+            $parent_law_id=(int)$row['parent_law_id'];
+            $parent_law_version_id=(int)$row['parent_law_version_id'];
+            $parent_reference->bind_param('iii',$version_id,$parent_law_id,$parent_law_version_id);
+            if (!$parent_reference->execute() || !$parent_reference->get_result()->fetch_row()) {
+                $parent_reference->close();
+                throw new RuntimeException('amendment parent law reference missing from final review snapshot');
+            }
+            $parent_reference->close();
 
             if (!community_law_capture_charter_snapshot($conn,$version_id)) {
                 throw new RuntimeException('amendment charter snapshot unavailable');
