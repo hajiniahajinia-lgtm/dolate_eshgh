@@ -31,10 +31,10 @@ try {
     change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_change_voting.sql');
     change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_change_effects.sql');
     change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_conformity_workflow.sql');
-    change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_amendment_workflow.sql');
-    change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_amendment_submission.sql');
-    change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_amendment_voting.sql');
-    change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_amendment_parent_review.sql');
+    change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_amendment_00_workflow.sql');
+    change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_amendment_10_submission.sql');
+    change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_amendment_20_voting.sql');
+    change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_amendment_30_parent_review.sql');
     require_once __DIR__.'/../community_law_helpers.php';
     require_once __DIR__.'/../community_law_amendment_helpers.php';
     require_once __DIR__.'/../community_law_change_helpers.php';
