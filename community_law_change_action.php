@@ -71,24 +71,11 @@ try {
     }
 
     if ($action==='mark_notice_read') {
-        $member=$conn->prepare('SELECT 1 FROM community_members WHERE community_id=? AND user_id=? LIMIT 1');
-        if (!$member) throw new RuntimeException('membership check unavailable');
-        $member->bind_param('ii',$community_id,$user_id);
-        if (!$member->execute() || !$member->get_result()->fetch_row()) {
-            $member->close();
-            clca_redirect($community_id,'not_member');
-        }
-        $member->close();
         $notice_id=(int)($_POST['notice_id']??0);
-        $notice_source=(string)($_POST['notice_source']??'change');
-        if ($notice_source==='scope') {
-            $mark=$conn->prepare('UPDATE community_law_scope_notices SET read_at=NOW() WHERE id=? AND community_id=? AND read_at IS NULL');
-        } else {
-            $mark=$conn->prepare('UPDATE community_law_community_notices SET read_at=NOW() WHERE id=? AND community_id=? AND read_at IS NULL');
-        }
-        if (!$mark) throw new RuntimeException('notice update unavailable');
-        $mark->bind_param('ii',$notice_id,$community_id);
-        $ok=$mark->execute(); $mark->close();
+        $notice_source=(string)($_POST['notice_source']??'');
+        $ok=community_law_change_mark_notice_read(
+            $conn,$community_id,$user_id,$notice_id,$notice_source
+        );
         clca_redirect($community_id,$ok?'notice_read':'notice_failed');
     }
 
