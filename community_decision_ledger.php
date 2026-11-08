@@ -88,3 +88,46 @@ function community_decision_record_snapshot(mysqli $conn, array $decision): bool
     $stmt->close();
     return $ok;
 }
+
+/**
+ * اتصال اختیاری پروندهٔ دانش به تصمیم ثبت‌شدهٔ همان موضوع.
+ * این پیوند صرفاً ارجاعی است و هیچ وضعیت تصمیم یا دانش را تغییر نمی‌دهد.
+ */
+function community_decision_attach_knowledge_entry(mysqli $conn, int $topicId, int $entryId): bool
+{
+    if ($topicId <= 0 || $entryId <= 0) return false;
+    $stmt = $conn->prepare(
+        "UPDATE community_decision_records
+         SET knowledge_entry_id=?
+         WHERE source_topic_id=? AND record_status='recorded'
+           AND (knowledge_entry_id IS NULL OR knowledge_entry_id=?)"
+    );
+    if (!$stmt) return false;
+    $stmt->bind_param('iii', $entryId, $topicId, $entryId);
+    $ok = $stmt->execute();
+    $stmt->close();
+    return $ok;
+}
+
+/** بازیابی پیوندهای دانش و تصمیم بر اساس موضوع منشأ. */
+function community_decision_get_knowledge_link(mysqli $conn, int $topicId): ?array
+{
+    if ($topicId <= 0) return null;
+    $stmt = $conn->prepare(
+        "SELECT d.id AS decision_id, d.source_topic_id, d.community_id,
+                d.knowledge_entry_id, d.acceptance_status, d.enforceability_status,
+                d.decided_at
+         FROM community_decision_records d
+         WHERE d.source_topic_id=? AND d.record_status='recorded'
+         LIMIT 1"
+    );
+    if (!$stmt) return null;
+    $stmt->bind_param('i', $topicId);
+    if (!$stmt->execute()) {
+        $stmt->close();
+        return null;
+    }
+    $row = $stmt->get_result()->fetch_assoc() ?: null;
+    $stmt->close();
+    return $row;
+}
