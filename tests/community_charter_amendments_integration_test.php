@@ -278,29 +278,60 @@ try {
         'an open appeal leaves the current charter untouched'
     );
 
+    // A user outside the snapshotted panel must not be able to submit an assessment.
+    $db->begin_transaction();
+    $unauthorizedRejected = false;
+    try {
+        community_charter_record_appeal_assessment(
+            $db, $appealId, 23, 'dismiss',
+            'تلاش کاربر خارج از هیئت مستقل برای ارزیابی اعتراض.'
+        );
+    } catch (Throwable $error) {
+        $unauthorizedRejected = true;
+        $db->rollback();
+    }
+    integration_check($unauthorizedRejected,
+        'an unassigned user cannot submit an appeal assessment');
+    integration_check(
+        (int)$db->query("SELECT COUNT(*) AS total FROM community_charter_amendment_appeal_reviewers WHERE appeal_id=" . $appealId)->fetch_assoc()['total'] === 0,
+        'an unauthorized assessment leaves no persisted reviewer record'
+    );
+
     $appealVotes = [
-        ['reviewer_user_id'=>17,'verdict'=>'dismiss'],
+        ['reviewer_user_id'=>17,'verdict'=>'unclear'],
         ['reviewer_user_id'=>18,'verdict'=>'dismiss'],
-        ['reviewer_user_id'=>19,'verdict'=>'uphold']
+        ['reviewer_user_id'=>19,'verdict'=>'dismiss']
     ];
     integration_check(
         community_charter_amendment_appeal_result($appealVotes) === 'dismissed',
-        'two of three separate appeal reviewers dismiss the appeal'
+        'two dismiss votes resolve an appeal even when the remaining assessment is unclear'
     );
 
     $db->begin_transaction();
-    $appealStatus = 'under_review';
-    foreach ($appealVotes as $appealVote) {
-        $appealStatus = community_charter_record_appeal_assessment(
-            $db,
-            $appealId,
-            (int)$appealVote['reviewer_user_id'],
-            (string)$appealVote['verdict'],
-            'استدلال آزمایشی رسیدگی به اعتراض و بررسی شواهد ارائه‌شده.'
-        );
-    }
+    $firstAppealStatus = community_charter_record_appeal_assessment(
+        $db, $appealId, 17, 'unclear',
+        'شواهد موجود برای نتیجه قطعی کافی نیست و بررسی بیشتری لازم است.'
+    );
+    $secondAppealStatus = community_charter_record_appeal_assessment(
+        $db, $appealId, 18, 'dismiss',
+        'دلایل ارائه‌شده برای پذیرش اعتراض کافی و قانع‌کننده نیست.'
+    );
     $db->commit();
-    integration_check($appealStatus === 'dismissed', 'the production assessment service resolves an appeal by the three assigned reviewers');
+    integration_check($firstAppealStatus === 'under_review' && $secondAppealStatus === 'under_review',
+        'an unclear assessment and a single dismissal keep the appeal open');
+    integration_check(
+        (string)$db->query("SELECT status FROM community_charter_amendment_appeals WHERE id=" . $appealId)->fetch_assoc()['status'] === 'under_review',
+        'the appeal remains persisted as under review until a decisive majority exists'
+    );
+
+    $db->begin_transaction();
+    $appealStatus = community_charter_record_appeal_assessment(
+        $db, $appealId, 19, 'dismiss',
+        'رسیدگی مستقل نشان می‌دهد اعتراض مبنای کافی برای تغییر نتیجه ندارد.'
+    );
+    $db->commit();
+    integration_check($appealStatus === 'dismissed',
+        'the production service resolves the appeal only after the second dismissal vote');
     integration_check(
         (string)$db->query("SELECT status FROM community_charter_amendment_appeals WHERE id=" . $appealId)->fetch_assoc()['status'] === 'dismissed',
         'the production assessment service persists the final dismissed appeal status'
