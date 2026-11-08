@@ -144,23 +144,12 @@ try {
     integration_check(true, 'draft amendment and proposed charter version were persisted');
 
     $reviewerIds = [2, 3, 4, 5, 6];
-    $reviewerInsert = $db->prepare(
-        "INSERT INTO community_charter_amendment_reviewers (amendment_id,reviewer_user_id) VALUES (?,?)"
-    );
-    foreach ($reviewerIds as $reviewerId) {
-        $reviewerInsert->bind_param('ii', $amendmentId, $reviewerId);
-        $reviewerInsert->execute();
-    }
-    $reviewerInsert->close();
-
-    $electorateInsert = $db->prepare(
-        "INSERT INTO community_charter_amendment_electorate (amendment_id,user_id) VALUES (?,?)"
-    );
-    for ($voterId = 7; $voterId <= 16; $voterId++) {
-        $electorateInsert->bind_param('ii', $amendmentId, $voterId);
-        $electorateInsert->execute();
-    }
-    $electorateInsert->close();
+    $orderedCandidates = range(2, 16);
+    $db->begin_transaction();
+    $panel = community_charter_assign_review_panel($db, $amendmentId, $orderedCandidates);
+    $db->commit();
+    integration_check($panel['reviewer_ids'] === $reviewerIds, 'the production helper assigns the first five shuffled candidates as reviewers');
+    integration_check($panel['electorate_ids'] === range(7, 16), 'the production helper excludes reviewers from the public electorate');
 
     $db->query(
         "UPDATE community_charter_amendments
@@ -250,15 +239,10 @@ try {
     $appealId = (int)$appeal->insert_id;
     $appeal->close();
 
-    $assignment = $db->prepare(
-        "INSERT INTO community_charter_amendment_appeal_reviewer_assignments
-         (appeal_id,reviewer_user_id) VALUES (?,?)"
-    );
-    foreach ([17,18,19] as $reviewerId) {
-        $assignment->bind_param('ii', $appealId, $reviewerId);
-        $assignment->execute();
-    }
-    $assignment->close();
+    $db->begin_transaction();
+    $assignedAppealReviewers = community_charter_assign_appeal_reviewers($db, $appealId, [17,18,19]);
+    $db->commit();
+    integration_check($assignedAppealReviewers === [17,18,19], 'the production helper assigns three independent appeal reviewers');
 
     $db->query(
         "UPDATE community_charter_amendments
