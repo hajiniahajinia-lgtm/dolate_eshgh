@@ -140,24 +140,20 @@ try {
     // بررسی نهایی، مهلت اعتراض و ابلاغ اتمی؛ نسخه جاری تا پایان این مرحله همان نسخه پایه می‌ماند.
     $db->query("UPDATE community_law_review_cases SET status='screening_clear' WHERE law_version_id=".$second_version);
     $db->query("UPDATE community_law_authority_cases SET status='confirmed' WHERE law_version_id=".$second_version);
-    $db->query("UPDATE community_law_versions SET status='appeal_period' WHERE id=".$second_version);
     $db->query("INSERT INTO community_law_final_results (law_version_id,individual_vote_basis,final_status) VALUES (".$second_version.",'count','vote_passed')");
     $db->query("INSERT INTO community_law_implementations (law_version_id,community_id,responsible_user_id,local_plan,status,started_at,target_date,progress_report) VALUES (99002,90020,90200,'برنامه اجرای پایه','in_progress',NOW(),DATE_ADD(CURDATE(),INTERVAL 30 DAY),'پیشرفت ثبت‌شده پیش از اصلاحیه')");
-    change_case_check(community_law_capture_charter_snapshot($db,$second_version),'final amendment review captures the current effective charter version');
-    $parent_scopes=[];
-    $parent_scope_result=$db->query("SELECT scope_community_id,include_descendants FROM community_law_scopes WHERE law_version_id=99001 ORDER BY scope_community_id");
-    while($scope_row=$parent_scope_result->fetch_assoc()) $parent_scopes[]=['scope_community_id'=>(int)$scope_row['scope_community_id'],'include_descendants'=>(int)$scope_row['include_descendants']];
-    $parent_scope_fingerprint=hash('sha256',json_encode($parent_scopes));
-    $db->query("INSERT INTO community_law_final_review_references (law_version_id,reference_law_id,reference_law_version_id,reference_origin_community_id,relation_type,scope_fingerprint) VALUES (".$second_version.",9501,99001,90010,'higher','".$db->real_escape_string($parent_scope_fingerprint)."')");
-    $db->query("INSERT INTO community_law_final_review_cases (law_version_id,status,reviewer_quorum,appeal_period_days,appeal_deadline,opened_by,review_completed_at) VALUES (".$second_version.",'appeal_period',3,7,DATE_SUB(NOW(),INTERVAL 1 DAY),90201,NOW())");
+    change_case_check(community_law_open_amendment_final_review($db,9502,$second_version,90020,90201),'approved amendment with positive local vote can open the independent final review');
+    $opened_final_review=$db->query("SELECT l.status AS law_status,l.current_version_id,v.status AS version_status,fc.status AS final_status,(SELECT COUNT(*) FROM community_law_final_review_electorate e WHERE e.law_version_id=v.id) AS electorate_count,(SELECT COUNT(*) FROM community_law_final_review_references r WHERE r.law_version_id=v.id AND r.reference_law_id=9501 AND r.reference_law_version_id=99001) AS parent_reference_count,(SELECT COUNT(*) FROM community_law_charter_references cr WHERE cr.law_version_id=v.id) AS charter_snapshot_count FROM community_law_versions v JOIN community_laws l ON l.id=v.law_id JOIN community_law_final_review_cases fc ON fc.law_version_id=v.id WHERE v.id=".$second_version)->fetch_assoc();
+    change_case_check($opened_final_review && $opened_final_review['law_status']==='approved' && (int)$opened_final_review['current_version_id']===99002 && $opened_final_review['version_status']==='pending_final_review' && $opened_final_review['final_status']==='pending' && (int)$opened_final_review['electorate_count']>=3 && (int)$opened_final_review['parent_reference_count']===1 && (int)$opened_final_review['charter_snapshot_count']>0,'opening final review snapshots independent assessors, the active parent law and the charter without changing the current law');
     foreach([90205,90206,90207] as $final_reviewer) {
-        $db->query("INSERT INTO community_law_final_review_electorate (law_version_id,user_id) VALUES (".$second_version.",".$final_reviewer.")");
         $db->query("INSERT INTO community_law_final_review_assessments
             (law_version_id,reviewer_user_id,verdict,charter_and_rights,non_discrimination,power_concentration,
              human_and_social_impact,environmental_impact,economic_and_resource_impact,
              future_generations_and_other_life,implementation_and_accountability,reasoning)
             VALUES (".$second_version.",".$final_reviewer.",'confirm','pass','pass','pass','pass','pass','pass','pass','pass','بررسی نهایی مستقل و بدون تعارض')");
     }
+    $db->query("UPDATE community_law_final_review_cases SET status='appeal_period',appeal_deadline=DATE_SUB(NOW(),INTERVAL 1 DAY),review_completed_at=NOW() WHERE law_version_id=".$second_version);
+    $db->query("UPDATE community_law_versions SET status='appeal_period' WHERE id=".$second_version);
     $db->query("INSERT INTO community_law_appeals (law_version_id,community_id,submitted_by,appeal_type,description,status) VALUES (".$second_version.",90020,90200,'new_evidence','اعتراض آزمایشی برای جلوگیری از ابلاغ زودهنگام','submitted')");
     change_case_check(!community_law_enact_amendment($db,9502,$second_version,90020,90201),'an unresolved appeal blocks amendment activation');
     $still_current=(int)$db->query("SELECT current_version_id FROM community_laws WHERE id=9502")->fetch_assoc()['current_version_id'];
