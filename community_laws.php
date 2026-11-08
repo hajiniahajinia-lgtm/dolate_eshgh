@@ -48,6 +48,42 @@ function community_laws_redirect(int $community_id, string $status): void {
 
 $schema_ready = community_law_tables_ready($conn);
 
+// فهرست تصمیم‌های پذیرفته‌شده فقط از دفتر مستقل تصمیم‌ها خوانده می‌شود.
+$decision_ledger_ready = false;
+$source_decisions = [];
+if ($schema_ready) {
+    $ledger_table_check = $conn->query(
+        "SELECT COUNT(*) AS total
+         FROM information_schema.tables
+         WHERE table_schema=DATABASE() AND table_name='community_decision_records'"
+    );
+    $decision_ledger_ready = $ledger_table_check &&
+        (int)$ledger_table_check->fetch_assoc()['total'] === 1;
+    if ($ledger_table_check) $ledger_table_check->free();
+
+    if ($decision_ledger_ready) {
+        $source_decision_stmt = $conn->prepare(
+            "SELECT d.id, d.source_topic_id, t.title, d.decided_at
+             FROM community_decision_records d
+             JOIN topics t ON t.id=d.source_topic_id
+             WHERE d.community_id=? AND d.record_status='recorded'
+               AND d.acceptance_status='accepted'
+             ORDER BY d.decided_at DESC, d.id DESC
+             LIMIT 100"
+        );
+        if ($source_decision_stmt) {
+            $source_decision_stmt->bind_param('i', $community_id);
+            if ($source_decision_stmt->execute()) {
+                $source_decision_result = $source_decision_stmt->get_result();
+                while ($source_decision_row = $source_decision_result->fetch_assoc()) {
+                    $source_decisions[] = $source_decision_row;
+                }
+            }
+            $source_decision_stmt->close();
+        }
+    }
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (
         empty($_SESSION['community_law_csrf']) ||
@@ -86,6 +122,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 "SELECT source_topic_id, source_idea_id
                  FROM community_decision_records
                  WHERE id=? AND community_id=? AND record_status='recorded'
+                   AND acceptance_status='accepted'
                  LIMIT 1"
             );
             if (!$decision_source_stmt) community_laws_redirect($community_id, 'invalid_source');
@@ -4691,9 +4728,22 @@ details>summary{cursor:pointer;font-weight:bold}
         <textarea name="law_text" maxlength="50000" required placeholder="متن دقیق و روشن قانون را بنویسید."></textarea>
         <label>برنامه اجرایی (اختیاری)</label>
         <textarea name="implementation_plan" maxlength="30000" placeholder="مسئول اجرا، منابع، زمان‌بندی و شاخص ارزیابی را مشخص کنید."></textarea>
-        <label>شناسه تصمیم جمعی منشأ قانون (اختیاری)</label>
-        <input type="number" name="source_decision_id" min="1">
-        <p class="muted">با ثبت شناسه تصمیم، موضوع و ایدهٔ مرتبط از دفتر مستقل تصمیم‌ها بررسی و به‌صورت خودکار پیوند داده می‌شوند. این پیوند به‌تنهایی قانون را تصویب یا لازم‌الاجرا نمی‌کند.</p>
+        <label>تصمیم جمعی منشأ قانون (اختیاری)</label>
+        <select name="source_decision_id">
+            <option value="0">بدون پیوند مستقیم به تصمیم</option>
+            <?php foreach ($source_decisions as $source_decision_option): ?>
+                <option value="<?= (int)$source_decision_option['id'] ?>">
+                    تصمیم #<?= (int)$source_decision_option['id'] ?> — موضوع: <?= community_laws_escape($source_decision_option['title']) ?>
+                </option>
+            <?php endforeach; ?>
+        </select>
+        <?php if (!$decision_ledger_ready): ?>
+            <p class="muted">دفتر تصمیم‌ها هنوز در این پایگاه داده نصب نشده است؛ می‌توانید شناسهٔ موضوع یا ایده را به‌عنوان منشأ ثبت کنید.</p>
+        <?php elseif (!$source_decisions): ?>
+            <p class="muted">در این جامعه تصمیم پذیرفته‌شده‌ای برای انتخاب وجود ندارد؛ در صورت نیاز، منشأ موضوع را جداگانه مشخص کنید.</p>
+        <?php else: ?>
+            <p class="muted">فقط تصمیم‌های پذیرفته‌شده و ثبت‌شدهٔ همین جامعه نمایش داده می‌شوند. با انتخاب تصمیم، موضوع و ایدهٔ مرتبط خودکار پیوند می‌خورند. این پیوند به‌تنهایی قانون را تصویب یا لازم‌الاجرا نمی‌کند.</p>
+        <?php endif; ?>
         <label>شناسه موضوع مرتبط (اختیاری، در صورت نداشتن شناسه تصمیم)</label>
         <input type="number" name="source_topic_id" min="1">
         <label>شناسه ایده مرتبط (اختیاری، در صورت نداشتن شناسه تصمیم)</label>
