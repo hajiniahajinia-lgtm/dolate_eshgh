@@ -3945,9 +3945,15 @@ details>summary{cursor:pointer;font-weight:bold}
             if ($outcome_reports_ready) {
                 $reports_sql="SELECT r.id,r.community_id,cm.name AS community_name,r.submitted_by,
                                      r.report_type,r.period_start,r.period_end,r.summary,r.evidence,
-                                     r.metrics_json,r.review_status,r.created_at
+                                     r.metrics_json,r.review_status,r.created_at,
+                                     i.responsible_user_id,
+                                     (SELECT COUNT(*) FROM community_law_outcome_reviews rv WHERE rv.report_id=r.id) AS review_count,
+                                     (SELECT COUNT(*) FROM community_law_outcome_reviews rv WHERE rv.report_id=r.id AND rv.verdict='confirm') AS confirm_count,
+                                     (SELECT COUNT(*) FROM community_law_outcome_reviews rv WHERE rv.report_id=r.id AND rv.verdict='challenge') AS challenge_count,
+                                     (SELECT COUNT(*) FROM community_law_outcome_reviews rv WHERE rv.report_id=r.id AND rv.reviewer_user_id=?) AS my_review_count
                               FROM community_law_outcome_reports r
                               JOIN communities cm ON cm.id=r.community_id
+                              JOIN community_law_implementations i ON i.id=r.implementation_id
                               WHERE r.law_id=? AND r.law_version_id=?";
                 if (!$show_all_implementations) $reports_sql.=" AND r.community_id=?";
                 $reports_sql.=" ORDER BY r.created_at DESC,r.id DESC LIMIT 100";
@@ -3956,10 +3962,10 @@ details>summary{cursor:pointer;font-weight:bold}
                     $reports_law_id=(int)$law['law_id'];
                     $reports_version_id=(int)$law['version_id'];
                     if ($show_all_implementations) {
-                        $reports_stmt->bind_param('ii',$reports_law_id,$reports_version_id);
+                        $reports_stmt->bind_param('iii',$user_id,$reports_law_id,$reports_version_id);
                     } else {
                         $reports_community_id=$community_id;
-                        $reports_stmt->bind_param('iii',$reports_law_id,$reports_version_id,$reports_community_id);
+                        $reports_stmt->bind_param('iiii',$user_id,$reports_law_id,$reports_version_id,$reports_community_id);
                     }
                     if ($reports_stmt->execute()) {
                         $reports_result=$reports_stmt->get_result();
@@ -4070,7 +4076,8 @@ details>summary{cursor:pointer;font-weight:bold}
                                 <div class="meta">
                                     دوره: <?= community_laws_escape($outcome_report['period_start']) ?> تا <?= community_laws_escape($outcome_report['period_end']) ?>
                                     — ثبت: <?= community_laws_escape($outcome_report['created_at']) ?>
-                                    — وضعیت بررسی: <?= $outcome_report['review_status']==='submitted'?'ثبت‌شده؛ هنوز تأیید نشده':$outcome_report['review_status'] ?>
+                                    — وضعیت بررسی: <?= ['submitted'=>'در انتظار بررسی','under_review'=>'در حال بررسی مستقل','verified'=>'تأییدشده با رأی ارزیابان','disputed'=>'مورد اختلاف؛ نیازمند رسیدگی'][$outcome_report['review_status']] ?? $outcome_report['review_status'] ?>
+                                    — ارزیابی مستقل: <?= (int)$outcome_report['review_count'] ?>/۳ (تأیید: <?= (int)$outcome_report['confirm_count'] ?>، اختلاف: <?= (int)$outcome_report['challenge_count'] ?>)
                                 </div>
                                 <p><?= nl2br(community_laws_escape($outcome_report['summary'])) ?></p>
                                 <?php if (!empty($outcome_report['evidence'])): ?>
@@ -4080,6 +4087,47 @@ details>summary{cursor:pointer;font-weight:bold}
                                 <?php if (!empty($outcome_report['metrics_json'])): ?>
                                     <p><strong>شاخص‌های عددی:</strong></p>
                                     <pre style="white-space:pre-wrap;overflow-wrap:anywhere"><?= community_laws_escape(json_encode(json_decode($outcome_report['metrics_json'],true),JSON_UNESCAPED_UNICODE|JSON_PRETTY_PRINT)) ?></pre>
+                                <?php endif; ?>
+                                <?php
+                                $can_review_outcome=(bool)$is_member &&
+                                    (int)$outcome_report['community_id']===$community_id &&
+                                    (int)$outcome_report['submitted_by']!==$user_id &&
+                                    (int)($outcome_report['responsible_user_id']??0)!==$user_id &&
+                                    (int)$outcome_report['review_count']<3 &&
+                                    (int)$outcome_report['my_review_count']===0 &&
+                                    in_array($outcome_report['review_status'],['submitted','under_review'],true);
+                                ?>
+                                <?php if ($can_review_outcome): ?>
+                                    <details style="margin-top:8px">
+                                        <summary>ثبت ارزیابی مستقل این گزارش</summary>
+                                        <p class="muted">ارزیابی باید بر شواهد استوار باشد. گزارش‌دهنده و مسئول اجرای قانون نمی‌توانند گزارش خود یا اجرای خود را ارزیابی کنند. پس از سه ارزیابی مستقل، نتیجهٔ اکثریت ثبت می‌شود.</p>
+                                        <form method="post" action="community_law_outcome_action.php">
+                                            <input type="hidden" name="action" value="review">
+                                            <input type="hidden" name="csrf_token" value="<?= community_laws_escape($csrf_token) ?>">
+                                            <input type="hidden" name="community_id" value="<?= $community_id ?>">
+                                            <input type="hidden" name="report_id" value="<?= (int)$outcome_report['id'] ?>">
+                                            <label>نتیجهٔ ارزیابی</label>
+                                            <select name="verdict" required>
+                                                <option value="confirm">شواهد، گزارش را تأیید می‌کنند</option>
+                                                <option value="challenge">شواهد کافی نیست یا گزارش محل اختلاف است</option>
+                                            </select>
+                                            <label>دلیل و استدلال ارزیابی (الزامی)</label>
+                                            <textarea name="rationale" maxlength="20000" required></textarea>
+                                            <label>پیامدهای انسانی (اختیاری)</label>
+                                            <textarea name="human_impact" maxlength="12000"></textarea>
+                                            <label>پیامدهای اجتماعی (اختیاری)</label>
+                                            <textarea name="social_impact" maxlength="12000"></textarea>
+                                            <label>پیامدهای زیست‌محیطی (اختیاری)</label>
+                                            <textarea name="environmental_impact" maxlength="12000"></textarea>
+                                            <label>پیامدهای اقتصادی (اختیاری)</label>
+                                            <textarea name="economic_impact" maxlength="12000"></textarea>
+                                            <label>شواهد و منابع ارزیابی (اختیاری)</label>
+                                            <textarea name="review_evidence" maxlength="12000"></textarea>
+                                            <button type="submit">ثبت ارزیابی مستقل</button>
+                                        </form>
+                                    </details>
+                                <?php elseif ((int)$outcome_report['my_review_count']>0): ?>
+                                    <p class="meta">ارزیابی شما قبلاً ثبت شده و قابل ویرایش یا حذف نیست.</p>
                                 <?php endif; ?>
                             </div>
                         <?php endforeach; ?>
