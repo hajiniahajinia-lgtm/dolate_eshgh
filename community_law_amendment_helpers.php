@@ -1060,6 +1060,30 @@ if (!function_exists('community_law_enact_amendment')) {
                 'نسخه اصلاحی پس از رأی محلی، بررسی انطباق جامعه مادر، بررسی نهایی مستقل، پایان مهلت اعتراض و رسیدگی به اعتراض‌ها به‌صورت اتمی جایگزین نسخه قبلی شد.'
             )) throw new RuntimeException('amendment enactment history failed');
 
+            // ابلاغ نسخهٔ جدید به تمام جوامع مشمول و جامعهٔ مبدأ در همان تراکنش فعال‌سازی.
+            $notice_communities=array_values(array_unique(array_map('intval',array_merge($scope_ids,[$community_id]))));
+            $notice_text='نسخهٔ جدید قانون پس از طی فرایند معتبر تصویب و لازم‌الاجرا شد؛ سوابق و گزارش‌های اجرای نسخهٔ پیشین حفظ شده‌اند.';
+            $notice_details=json_encode([
+                'previous_version_id'=>$base_version_id,
+                'current_version_id'=>$version_id,
+                'implementation_state_copied'=>true
+            ],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
+            if (!is_string($notice_details)) throw new RuntimeException('amendment notice details encoding failed');
+            $notice=$conn->prepare(
+                "INSERT INTO community_law_version_notices
+                    (law_id,law_version_id,previous_version_id,community_id,actor_user_id,event_type,notice_text,details)
+                 VALUES (?,?,?,?,?,'version_activated',?,?)"
+            );
+            if (!$notice) throw new RuntimeException('amendment version notice prepare failed');
+            foreach ($notice_communities as $notice_community_id) {
+                $notice->bind_param('iiiiiss',$law_id,$version_id,$base_version_id,$notice_community_id,$user_id,$notice_text,$notice_details);
+                if (!$notice->execute() || $notice->affected_rows!==1) {
+                    $notice->close();
+                    throw new RuntimeException('amendment version notice insert failed');
+                }
+            }
+            $notice->close();
+
             if (!$conn->commit()) throw new RuntimeException('amendment enactment commit failed');
             $started=false;
             return true;
