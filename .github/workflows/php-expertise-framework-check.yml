@@ -165,6 +165,7 @@ jobs:
           php -l tests/community_law_implementation_integration_test.php
           php -l tests/community_law_outcome_reports_integration_test.php
           php -l community_law_outcome_action.php
+          php -l community_law_helpers.php
           php -l community_decision_ledger.php
           php -l tests/community_law_decision_origin_migration_test.php
           php -l tests/community_decision_knowledge_link_integration_test.php
