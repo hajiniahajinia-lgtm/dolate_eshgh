@@ -94,7 +94,7 @@ try {
 
     change_case_check(community_law_create_amendment_draft($db,$conformity_case_id,90020,90200,'درخواست با متن تکراری.',[[
         'reference'=>'ماده ۴','previous_text'=>'متن محلی','proposed_text'=>'متن تازه','reason'=>'دلیل'
-    ]])===false,'a second parallel amendment is blocked while the first is open');
+    ]])===false,'a second amendment draft is blocked while the conformity case is already in progress');
     change_case_check(community_law_create_amendment_draft($db,$conformity_case_id,90010,90100,'درخواست جامعه مادر.',[[
         'reference'=>'ماده ۳','previous_text'=>'متن قانون محلی','proposed_text'=>'متن دیگر','reason'=>'دلیل'
     ]])===false,'parent-community members cannot author a local law amendment in place of the local community');
