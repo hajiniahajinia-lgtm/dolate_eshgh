@@ -51,7 +51,7 @@ try {
     outcome_check($history===1,'report submission is recorded in law history');
 
     outcome_check(community_law_submit_outcome_report(
-        $db,990000,990001,920,9701,'outcome','2026-01-01','2026-01-31','گزارش نامعتبر'
+        $db,990000,990001,920,9705,'outcome','2026-01-01','2026-01-31','گزارش نامعتبر'
     )===false,'non-member cannot submit a report');
     outcome_check(community_law_submit_outcome_report(
         $db,990000,990001,920,9700,'progress','2026-02-01','2026-01-01','بازهٔ معکوس'
