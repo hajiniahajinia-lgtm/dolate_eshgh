@@ -145,6 +145,19 @@ if (!function_exists('community_law_create_amendment_draft')) {
             $new_version_id=(int)$conn->insert_id;
             $version_insert->close();
 
+            // دامنهٔ الزام‌آور نسخهٔ پیشنهادی دقیقاً از نسخهٔ مصوب مبنا snapshot می‌شود.
+            $scope_copy=$conn->prepare(
+                'INSERT INTO community_law_scopes (law_version_id,scope_community_id,include_descendants)
+                 SELECT ?,scope_community_id,include_descendants
+                 FROM community_law_scopes WHERE law_version_id=?'
+            );
+            if (!$scope_copy) throw new RuntimeException('amendment scope copy prepare failed');
+            $scope_copy->bind_param('ii',$new_version_id,$base_version_id);
+            if (!$scope_copy->execute() || $scope_copy->affected_rows<1) {
+                throw new RuntimeException('amendment base scope missing');
+            }
+            $scope_copy->close();
+
             $case_insert=$conn->prepare(
                 "INSERT INTO community_law_amendment_cases
                     (law_id,base_version_id,proposed_version_id,conformity_case_id,community_id,proposed_by,status,rationale,evidence)
@@ -188,6 +201,165 @@ if (!function_exists('community_law_create_amendment_draft')) {
         } catch (Throwable $e) {
             if ($started) $conn->rollback();
             error_log('[Dolate Eshgh law amendment draft] '.$e->getMessage());
+            return false;
+        }
+    }
+}
+
+
+if (!function_exists('community_law_submit_amendment_for_vote')) {
+    /**
+     * اصلاحیه فقط با پذیرش صریح قواعد رأی‌گیریِ از پیش مصوب نسخهٔ مبنا به رأی محلی فرستاده می‌شود.
+     * قواعد به‌صورت snapshot برای نسخهٔ تازه ثبت و منشأ آن در پرونده نگهداری می‌شود.
+     */
+    function community_law_submit_amendment_for_vote(
+        mysqli $conn,
+        int $amendment_id,
+        int $community_id,
+        int $user_id,
+        bool $adopt_base_rules
+    ): bool {
+        if ($amendment_id<=0 || $community_id<=0 || $user_id<=0 || !$adopt_base_rules ||
+            !community_law_amendment_tables_ready($conn)) return false;
+        $started=false;
+        try {
+            if (!$conn->begin_transaction()) return false;
+            $started=true;
+
+            $member=$conn->prepare('SELECT 1 FROM community_members WHERE community_id=? AND user_id=? LIMIT 1');
+            if (!$member) throw new RuntimeException('amendment submit membership prepare failed');
+            $member->bind_param('ii',$community_id,$user_id);
+            if (!$member->execute() || !$member->get_result()->fetch_row()) {
+                $member->close();
+                throw new RuntimeException('local membership required');
+            }
+            $member->close();
+
+            $lock=$conn->prepare(
+                "SELECT a.id,a.status,a.law_id,a.base_version_id,a.proposed_version_id,a.conformity_case_id,
+                        a.community_id,l.status AS law_status,l.current_version_id,l.originating_community_id,
+                        base.status AS base_status,base.version_number,
+                        proposed.status AS proposed_status,
+                        c.status AS conformity_status,c.parent_community_id
+                 FROM community_law_amendment_cases a
+                 JOIN community_laws l ON l.id=a.law_id
+                 JOIN community_law_versions base ON base.id=a.base_version_id AND base.law_id=a.law_id
+                 JOIN community_law_versions proposed ON proposed.id=a.proposed_version_id AND proposed.law_id=a.law_id
+                 JOIN community_law_conformity_cases c ON c.id=a.conformity_case_id
+                 WHERE a.id=? FOR UPDATE"
+            );
+            if (!$lock) throw new RuntimeException('amendment submit lock prepare failed');
+            $lock->bind_param('i',$amendment_id);
+            if (!$lock->execute()) throw new RuntimeException('amendment submit lock failed');
+            $row=$lock->get_result()->fetch_assoc();
+            $lock->close();
+            if (!$row || (int)$row['community_id']!==$community_id ||
+                (int)$row['originating_community_id']!==$community_id ||
+                $row['status']!=='draft' || $row['law_status']!=='approved' ||
+                (int)$row['current_version_id']!==(int)$row['base_version_id'] ||
+                $row['base_status']!=='approved' || $row['proposed_status']!=='draft' ||
+                $row['conformity_status']!=='amendment_required') {
+                throw new RuntimeException('amendment submission state is no longer valid');
+            }
+
+            $source_rules=$conn->prepare(
+                "SELECT jurisdiction_level,individual_quorum_percent,individual_approval_percent,
+                        community_quorum_percent,community_approval_percent,
+                        community_aggregate_quorum_percent,community_aggregate_approval_percent,
+                        require_community_approval,individual_vote_basis,community_vote_basis
+                 FROM community_law_voting_rules
+                 WHERE law_version_id=? AND status='approved' LIMIT 1 FOR UPDATE"
+            );
+            if (!$source_rules) throw new RuntimeException('base voting rules prepare failed');
+            $base_version_id=(int)$row['base_version_id'];
+            $source_rules->bind_param('i',$base_version_id);
+            if (!$source_rules->execute()) throw new RuntimeException('base voting rules lookup failed');
+            $rules=$source_rules->get_result()->fetch_assoc();
+            $source_rules->close();
+            if (!$rules) throw new RuntimeException('approved base voting rules are required');
+
+            $rule_insert=$conn->prepare(
+                "INSERT INTO community_law_voting_rules
+                    (law_version_id,jurisdiction_level,
+                     individual_quorum_percent,individual_approval_percent,
+                     community_quorum_percent,community_approval_percent,
+                     community_aggregate_quorum_percent,community_aggregate_approval_percent,
+                     require_community_approval,individual_vote_basis,community_vote_basis,
+                     status,configured_by,configured_at,approved_at)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,'approved',?,NOW(),NOW())"
+            );
+            if (!$rule_insert) throw new RuntimeException('amendment voting rules snapshot prepare failed');
+            $new_version_id=(int)$row['proposed_version_id'];
+            $jurisdiction=(string)$rules['jurisdiction_level'];
+            $individual_quorum=(float)$rules['individual_quorum_percent'];
+            $individual_approval=(float)$rules['individual_approval_percent'];
+            $community_quorum=$rules['community_quorum_percent']!==null?(float)$rules['community_quorum_percent']:null;
+            $community_approval=$rules['community_approval_percent']!==null?(float)$rules['community_approval_percent']:null;
+            $aggregate_quorum=$rules['community_aggregate_quorum_percent']!==null?(float)$rules['community_aggregate_quorum_percent']:null;
+            $aggregate_approval=$rules['community_aggregate_approval_percent']!==null?(float)$rules['community_aggregate_approval_percent']:null;
+            $require_community=(int)$rules['require_community_approval'];
+            $individual_basis=(string)$rules['individual_vote_basis'];
+            $community_basis=$rules['community_vote_basis'];
+            $rule_insert->bind_param(
+                'isddddddissi',
+                $new_version_id,$jurisdiction,$individual_quorum,$individual_approval,
+                $community_quorum,$community_approval,$aggregate_quorum,$aggregate_approval,
+                $require_community,$individual_basis,$community_basis,$user_id
+            );
+            if (!$rule_insert->execute()) throw new RuntimeException('amendment voting rules snapshot failed');
+            $rule_insert->close();
+
+            $version_update=$conn->prepare(
+                "UPDATE community_law_versions SET status='proposed'
+                 WHERE id=? AND status='draft'"
+            );
+            if (!$version_update) throw new RuntimeException('amendment version submission prepare failed');
+            $version_update->bind_param('i',$new_version_id);
+            if (!$version_update->execute() || $version_update->affected_rows!==1) {
+                throw new RuntimeException('amendment version submission failed');
+            }
+            $version_update->close();
+
+            $case_update=$conn->prepare(
+                "UPDATE community_law_amendment_cases
+                 SET status='submitted',voting_rules_source_version_id=?,
+                     rules_adopted_by=?,rules_adopted_at=NOW(),submitted_at=NOW()
+                 WHERE id=? AND status='draft'"
+            );
+            if (!$case_update) throw new RuntimeException('amendment case submission prepare failed');
+            $case_update->bind_param('iii',$base_version_id,$user_id,$amendment_id);
+            if (!$case_update->execute() || $case_update->affected_rows!==1) {
+                throw new RuntimeException('amendment case submission failed');
+            }
+            $case_update->close();
+
+            $details=json_encode([
+                'base_version_id'=>$base_version_id,'proposed_version_id'=>$new_version_id,
+                'voting_rules_source_version_id'=>$base_version_id,
+                'rules_explicitly_adopted'=>true,'rules_snapshot_created'=>true,
+                'current_approved_law_unchanged'=>true
+            ],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
+            $event=$conn->prepare(
+                "INSERT INTO community_law_amendment_events (case_id,actor_user_id,event_type,details)
+                 VALUES (?,?,'amendment_submitted',?)"
+            );
+            if (!$event) throw new RuntimeException('amendment submission event prepare failed');
+            $event->bind_param('iis',$amendment_id,$user_id,$details);
+            if (!$event->execute()) throw new RuntimeException('amendment submission event failed');
+            $event->close();
+
+            if (!community_law_record_history(
+                $conn,(int)$row['law_id'],$new_version_id,$community_id,$user_id,
+                'amendment_submitted',
+                'اصلاحیه برای رأی محلی ارسال شد؛ قواعد رأی‌گیریِ مصوب نسخهٔ مبنا با پذیرش صریح ثبت‌کننده snapshot شد و قانون جاری تغییر نکرد.'
+            )) throw new RuntimeException('amendment submission history failed');
+
+            if (!$conn->commit()) throw new RuntimeException('amendment submission commit failed');
+            $started=false;
+            return true;
+        } catch (Throwable $e) {
+            if ($started) $conn->rollback();
+            error_log('[Dolate Eshgh amendment submission] '.$e->getMessage());
             return false;
         }
     }
