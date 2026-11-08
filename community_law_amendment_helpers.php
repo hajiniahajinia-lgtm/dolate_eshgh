@@ -151,7 +151,7 @@ if (!function_exists('community_law_create_amendment_draft')) {
             );
             if (!$case_insert) throw new RuntimeException('amendment case insert prepare failed');
             $base_version_id=(int)$record['local_law_version_id'];
-            $case_insert->bind_param('iiii iiss',$law_id,$base_version_id,$new_version_id,$conformity_case_id,$community_id,$user_id,$rationale,$evidence);
+            $case_insert->bind_param('iiiiiiss',$law_id,$base_version_id,$new_version_id,$conformity_case_id,$community_id,$user_id,$rationale,$evidence);
             if (!$case_insert->execute()) throw new RuntimeException('amendment case insert failed');
             $amendment_id=(int)$conn->insert_id;
             $case_insert->close();
