@@ -1303,9 +1303,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$conn->begin_transaction()) community_laws_redirect($community_id, 'save_error');
         try {
             $lock = $conn->prepare(
-                "SELECT l.status, l.current_version_id, v.status AS version_status, v.vote_deadline
+                "SELECT l.status, l.current_version_id, v.status AS version_status, v.vote_deadline,
+                        a.id AS amendment_case_id,a.status AS amendment_status,
+                        a.base_version_id AS amendment_base_version_id
                  FROM community_laws l
                  JOIN community_law_versions v ON v.law_id=l.id
+                 LEFT JOIN community_law_amendment_cases a ON a.proposed_version_id=v.id
                  WHERE l.id=? AND v.id=? AND l.originating_community_id=?
                  FOR UPDATE"
             );
@@ -1315,10 +1318,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $record = $lock->get_result()->fetch_assoc();
             $lock->close();
 
+            $is_amendment_tally = $record && !empty($record['amendment_case_id']);
+            $standard_tally_state = $record &&
+                $record['status']==='voting' && $record['version_status']==='voting' &&
+                (int)$record['current_version_id']===$version_id;
+            $amendment_tally_state = $is_amendment_tally &&
+                $record['status']==='approved' && $record['version_status']==='voting' &&
+                $record['amendment_status']==='local_voting' &&
+                (int)$record['current_version_id']===(int)$record['amendment_base_version_id'];
             if (
-                !$record || $record['status'] !== 'voting' ||
-                $record['version_status'] !== 'voting' ||
-                (int)$record['current_version_id'] !== $version_id ||
+                (!$standard_tally_state && !$amendment_tally_state) ||
                 empty($record['vote_deadline']) ||
                 strtotime($record['vote_deadline']) > time()
             ) {
@@ -1622,10 +1631,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!$save_final_result->execute()) throw new Exception('final result insert failed');
             $save_final_result->close();
 
+            if ($is_amendment_tally) {
+                $next_amendment_status = $final_status==='vote_passed'
+                    ? 'parent_review'
+                    : ($final_status==='insufficient' ? 'vote_insufficient' : 'rejected');
+                $decision_note='نتیجه رأی محلی اصلاحیه: '.$final_status;
+                $amendment_update=$conn->prepare(
+                    "UPDATE community_law_amendment_cases
+                     SET status=?,decided_at=NOW(),decision_note=?
+                     WHERE id=? AND status='local_voting'"
+                );
+                if (!$amendment_update) throw new Exception('amendment tally status prepare failed');
+                $amendment_id=(int)$record['amendment_case_id'];
+                $amendment_update->bind_param('ssi',$next_amendment_status,$decision_note,$amendment_id);
+                if (!$amendment_update->execute() || $amendment_update->affected_rows!==1) {
+                    throw new Exception('amendment tally status update failed');
+                }
+                $amendment_update->close();
+                $amendment_details=json_encode([
+                    'final_status'=>$final_status,'individual_turnout_percent'=>$individual_turnout_percent,
+                    'individual_approval_percent'=>$individual_approval_percent,
+                    'community_turnout_percent'=>$community_turnout_percent,
+                    'community_approval_percent'=>$community_approval_percent,
+                    'current_approved_law_unchanged'=>true,
+                    'next_stage'=>$next_amendment_status
+                ],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
+                $amendment_event=$conn->prepare(
+                    "INSERT INTO community_law_amendment_events (case_id,actor_user_id,event_type,details)
+                     VALUES (?,?,'local_vote_calculated',?)"
+                );
+                if (!$amendment_event) throw new Exception('amendment tally event prepare failed');
+                $amendment_event->bind_param('iis',$amendment_id,$user_id,$amendment_details);
+                if (!$amendment_event->execute()) throw new Exception('amendment tally event failed');
+                $amendment_event->close();
+            }
+
             if (!community_law_record_history(
                 $conn, $law_id, $version_id, $community_id, $user_id,
-                'voting_result_calculated',
-                'نتیجه مرکب رأی‌گیری بر اساس قواعد تأییدشده محاسبه شد؛ این نتیجه به‌تنهایی موجب لازم‌الاجرا شدن قانون نیست.'
+                $is_amendment_tally ? 'amendment_local_vote_calculated' : 'voting_result_calculated',
+                $is_amendment_tally
+                    ? 'نتیجه رأی محلی اصلاحیه ثبت شد؛ قانون مصوب جاری تا پایان بررسی انطباق و تصویب نهایی بدون تغییر باقی می‌ماند.'
+                    : 'نتیجه مرکب رأی‌گیری بر اساس قواعد تأییدشده محاسبه شد؛ این نتیجه به‌تنهایی موجب لازم‌الاجرا شدن قانون نیست.'
             )) throw new Exception('tally history failed');
 
             if (!$conn->commit()) throw new Exception('tally commit failed');
