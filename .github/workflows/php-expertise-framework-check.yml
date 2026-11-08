@@ -127,3 +127,4 @@ jobs:
           DB_USER: root
           DB_PASSWORD: root
         run: php tests/community_charter_amendments_integration_test.php
+          php tests/community_law_implementation_integration_test.php
