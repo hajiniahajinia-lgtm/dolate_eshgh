@@ -151,6 +151,19 @@ try {
     integration_check($panel['reviewer_ids'] === $reviewerIds, 'the production helper assigns the first five shuffled candidates as reviewers');
     integration_check($panel['electorate_ids'] === range(7, 16), 'the production helper excludes reviewers from the public electorate');
 
+    $panelCounts = $db->query(
+        "SELECT
+            (SELECT COUNT(*) FROM community_charter_amendment_reviewers WHERE amendment_id=" . $amendmentId . ") AS reviewers,
+            (SELECT COUNT(*) FROM community_charter_amendment_electorate WHERE amendment_id=" . $amendmentId . ") AS electorate,
+            (SELECT COUNT(*) FROM community_charter_amendment_reviewers r
+             JOIN community_charter_amendment_electorate e
+               ON e.amendment_id=r.amendment_id AND e.user_id=r.reviewer_user_id
+             WHERE r.amendment_id=" . $amendmentId . ") AS overlap"
+    )->fetch_assoc();
+    integration_check((int)$panelCounts['reviewers'] === 5, 'five reviewer assignments were persisted by the production helper');
+    integration_check((int)$panelCounts['electorate'] === 10, 'ten public electorate snapshots were persisted by the production helper');
+    integration_check((int)$panelCounts['overlap'] === 0, 'reviewers are never included in the public electorate snapshot');
+
     $db->query(
         "UPDATE community_charter_amendments
          SET status='independent_review', review_opens_at=NOW(),
@@ -243,6 +256,10 @@ try {
     $assignedAppealReviewers = community_charter_assign_appeal_reviewers($db, $appealId, [17,18,19]);
     $db->commit();
     integration_check($assignedAppealReviewers === [17,18,19], 'the production helper assigns three independent appeal reviewers');
+    $appealAssignmentCount = (int)$db->query(
+        "SELECT COUNT(*) AS total FROM community_charter_amendment_appeal_reviewer_assignments WHERE appeal_id=" . $appealId
+    )->fetch_assoc()['total'];
+    integration_check($appealAssignmentCount === 3, 'all three independent appeal reviewer assignments were persisted');
 
     $db->query(
         "UPDATE community_charter_amendments
