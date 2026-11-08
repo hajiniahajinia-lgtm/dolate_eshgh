@@ -58,6 +58,11 @@ on:
       - 'tests/community_decision_knowledge_link_integration_test.php'
       - 'tests/community_law_implementation_integration_test.php'
       - 'migrations/20261108_community_law_outcome_reports.sql'
+      - 'migrations/20261108_community_law_outcome_reviews.sql'
+      - 'tests/community_law_outcome_reports_integration_test.php'
+      - 'community_law_outcome_action.php'
+      - 'migrations/20261108_community_law_outcome_reports.sql'
+      - 'migrations/20261108_community_law_outcome_reviews.sql'
       - 'tests/community_law_outcome_reports_integration_test.php'
       - 'community_law_outcome_action.php'
       - 'migrations/20261108_community_law_outcome_reports.sql'
@@ -155,6 +160,7 @@ jobs:
           php -l tests/community_charter_amendments_integration_test.php
           php -l tests/community_law_implementation_integration_test.php
           php -l tests/community_law_outcome_reports_integration_test.php
+          php -l community_law_outcome_action.php
           php -l community_decision_ledger.php
           php -l tests/community_law_decision_origin_migration_test.php
           php -l tests/community_decision_knowledge_link_integration_test.php
