@@ -290,6 +290,37 @@ try {
     $restored=$db->query('SELECT community_id,responsible_user_id,local_plan,status,progress_report FROM community_law_implementations WHERE law_version_id=99001 ORDER BY community_id')->fetch_all(MYSQLI_ASSOC);
     change_case_check(count($restored)===2 && $restored[0]['status']==='in_progress' && $restored[0]['responsible_user_id']==='90101' && $restored[0]['local_plan']==='برنامهٔ جامعهٔ مادر' && $restored[1]['status']==='completed' && $restored[1]['responsible_user_id']==='90102' && $restored[1]['local_plan']==='برنامهٔ زیرجامعه','implementation owners, plans and statuses are restored from suspension snapshots');
 
+    // لغو قانون باید همهٔ جوامع مشمول را مطلع کند و وضعیت اجرا را بدون حذف شواهد متوقف سازد.
+    $repeal_case=community_law_open_change_case($db,9501,90200,90020,'repeal','لغو قانون پس از رفع نیاز و بررسی پیامدهای آن','گزارش ارزیابی پیامدها');
+    change_case_check(is_int($repeal_case) && $repeal_case>0,'an affected child member can request repeal for parent-community review');
+    $repeal_reviewers=$db->query('SELECT reviewer_user_id FROM community_law_change_reviewers WHERE case_id='.(int)$repeal_case)->fetch_all(MYSQLI_ASSOC);
+    change_case_check(count($repeal_reviewers)===5,'repeal receives five independent reviewers');
+    foreach ($repeal_reviewers as $index=>$reviewer) {
+        $verdict=$index<4?'uphold':'dismiss';
+        change_case_check(community_law_submit_change_assessment($db,$repeal_case,(int)$reviewer['reviewer_user_id'],$verdict,'بررسی مستقل آثار لغو انجام شد.')!==false,'independent repeal assessment is accepted');
+    }
+    $repeal_electorate=$db->query('SELECT user_id FROM community_law_change_electorate WHERE case_id='.(int)$repeal_case.' ORDER BY user_id')->fetch_all(MYSQLI_ASSOC);
+    change_case_check(count($repeal_electorate)===4,'repeal voting uses the parent-community electorate');
+    foreach (array_slice($repeal_electorate,0,3) as $voter) {
+        change_case_check(community_law_change_cast_vote($db,$repeal_case,(int)$voter['user_id'],'yes'),'parent voter can approve repeal');
+    }
+    $db->query('UPDATE community_law_change_cases SET vote_closes_at=DATE_SUB(NOW(),INTERVAL 1 SECOND) WHERE id='.(int)$repeal_case);
+    change_case_check(community_law_change_finalize_vote($db,$repeal_case)==='approved','parent vote approves repeal and applies it atomically');
+    $repealed=$db->query('SELECT status,repealed_at,last_status_change_case_id FROM community_laws WHERE id=9501')->fetch_assoc();
+    change_case_check($repealed && $repealed['status']==='repealed' && $repealed['repealed_at']!==null && (int)$repealed['last_status_change_case_id']===$repeal_case,'repeal is recorded as the authoritative law status transition');
+    $repealed_impl=$db->query('SELECT community_id,status,progress_report FROM community_law_implementations WHERE law_version_id=99001 ORDER BY community_id')->fetch_all(MYSQLI_ASSOC);
+    change_case_check(count($repealed_impl)===2 && $repealed_impl[0]['status']==='not_applicable' && $repealed_impl[1]['status']==='not_applicable' && $repealed_impl[0]['progress_report']==='گزارش پیشرفت مادر' && $repealed_impl[1]['progress_report']==='گزارش تکمیل زیرجامعه','repeal ends obligations across the scoped implementations while retaining prior progress reports');
+    $repeal_notice_count=(int)$db->query('SELECT COUNT(*) AS n FROM community_law_community_notices WHERE case_id='.(int)$repeal_case." AND event_type='repealed'")->fetch_assoc()['n'];
+    change_case_check($repeal_notice_count===3,'parent, direct child and deep descendant receive repeal notices');
+    $repeal_snapshot_count=(int)$db->query('SELECT COUNT(*) AS n FROM community_law_change_implementation_snapshots WHERE case_id='.(int)$repeal_case)->fetch_assoc()['n'];
+    change_case_check($repeal_snapshot_count===2,'repeal preserves a complete pre-repeal implementation snapshot');
+    $repeal_history_before=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_history WHERE law_id=9501 AND event_type='law_repealed'")->fetch_assoc()['n'];
+    change_case_check($repeal_history_before===1,'repeal is written to permanent law history');
+    change_case_check(community_law_change_apply_approved_case($db,(int)$repeal_case,null),'replaying an applied repeal returns safely');
+    $replay_repeal_notices=(int)$db->query('SELECT COUNT(*) AS n FROM community_law_community_notices WHERE case_id='.(int)$repeal_case." AND event_type='repealed'")->fetch_assoc()['n'];
+    $replay_repeal_history=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_history WHERE law_id=9501 AND event_type='law_repealed'")->fetch_assoc()['n'];
+    change_case_check($replay_repeal_notices===$repeal_notice_count && $replay_repeal_history===$repeal_history_before,'replaying repeal creates no duplicate notices or history');
+
     change_case_check(community_law_open_change_case($db,9501,999999,90020,'repeal','درخواست نامعتبر')===false,'non-member cannot submit a change request');
     change_case_check(community_law_open_change_case($db,9501,90200,90020,'repeal','')===false,'empty reasons are rejected');
     change_case_check(community_law_open_change_case($db,9501,90200,90020,'repeal','درخواست اضطراری',null,true)===false,'emergency flag is restricted to suspension requests');
