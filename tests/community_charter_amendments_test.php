@@ -131,6 +131,7 @@ check_charter_amendment(
 
 
 $action_source = file_get_contents(__DIR__ . '/../community_charter_amendment_action.php');
+$helper_source = file_get_contents(__DIR__ . '/../community_law_helpers.php');
 check_charter_amendment(
     is_string($action_source) && strpos($action_source, 'review_closes_at>NOW()') !== false &&
     strpos($action_source, 'review_closes_at<=NOW()') !== false,
@@ -143,7 +144,7 @@ check_charter_amendment(
 );
 check_charter_amendment(
     is_string($action_source) && strpos($action_source, 'appeal_closes_at>NOW()') !== false &&
-    strpos($action_source, 'appeal_closes_at<=NOW()') !== false,
+    is_string($helper_source) && strpos($helper_source, 'appeal_closes_at<=NOW()') !== false,
     'appeal deadline has mutually exclusive open and closed conditions'
 );
 
