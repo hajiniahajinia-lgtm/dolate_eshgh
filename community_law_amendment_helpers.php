@@ -26,7 +26,20 @@ if (!function_exists('community_law_amendment_tables_ready')) {
         }
         $column_count=(int)$column_check->get_result()->fetch_assoc()['n'];
         $column_check->close();
-        return $column_count===3;
+        if ($column_count!==3) return false;
+
+        $status_check=$conn->prepare(
+            "SELECT COUNT(*) AS n FROM information_schema.columns
+             WHERE table_schema=DATABASE() AND table_name='community_law_amendment_cases'
+               AND column_name='status' AND column_type LIKE '%vote_insufficient%'"
+        );
+        if (!$status_check || !$status_check->execute()) {
+            if ($status_check) $status_check->close();
+            return false;
+        }
+        $status_ready=(int)$status_check->get_result()->fetch_assoc()['n']===1;
+        $status_check->close();
+        return $status_ready;
     }
 }
 
