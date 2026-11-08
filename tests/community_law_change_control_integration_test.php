@@ -325,11 +325,34 @@ try {
         change_case_check(community_law_change_cast_vote($db,$reinstate_case,(int)$voter['user_id'],'yes'),'parent voter can approve reinstatement');
     }
     $db->query('UPDATE community_law_change_cases SET vote_closes_at=DATE_SUB(NOW(),INTERVAL 1 SECOND) WHERE id='.(int)$reinstate_case);
-    change_case_check(community_law_change_finalize_vote($db,$reinstate_case)==='approved','parent vote approves reinstatement');
+
+    // خطای عمدی در اعلان بازگردانی باید کل نتیجه رأی، وضعیت قانون، اجرا و تاریخچه را rollback کند.
+    $db->query("CREATE TRIGGER fail_reinstatement_notice BEFORE INSERT ON community_law_community_notices FOR EACH ROW BEGIN IF NEW.event_type='reinstated' THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='forced reinstatement notice failure'; END IF; END");
+    change_case_check(community_law_change_finalize_vote($db,$reinstate_case)===false,'a failed reinstatement notice aborts the parent vote transaction');
+    $db->query('DROP TRIGGER fail_reinstatement_notice');
+    $pending_reinstate=$db->query('SELECT status,vote_result,effect_applied_at FROM community_law_change_cases WHERE id='.(int)$reinstate_case)->fetch_assoc();
+    $still_suspended=$db->query('SELECT status,suspended_at,suspension_case_id FROM community_laws WHERE id=9501')->fetch_assoc();
+    $still_paused=$db->query("SELECT COUNT(*) AS n FROM community_law_implementations WHERE law_version_id=99001 AND status='suspended'")->fetch_assoc();
+    $rollback_history=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_history WHERE law_id=9501 AND event_type='law_reinstated'")->fetch_assoc()['n'];
+    $rollback_notices=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_community_notices WHERE case_id=".(int)$reinstate_case." AND event_type='reinstated'")->fetch_assoc()['n'];
+    change_case_check($pending_reinstate && $pending_reinstate['status']==='awaiting_vote' && $pending_reinstate['vote_result']===null && $pending_reinstate['effect_applied_at']===null,'failed reinstatement leaves the parent vote pending and unapplied');
+    change_case_check($still_suspended && $still_suspended['status']==='suspended' && $still_suspended['suspended_at']!==null && (int)$still_suspended['suspension_case_id']===(int)$case_id,'failed reinstatement preserves the exact prior suspension state');
+    change_case_check((int)$still_paused['n']===2 && $rollback_history===0 && $rollback_notices===0,'failed reinstatement rolls back implementation restoration, history and notices together');
+
+    change_case_check(community_law_change_finalize_vote($db,$reinstate_case)==='approved','parent vote successfully retries reinstatement after the notice failure is removed');
     $restored_law=$db->query('SELECT status,suspended_at,suspension_case_id FROM community_laws WHERE id=9501')->fetch_assoc();
     change_case_check($restored_law && $restored_law['status']==='approved' && $restored_law['suspended_at']===null && $restored_law['suspension_case_id']===null,'approved reinstatement restores the law to active status');
-    $restored=$db->query('SELECT community_id,responsible_user_id,local_plan,status,progress_report FROM community_law_implementations WHERE law_version_id=99001 ORDER BY community_id')->fetch_all(MYSQLI_ASSOC);
-    change_case_check(count($restored)===2 && $restored[0]['status']==='in_progress' && $restored[0]['responsible_user_id']==='90101' && $restored[0]['local_plan']==='برنامهٔ جامعهٔ مادر' && $restored[1]['status']==='completed' && $restored[1]['responsible_user_id']==='90102' && $restored[1]['local_plan']==='برنامهٔ زیرجامعه','implementation owners, plans and statuses are restored from suspension snapshots');
+    $restored=$db->query('SELECT community_id,responsible_user_id,local_plan,status,progress_report,started_at,target_date,completed_at FROM community_law_implementations WHERE law_version_id=99001 ORDER BY community_id')->fetch_all(MYSQLI_ASSOC);
+    change_case_check(count($restored)===2 && $restored[0]['status']==='in_progress' && $restored[0]['responsible_user_id']==='90101' && $restored[0]['local_plan']==='برنامهٔ جامعهٔ مادر' && $restored[0]['progress_report']==='گزارش پیشرفت مادر' && $restored[0]['started_at']!==null && $restored[0]['target_date']!==null && $restored[0]['completed_at']===null && $restored[1]['status']==='completed' && $restored[1]['responsible_user_id']==='90102' && $restored[1]['local_plan']==='برنامهٔ زیرجامعه' && $restored[1]['progress_report']==='گزارش تکمیل زیرجامعه' && $restored[1]['started_at']!==null && $restored[1]['target_date']!==null,'all implementation owners, plans, statuses, dates and progress reports are restored from suspension snapshots');
+    $reinstated_notices=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_community_notices WHERE case_id=".(int)$reinstate_case." AND event_type='reinstated'")->fetch_assoc()['n'];
+    $reinstated_history=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_history WHERE law_id=9501 AND event_type='law_reinstated'")->fetch_assoc()['n'];
+    change_case_check($reinstated_notices===3 && $reinstated_history===1,'successful reinstatement notifies every scoped community and records one permanent history event');
+    $before_reinstate_replay_notices=$reinstated_notices;
+    $before_reinstate_replay_history=$reinstated_history;
+    change_case_check(community_law_change_apply_approved_case($db,(int)$reinstate_case,null),'replaying an applied reinstatement is safe');
+    $after_reinstate_replay_notices=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_community_notices WHERE case_id=".(int)$reinstate_case." AND event_type='reinstated'")->fetch_assoc()['n'];
+    $after_reinstate_replay_history=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_history WHERE law_id=9501 AND event_type='law_reinstated'")->fetch_assoc()['n'];
+    change_case_check($before_reinstate_replay_notices===$after_reinstate_replay_notices && $before_reinstate_replay_history===$after_reinstate_replay_history,'replaying reinstatement creates no duplicate notices or history');
 
     // لغو قانون باید همهٔ جوامع مشمول را مطلع کند و وضعیت اجرا را بدون حذف شواهد متوقف سازد.
     $repeal_case=community_law_open_change_case($db,9501,90200,90020,'repeal','لغو قانون پس از رفع نیاز و بررسی پیامدهای آن','گزارش ارزیابی پیامدها');
