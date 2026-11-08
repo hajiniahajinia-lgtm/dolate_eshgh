@@ -46,7 +46,7 @@ if (!function_exists('community_law_open_change_case')) {
         if (!$is_member) return false;
 
         $law=$conn->prepare(
-            "SELECT l.originating_community_id,l.current_version_id,l.created_by
+            "SELECT l.originating_community_id,l.current_version_id,l.created_by,v.proposed_by
              FROM community_laws l
              JOIN community_law_versions v ON v.id=l.current_version_id AND v.law_id=l.id
              WHERE l.id=? AND l.status='approved' AND v.status='approved'
@@ -63,16 +63,29 @@ if (!function_exists('community_law_open_change_case')) {
 
         $version_id=(int)$law_row['current_version_id'];
         $origin_id=(int)$law_row['originating_community_id'];
-        $proposer_id=(int)$law_row['created_by'];
+        $creator_id=(int)$law_row['created_by'];
+        $proposer_id=(int)$law_row['proposed_by'];
         if ($requester_community_id!==$origin_id &&
             !community_law_scope_matches($conn,$version_id,$requester_community_id)) return false;
+
+        $pending_case=$conn->prepare(
+            "SELECT 1 FROM community_law_change_cases
+             WHERE law_id=? AND status IN ('submitted','under_review','review_complete','awaiting_vote')
+             LIMIT 1"
+        );
+        if (!$pending_case) return false;
+        $pending_case->bind_param('i',$law_id);
+        if (!$pending_case->execute()) { $pending_case->close(); return false; }
+        $has_pending=(bool)$pending_case->get_result()->fetch_row();
+        $pending_case->close();
+        if ($has_pending) return false;
 
         // ارزیابان باید عضو جامعهٔ مادر باشند و در پیشنهاد یا رأی‌گیری اولیه دخالت نداشته باشند.
         $candidates_stmt=$conn->prepare(
             "SELECT DISTINCT cm.user_id
              FROM community_members cm
              WHERE cm.community_id=?
-               AND cm.user_id<>? AND cm.user_id<>?
+               AND cm.user_id<>? AND cm.user_id<>? AND cm.user_id<>?
                AND NOT EXISTS (
                    SELECT 1 FROM community_law_votes lv
                    WHERE lv.law_version_id=? AND lv.voter_user_id=cm.user_id
@@ -80,7 +93,7 @@ if (!function_exists('community_law_open_change_case')) {
              ORDER BY cm.user_id"
         );
         if (!$candidates_stmt) return false;
-        $candidates_stmt->bind_param('iiii',$origin_id,$actor_user_id,$proposer_id,$version_id);
+        $candidates_stmt->bind_param('iiiii',$origin_id,$actor_user_id,$creator_id,$proposer_id,$version_id);
         if (!$candidates_stmt->execute()) { $candidates_stmt->close(); return false; }
         $candidates=[];
         $cr=$candidates_stmt->get_result();
