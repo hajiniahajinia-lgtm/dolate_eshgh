@@ -91,7 +91,7 @@ $drafts=[];
 if ($schema_ready) {
     $stmt=$conn->prepare(
         "SELECT a.id,a.status,a.rationale,a.created_at,a.community_id AS originating_community_id,
-                a.base_version_id,a.proposed_version_id,
+                a.base_version_id,a.proposed_version_id,a.proposed_by,
                 v.version_number,v.law_text,v.status AS version_status,v.vote_deadline,v.vote_started_at,
                 l.id AS law_id,l.current_version_id,l.law_code,a.voting_rules_source_version_id,
                 c.parent_community_id
@@ -208,6 +208,51 @@ a{color:#1d4ed8}@media(max-width:600px){body{padding:5px}.card{padding:11px}inpu
 $amendment_version_id=(int)$draft['proposed_version_id'];
 $can_amendment_community_vote=false;
 $can_amendment_direct_vote=false;
+$can_amendment_legal_review=false;
+$can_amendment_authority_review=false;
+$amendment_review_state=['screening_status'=>null,'authority_status'=>null,'jurisdiction_level'=>null];
+if($draft['status']==='submitted' && $is_member && (int)$draft['proposed_by']!==$user_id) {
+    $review_state_stmt=$conn->prepare(
+        'SELECT rc.status AS screening_status,ac.status AS authority_status,ac.derived_jurisdiction_level
+         FROM community_law_review_cases rc
+         JOIN community_law_authority_cases ac ON ac.law_version_id=rc.law_version_id
+         WHERE rc.law_version_id=?'
+    );
+    if($review_state_stmt) {
+        $review_state_stmt->bind_param('i',$amendment_version_id);
+        if($review_state_stmt->execute()) {
+            $state_row=$review_state_stmt->get_result()->fetch_assoc();
+            if($state_row) $amendment_review_state=[
+                'screening_status'=>$state_row['screening_status'],
+                'authority_status'=>$state_row['authority_status'],
+                'jurisdiction_level'=>$state_row['derived_jurisdiction_level']
+            ];
+        }
+        $review_state_stmt->close();
+    }
+    $elector_stmt=$conn->prepare('SELECT 1 FROM community_law_review_electorate WHERE law_version_id=? AND user_id=? LIMIT 1');
+    if($elector_stmt) {
+        $elector_stmt->bind_param('ii',$amendment_version_id,$user_id);
+        if($elector_stmt->execute()) $can_amendment_legal_review=(bool)$elector_stmt->get_result()->fetch_row();
+        $elector_stmt->close();
+    }
+    if($can_amendment_legal_review && $amendment_review_state['screening_status']==='screening_clear' && $amendment_review_state['authority_status']==='pending') {
+        $prior_authority_stmt=$conn->prepare('SELECT 1 FROM community_law_authority_assessments WHERE law_version_id=? AND reviewer_user_id=? LIMIT 1');
+        if($prior_authority_stmt) {
+            $prior_authority_stmt->bind_param('ii',$amendment_version_id,$user_id);
+            if($prior_authority_stmt->execute()) $can_amendment_authority_review=!(bool)$prior_authority_stmt->get_result()->fetch_row();
+            $prior_authority_stmt->close();
+        }
+    }
+    if($can_amendment_legal_review && $amendment_review_state['screening_status']==='pending') {
+        $prior_legal_stmt=$conn->prepare('SELECT 1 FROM community_law_review_assessments WHERE law_version_id=? AND reviewer_user_id=? LIMIT 1');
+        if($prior_legal_stmt) {
+            $prior_legal_stmt->bind_param('ii',$amendment_version_id,$user_id);
+            if($prior_legal_stmt->execute()) $can_amendment_legal_review=!(bool)$prior_legal_stmt->get_result()->fetch_row();
+            $prior_legal_stmt->close();
+        }
+    }
+}
 if($is_member && $draft['status']==='local_voting' && !empty($draft['vote_deadline']) && strtotime($draft['vote_deadline'])>time()) {
     $eligible_stmt=$conn->prepare('SELECT 1 FROM community_law_electorate WHERE law_version_id=? AND voting_community_id=? AND user_id=? LIMIT 1');
     if($eligible_stmt) {
@@ -257,16 +302,72 @@ if($review_list) {
 <?php elseif($draft['status']==='draft'):?>
 <p class="muted">پیش‌نویس اصلاحیه در جامعهٔ مبدأ در حال آماده‌سازی است و هنوز برای رأی‌گیری ارسال نشده است.</p>
 <?php elseif($draft['status']==='submitted'):?>
-<p class="notice">اصلاحیه ارسال شده است. قواعد رأی‌گیری از نسخهٔ مصوب مبنا گرفته شده و منشأ آن ثبت شده است؛ قانون جاری هنوز تغییر نکرده است.</p>
-<?php if((int)$draft['originating_community_id']===$community_id):?>
+<p class="notice">اصلاحیه ارسال شده است. قواعد رأی‌گیری از نسخهٔ مصوب مبنا ثبت شده‌اند؛ اما پیش از رأی‌گیری، غربالگری حقوقی و بررسی صلاحیت مستقل باید تکمیل شوند. قانون جاری تغییر نمی‌کند.</p>
+<?php if($amendment_review_state['screening_status']==='pending' && $can_amendment_legal_review):?>
+<form method="post" action="community_laws.php?community_id=<?=$community_id?>">
+<input type="hidden" name="csrf_token" value="<?=clamp_h($law_csrf)?>">
+<input type="hidden" name="law_version_id" value="<?=$amendment_version_id?>">
+<strong>غربالگری حقوقی مستقل</strong>
+<?php foreach(['charter_compatibility'=>'سازگاری با منشور','hierarchy_compatibility'=>'سازگاری با سلسله‌مراتب قوانین','rights_impact'=>'اثر بر حقوق','environmental_impact'=>'اثر زیست‌محیطی','implementation_feasibility'=>'امکان‌پذیری اجرا'] as $field=>$caption):?>
+<label><?=clamp_h($caption)?></label><select name="<?=clamp_h($field)?>" required><option value="compliant">سازگار</option><option value="conflict">دارای تعارض</option><option value="unclear">نیازمند بررسی بیشتر</option></select>
+<?php endforeach;?>
+<label>استدلال</label><textarea name="reasoning" required maxlength="30000"></textarea>
+<label>شواهد (اختیاری)</label><textarea name="evidence" maxlength="30000"></textarea>
+<button type="submit" name="submit_law_legal_assessment" value="1">ثبت ارزیابی حقوقی</button>
+</form>
+<?php elseif($amendment_review_state['screening_status']==='pending'):?>
+<p class="muted">غربالگری حقوقی در انتظار ارزیابی اعضای مستقل واجد شرایط است.</p>
+<?php elseif(in_array($amendment_review_state['screening_status'],['conflict_found','needs_revision'],true)):?>
+<p class="notice warning">غربالگری حقوقی تعارض یا ابهام یافته است؛ تا رفع آن رأی‌گیری آغاز نمی‌شود.</p>
+<?php endif;?>
+<?php if($amendment_review_state['screening_status']==='screening_clear' && $amendment_review_state['authority_status']==='pending' && $can_amendment_authority_review):?>
+<?php
+$authority_refs=[];
+$authority_ref_stmt=$conn->prepare(
+    'SELECT ar.id,ar.relation_type,rl.law_code,rv.title,rv.version_number
+     FROM community_law_authority_references ar
+     JOIN community_laws rl ON rl.id=ar.reference_law_id
+     JOIN community_law_versions rv ON rv.id=ar.reference_law_version_id
+     WHERE ar.law_version_id=? ORDER BY ar.relation_type,ar.id'
+);
+if($authority_ref_stmt) {
+    $authority_ref_stmt->bind_param('i',$amendment_version_id);
+    if($authority_ref_stmt->execute()) { $authority_ref_result=$authority_ref_stmt->get_result(); while($authority_ref=$authority_ref_result->fetch_assoc()) $authority_refs[]=$authority_ref; }
+    $authority_ref_stmt->close();
+}
+?>
+<form method="post" action="community_laws.php?community_id=<?=$community_id?>">
+<input type="hidden" name="csrf_token" value="<?=clamp_h($law_csrf)?>">
+<input type="hidden" name="law_version_id" value="<?=$amendment_version_id?>">
+<strong>بررسی صلاحیت و قوانین بالادستی</strong>
+<label>نتیجهٔ کلی صلاحیت</label><select name="authority_verdict" required><option value="confirm">تأیید</option><option value="dispute">دارای تعارض</option><option value="unclear">نیازمند بررسی بیشتر</option></select>
+<?php foreach($authority_refs as $authority_ref):?>
+<div class="article">
+<strong><?=clamp_h($authority_ref['law_code'].' — '.$authority_ref['title'])?> (نسخه <?= (int)$authority_ref['version_number']?>)</strong>
+<p class="muted">نوع ارتباط: <?=clamp_h($authority_ref['relation_type'])?></p>
+<label>سازگاری با این قانون مرجع</label><select name="precedent_assessment[<?=(int)$authority_ref['id']?>]" required><option value="compatible">سازگار</option><option value="conflict">دارای تعارض</option><option value="unclear">نیازمند بررسی بیشتر</option></select>
+<label>استدلال دربارهٔ این مرجع</label><textarea name="precedent_reasoning[<?=(int)$authority_ref['id']?>]" required maxlength="30000"></textarea>
+<label>شواهد (اختیاری)</label><textarea name="precedent_evidence[<?=(int)$authority_ref['id']?>]" maxlength="30000"></textarea>
+</div>
+<?php endforeach;?>
+<label>استدلال کلی</label><textarea name="authority_reasoning" required maxlength="30000"></textarea>
+<label>شواهد کلی (اختیاری)</label><textarea name="authority_evidence" maxlength="30000"></textarea>
+<button type="submit" name="submit_law_authority_assessment" value="1">ثبت بررسی صلاحیت</button>
+</form>
+<?php elseif($amendment_review_state['screening_status']==='screening_clear' && $amendment_review_state['authority_status']==='pending'):?>
+<p class="muted">بررسی صلاحیت در انتظار ارزیابی مستقل است.</p>
+<?php elseif(in_array($amendment_review_state['authority_status'],['conflict_found','needs_revision'],true)):?>
+<p class="notice warning">بررسی صلاحیت تعارض یا ابهام یافته است؛ رأی‌گیری تا رفع آن متوقف می‌ماند.</p>
+<?php endif;?>
+<?php if($amendment_review_state['screening_status']==='screening_clear' && $amendment_review_state['authority_status']==='confirmed' && (int)$draft['originating_community_id']===$community_id):?>
 <form method="post" action="community_laws.php?community_id=<?=$community_id?>">
 <input type="hidden" name="csrf_token" value="<?=clamp_h($law_csrf)?>">
 <input type="hidden" name="law_id" value="<?=(int)$draft['law_id']?>">
 <input type="hidden" name="version_id" value="<?=$amendment_version_id?>">
 <button type="submit" name="start_law_vote" value="1">آغاز رأی‌گیری اصلاحیه در جامعهٔ محلی</button>
 </form>
-<?php else:?>
-<p class="muted">این اصلاحیه در جامعهٔ مبدأ در انتظار آغاز رأی‌گیری است.</p>
+<?php elseif($amendment_review_state['screening_status']==='screening_clear' && $amendment_review_state['authority_status']==='confirmed'):?>
+<p class="muted">بررسی‌های مقدماتی کامل شده‌اند؛ آغاز رأی‌گیری در جامعهٔ مبدأ انجام می‌شود.</p>
 <?php endif;?>
 <?php elseif($draft['status']==='local_voting'):?>
 <?php if(!empty($draft['vote_deadline']) && strtotime($draft['vote_deadline'])>time()):?>
