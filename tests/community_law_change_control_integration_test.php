@@ -146,7 +146,7 @@ try {
     change_case_check(community_law_capture_charter_snapshot($db,$second_version),'final amendment review captures the current effective charter version');
     $parent_scopes=[];
     $parent_scope_result=$db->query("SELECT scope_community_id,include_descendants FROM community_law_scopes WHERE law_version_id=99001 ORDER BY scope_community_id");
-    while($scope_row=$parent_scope_result->fetch_assoc()) $parent_scopes[]=$scope_row;
+    while($scope_row=$parent_scope_result->fetch_assoc()) $parent_scopes[]=['scope_community_id'=>(int)$scope_row['scope_community_id'],'include_descendants'=>(int)$scope_row['include_descendants']];
     $parent_scope_fingerprint=hash('sha256',json_encode($parent_scopes));
     $db->query("INSERT INTO community_law_final_review_references (law_version_id,reference_law_id,reference_law_version_id,reference_origin_community_id,relation_type,scope_fingerprint) VALUES (".$second_version.",9501,99001,90010,'higher','".$db->real_escape_string($parent_scope_fingerprint)."')");
     $db->query("INSERT INTO community_law_final_review_cases (law_version_id,status,reviewer_quorum,appeal_period_days,appeal_deadline,opened_by,review_completed_at) VALUES (".$second_version.",'appeal_period',3,7,DATE_SUB(NOW(),INTERVAL 1 DAY),90201,NOW())");
