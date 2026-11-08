@@ -193,7 +193,12 @@ if (!function_exists('community_law_create_amendment_draft')) {
             }
             if ($new_text===$base_text || mb_strlen($new_text)>50000) throw new RuntimeException('invalid resulting law text');
 
-            $next_number=(int)$record['version_number']+1;
+            $next_stmt=$conn->prepare('SELECT COALESCE(MAX(version_number),0)+1 AS next_version_number FROM community_law_versions WHERE law_id=?');
+            if (!$next_stmt) throw new RuntimeException('amendment version number prepare failed');
+            $next_stmt->bind_param('i',$law_id);
+            if (!$next_stmt->execute()) throw new RuntimeException('amendment version number lookup failed');
+            $next_number=(int)$next_stmt->get_result()->fetch_assoc()['next_version_number'];
+            $next_stmt->close();
             $version_insert=$conn->prepare(
                 "INSERT INTO community_law_versions
                     (law_id,version_number,title,law_text,implementation_plan,change_summary,
