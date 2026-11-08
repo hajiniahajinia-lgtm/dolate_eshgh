@@ -56,6 +56,24 @@ try {
     change_case_check($conformity && (int)$conformity['parent_community_id']===90010 && (int)$conformity['local_law_id']===9502 && $conformity['status']==='review_required','conformity case captures both exact law versions and awaits human review');
     $conflict_count=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_conformity_conflicts WHERE case_id=(SELECT id FROM community_law_conformity_cases WHERE community_id=90020 AND local_law_version_id=99002 AND parent_law_version_id=99001)")->fetch_assoc()['n'];
     change_case_check($conflict_count===0,'opening a conformity review does not falsely declare a semantic conflict');
+
+    // Deep hierarchy regression: a moved parent must trigger reviews for every
+    // descendant law against every applicable ancestor law, not only one level.
+    $db->query("INSERT INTO communities (id,parent_community_id) VALUES (90030,90020) ON DUPLICATE KEY UPDATE parent_community_id=VALUES(parent_community_id)");
+    $db->query("INSERT INTO community_laws (id,law_code,originating_community_id,created_by,status,current_version_id,effective_at) VALUES (9503,'LAW-DEEP-LOCAL-TEST',90030,90200,'approved',99003,NOW())");
+    $db->query("INSERT INTO community_law_versions (id,law_id,version_number,title,law_text,proposed_by,status,approved_at) VALUES (99003,9503,1,'قانون جامعهٔ زیرشاخهٔ عمیق','متن قانون زیرشاخه',90200,'approved',NOW())");
+    $db->query("INSERT INTO community_law_scopes (law_version_id,scope_community_id,include_descendants) VALUES (99003,90030,1)");
+    change_case_check(
+        community_law_register_hierarchy_conformity_reviews($db,[90010=>0,90020=>90010,90030=>90020],90020,90100),
+        'moving a parent community opens conformity reviews for deep descendants'
+    );
+    $deep_cases=$db->query("SELECT parent_law_version_id FROM community_law_conformity_cases WHERE community_id=90030 AND local_law_version_id=99003 ORDER BY parent_law_version_id")->fetch_all(MYSQLI_ASSOC);
+    $deep_parent_versions=array_map('intval',array_column($deep_cases,'parent_law_version_id'));
+    sort($deep_parent_versions,SORT_NUMERIC);
+    change_case_check(
+        $deep_parent_versions===[99001,99002],
+        'deep descendant law is checked against both immediate and higher-level applicable parent laws'
+    );
     $conformity_case_id=(int)$db->query("SELECT id FROM community_law_conformity_cases WHERE community_id=90020 AND local_law_version_id=99002 AND parent_law_version_id=99001")->fetch_assoc()['id'];
     $conflict_id=community_law_conformity_add_conflict($db,$conformity_case_id,90200,'ماده ۳','ماده ۷','تعارض احتمالی دربارهٔ دامنهٔ اختیار جامعهٔ محلی','متن و مستندات دو ماده');
     change_case_check(is_int($conflict_id) && $conflict_id>0,'local member can record a conflict with exact article references and evidence');
