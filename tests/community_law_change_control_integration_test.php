@@ -336,17 +336,9 @@ try {
             'community_law_charter_references',
             'community_law_charter_assessments'
         ];
-    $required_marks=implode(',',array_fill(0,count($required_debug),'?'));
-    $required_check=$db->prepare("SELECT table_name FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN ($required_marks)");
-    $required_types=str_repeat('s',count($required_debug));
-    $required_params=array_merge([$required_types],$required_debug);
-    $required_refs=[];
-    foreach($required_params as $required_index=>&$required_value) $required_refs[$required_index]=&$required_value;
-    call_user_func_array([$required_check,'bind_param'],$required_refs);
-    $required_check->execute();
-    $present_tables=array_column($required_check->get_result()->fetch_all(MYSQLI_ASSOC),'table_name');
-    $required_check->close();
+    $present_tables=array_column($db->query("SELECT table_name FROM information_schema.tables WHERE table_schema=DATABASE()")->fetch_all(MYSQLI_ASSOC),'table_name');
     $missing_tables=array_values(array_diff($required_debug,$present_tables));
+    $decision_column=(int)$db->query("SELECT COUNT(*) AS n FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='community_law_versions' AND column_name='source_decision_id'")->fetch_assoc()['n'];
     $ready_debug=community_law_tables_ready($db);
     $conformity_debug=community_law_register_hierarchy_conformity_reviews($db,$new_scope_map,91030,90200);
     $scope_diff_debug=[];
