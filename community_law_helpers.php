@@ -831,6 +831,112 @@ if (!function_exists('community_law_charter_snapshot_is_current')) {
 }
 
 
+
+if (!function_exists('community_charter_assign_review_panel')) {
+    /**
+     * پنج ارزیاب مستقل و بقیه واجدان شرایط را در دو snapshot جدا ثبت می‌کند.
+     * ورودی باید از قبل به‌صورت تصادفی مرتب شده باشد؛ فراخواننده تراکنش را مدیریت می‌کند.
+     */
+    function community_charter_assign_review_panel(
+        mysqli $conn,
+        int $amendment_id,
+        array $ordered_candidate_ids,
+        int $reviewer_count = 5,
+        int $minimum_electorate = 3
+    ): array {
+        if ($amendment_id <= 0 || $reviewer_count < 1 || $minimum_electorate < 1) {
+            throw new RuntimeException('پارامترهای تخصیص بررسی منشور معتبر نیست.');
+        }
+        $candidate_ids = [];
+        $seen = [];
+        foreach ($ordered_candidate_ids as $candidate_id) {
+            $candidate_id = (int)$candidate_id;
+            if ($candidate_id <= 0 || isset($seen[$candidate_id])) {
+                throw new RuntimeException('فهرست نامزدهای بررسی منشور تکراری یا نامعتبر است.');
+            }
+            $seen[$candidate_id] = true;
+            $candidate_ids[] = $candidate_id;
+        }
+        if (count($candidate_ids) < $reviewer_count + $minimum_electorate) {
+            throw new RuntimeException('تعداد نامزدها برای تشکیل هیئت بررسی و فهرست رأی‌دهندگان کافی نیست.');
+        }
+
+        $reviewer_ids = array_slice($candidate_ids, 0, $reviewer_count);
+        $electorate_ids = array_slice($candidate_ids, $reviewer_count);
+        $reviewer_insert = $conn->prepare(
+            "INSERT INTO community_charter_amendment_reviewers (amendment_id,reviewer_user_id) VALUES (?,?)"
+        );
+        if (!$reviewer_insert) throw new RuntimeException('ثبت ارزیابان مستقل ممکن نیست.');
+        foreach ($reviewer_ids as $reviewer_id) {
+            $reviewer_insert->bind_param('ii', $amendment_id, $reviewer_id);
+            if (!$reviewer_insert->execute()) {
+                $reviewer_insert->close();
+                throw new RuntimeException('ثبت ارزیاب مستقل انجام نشد.');
+            }
+        }
+        $reviewer_insert->close();
+
+        $electorate_insert = $conn->prepare(
+            "INSERT INTO community_charter_amendment_electorate (amendment_id,user_id) VALUES (?,?)"
+        );
+        if (!$electorate_insert) throw new RuntimeException('ثبت فهرست رأی‌دهندگان ممکن نیست.');
+        foreach ($electorate_ids as $voter_id) {
+            $electorate_insert->bind_param('ii', $amendment_id, $voter_id);
+            if (!$electorate_insert->execute()) {
+                $electorate_insert->close();
+                throw new RuntimeException('ثبت رأی‌دهندگان انجام نشد.');
+            }
+        }
+        $electorate_insert->close();
+
+        return ['reviewer_ids' => $reviewer_ids, 'electorate_ids' => $electorate_ids];
+    }
+}
+
+if (!function_exists('community_charter_assign_appeal_reviewers')) {
+    /**
+     * سه ارزیاب اعتراض را از فهرست نامزدهای از قبل پالایش و تصادفی‌مرتب‌شده ثبت می‌کند.
+     * فراخواننده تراکنش را مدیریت می‌کند.
+     */
+    function community_charter_assign_appeal_reviewers(
+        mysqli $conn,
+        int $appeal_id,
+        array $ordered_candidate_ids,
+        int $reviewer_count = 3
+    ): array {
+        if ($appeal_id <= 0 || $reviewer_count < 3) {
+            throw new RuntimeException('پارامترهای تخصیص ارزیاب اعتراض معتبر نیست.');
+        }
+        $candidate_ids = [];
+        $seen = [];
+        foreach ($ordered_candidate_ids as $candidate_id) {
+            $candidate_id = (int)$candidate_id;
+            if ($candidate_id <= 0 || isset($seen[$candidate_id])) {
+                throw new RuntimeException('فهرست ارزیابان اعتراض تکراری یا نامعتبر است.');
+            }
+            $seen[$candidate_id] = true;
+            $candidate_ids[] = $candidate_id;
+        }
+        if (count($candidate_ids) < $reviewer_count) {
+            throw new RuntimeException('برای رسیدگی مستقل به اعتراض ارزیاب کافی وجود ندارد.');
+        }
+        $reviewer_ids = array_slice($candidate_ids, 0, $reviewer_count);
+        $assignment = $conn->prepare(
+            "INSERT INTO community_charter_amendment_appeal_reviewer_assignments (appeal_id,reviewer_user_id) VALUES (?,?)"
+        );
+        if (!$assignment) throw new RuntimeException('تخصیص ارزیابان اعتراض ممکن نیست.');
+        foreach ($reviewer_ids as $reviewer_id) {
+            $assignment->bind_param('ii', $appeal_id, $reviewer_id);
+            if (!$assignment->execute()) {
+                $assignment->close();
+                throw new RuntimeException('تخصیص ارزیاب اعتراض انجام نشد.');
+            }
+        }
+        $assignment->close();
+        return $reviewer_ids;
+    }
+}
+
 if (!function_exists('community_charter_amendment_reviewer_result')) {
     /**
      * پنج ارزیاب مستقل لازم است؛ دست‌کم چهار ارزیاب باید حمایت کنند.
