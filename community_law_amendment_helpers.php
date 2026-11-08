@@ -292,12 +292,12 @@ if (!function_exists('community_law_submit_amendment_for_vote')) {
                         community_quorum_percent,community_approval_percent,
                         community_aggregate_quorum_percent,community_aggregate_approval_percent,
                         require_community_approval,individual_vote_basis,community_vote_basis,
-                        'approved',?,NOW(),NOW()
+                        status,configured_by,configured_at,approved_at
                  FROM community_law_voting_rules
                  WHERE law_version_id=? AND status='approved'"
             );
             if (!$rule_insert) throw new RuntimeException('amendment voting rules snapshot prepare failed');
-            $rule_insert->bind_param('iii',$new_version_id,$user_id,$base_version_id);
+            $rule_insert->bind_param('ii',$new_version_id,$base_version_id);
             if (!$rule_insert->execute() || $rule_insert->affected_rows!==1) {
                 throw new RuntimeException('amendment voting rules snapshot failed');
             }
