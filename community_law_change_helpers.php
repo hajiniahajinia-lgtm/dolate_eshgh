@@ -5,6 +5,26 @@
  */
 require_once __DIR__ . '/community_law_helpers.php';
 
+if (!function_exists('community_law_change_tables_ready')) {
+    function community_law_change_tables_ready(mysqli $conn): bool {
+        $required=[
+            'community_law_change_cases','community_law_change_reviewers',
+            'community_law_change_assessments','community_law_change_electorate',
+            'community_law_change_votes','community_law_community_notices',
+            'community_law_change_implementation_snapshots'
+        ];
+        $marks=implode(',',array_fill(0,count($required),'?'));
+        $stmt=$conn->prepare("SELECT COUNT(*) AS total FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN ($marks)");
+        if (!$stmt) return false;
+        $types=str_repeat('s',count($required)); $params=array_merge([$types],$required); $refs=[];
+        foreach ($params as $index=>&$value) $refs[$index]=&$value;
+        call_user_func_array([$stmt,'bind_param'],$refs);
+        if (!$stmt->execute()) { $stmt->close(); return false; }
+        $count=(int)$stmt->get_result()->fetch_assoc()['total']; $stmt->close();
+        return $count===count($required);
+    }
+}
+
 if (!function_exists('community_law_change_shuffle')) {
     function community_law_change_shuffle(array &$items): void {
         for ($i=count($items)-1; $i>0; $i--) {
@@ -82,7 +102,7 @@ if (!function_exists('community_law_open_change_case')) {
 
         $pending_case=$conn->prepare(
             "SELECT 1 FROM community_law_change_cases
-             WHERE law_id=? AND status IN ('submitted','under_review','review_complete','awaiting_vote')
+             WHERE law_id=? AND status IN ('submitted','under_review','awaiting_vote')
              LIMIT 1"
         );
         if (!$pending_case) return false;
