@@ -51,10 +51,10 @@ $outcome_reports_ready=false;
 if ($schema_ready) {
     $outcome_table_check=$conn->query(
         "SELECT COUNT(*) AS total FROM information_schema.tables
-         WHERE table_schema=DATABASE() AND table_name IN ('community_law_outcome_reports','community_law_outcome_reviews','community_law_outcome_followups')"
+         WHERE table_schema=DATABASE() AND table_name IN ('community_law_outcome_reports','community_law_outcome_reviews','community_law_outcome_followups','community_law_outcome_reassessments','community_law_outcome_reassessment_reviews')"
     );
     $outcome_reports_ready=$outcome_table_check &&
-        (int)$outcome_table_check->fetch_assoc()['total']===3;
+        (int)$outcome_table_check->fetch_assoc()['total']===5;
     if ($outcome_table_check) $outcome_table_check->free();
 }
 
@@ -3750,6 +3750,9 @@ $status_messages = [
     'outcome_review_failed' => 'ارزیابی ثبت نشد؛ عضویت در جامعه، تعارض منافع یا ثبت ارزیابی قبلی را بررسی کنید.',
     'outcome_followup_saved' => 'پاسخ یا شواهد تکمیلی ثبت شد و در تاریخچهٔ پرونده باقی می‌ماند.',
     'outcome_followup_failed' => 'ثبت پاسخ یا شواهد انجام نشد؛ فقط اعضای جامعهٔ مربوط و افراد مجاز می‌توانند اقدام کنند.',
+    'outcome_reassessment_saved' => 'ارزیابی مستقل مرحلهٔ دوم ثبت شد؛ نتیجه پس از سه ارزیاب تازه مشخص می‌شود.',
+    'outcome_reassessment_finalized' => 'رسیدگی مستقل مرحلهٔ دوم با رأی سه ارزیاب تازه نهایی شد؛ گزارش اولیه و وضعیت قانون تغییر خودکار نکرده‌اند.',
+    'outcome_reassessment_failed' => 'رسیدگی تکمیلی ثبت نشد؛ وجود پاسخ مجری و شواهد تازه و نداشتن تعارض منافع را بررسی کنید.',
     'submitted_for_review' => 'پیشنهاد برای غربالگری حقوقی مستقل ارسال شد؛ رأی‌گیری تا تکمیل این مرحله متوقف است.',
     'legal_assessment_saved' => 'ارزیابی مستقل ثبت شد.',
     'legal_assessment_not_allowed' => 'شما برای ارزیابی این پیشنهاد واجد شرایط نیستید یا مرحله بررسی بسته شده است.',
@@ -4025,6 +4028,40 @@ details>summary{cursor:pointer;font-weight:bold}
                     }
                 }
             }
+            $outcome_reassessment_cases_by_report=[];
+            $outcome_reassessment_reviews_by_report=[];
+            if ($outcome_reports && $outcome_reports_ready) {
+                $outcome_report_ids=array_values(array_filter(array_map(
+                    static fn($row)=>(int)$row['id'],
+                    $outcome_reports
+                ),static fn($id)=>$id>0));
+                if ($outcome_report_ids) {
+                    $report_id_list=implode(',', $outcome_report_ids);
+                    $case_result=$conn->query(
+                        "SELECT id,report_id,status,final_outcome,finalized_at
+                         FROM community_law_outcome_reassessments
+                         WHERE report_id IN ($report_id_list)"
+                    );
+                    if ($case_result) {
+                        while ($case_row=$case_result->fetch_assoc()) {
+                            $outcome_reassessment_cases_by_report[(int)$case_row['report_id']]=$case_row;
+                        }
+                        $case_result->free();
+                    }
+                    $reassessment_review_result=$conn->query(
+                        "SELECT report_id,reviewer_user_id,outcome,rationale,evidence,created_at
+                         FROM community_law_outcome_reassessment_reviews
+                         WHERE report_id IN ($report_id_list)
+                         ORDER BY report_id,id"
+                    );
+                    if ($reassessment_review_result) {
+                        while ($review_row=$reassessment_review_result->fetch_assoc()) {
+                            $outcome_reassessment_reviews_by_report[(int)$review_row['report_id']][]=$review_row;
+                        }
+                        $reassessment_review_result->free();
+                    }
+                }
+            }
             $can_submit_outcome_report=false;
             if ($is_member && $outcome_reports_ready) {
                 foreach ($implementation_rows as $implementation_row) {
@@ -4206,6 +4243,86 @@ details>summary{cursor:pointer;font-weight:bold}
                                             <button type="submit">ثبت شواهد تکمیلی</button>
                                         </form>
                                     </details>
+                                <?php endif; ?>
+                                <?php
+                                $report_followups=$outcome_followups_by_report[(int)$outcome_report['id']] ?? [];
+                                $has_executor_response=false;
+                                $has_additional_evidence=false;
+                                foreach ($report_followups as $entry) {
+                                    if ($entry['entry_type']==='executor_response') $has_executor_response=true;
+                                    if ($entry['entry_type']==='additional_evidence') $has_additional_evidence=true;
+                                }
+                                $reassessment_case=$outcome_reassessment_cases_by_report[(int)$outcome_report['id']] ?? null;
+                                $reassessment_reviews=$outcome_reassessment_reviews_by_report[(int)$outcome_report['id']] ?? [];
+                                $my_original_review=false;
+                                foreach (($outcome_reviews_by_report[(int)$outcome_report['id']] ?? []) as $original_review) {
+                                    if ((int)$original_review['reviewer_user_id']===$user_id) { $my_original_review=true; break; }
+                                }
+                                $my_reassessment_review=false;
+                                foreach ($reassessment_reviews as $second_review) {
+                                    if ((int)$second_review['reviewer_user_id']===$user_id) { $my_reassessment_review=true; break; }
+                                }
+                                $can_reassess_outcome=(bool)$is_member &&
+                                    (int)$outcome_report['community_id']===$community_id &&
+                                    $outcome_report['review_status']==='disputed' &&
+                                    $has_executor_response && $has_additional_evidence &&
+                                    (int)$outcome_report['submitted_by']!==$user_id &&
+                                    (int)($outcome_report['responsible_user_id']??0)!==$user_id &&
+                                    !$my_original_review && !$my_reassessment_review &&
+                                    (!$reassessment_case || $reassessment_case['status']==='open');
+                                ?>
+                                <?php if ($outcome_report['review_status']==='disputed'): ?>
+                                    <div class="notice" style="margin-top:10px;background:#f8fafc;border-color:#cbd5e1">
+                                        <strong>رسیدگی مستقل مرحلهٔ دوم</strong>
+                                        <p class="muted">پس از ثبت پاسخ مسئول اجرا و شواهد تکمیلی، سه عضو تازه که در ارزیابی نخست شرکت نکرده‌اند و تعارض منافع ندارند، نتیجه را بررسی می‌کنند.</p>
+                                        <p>تعداد ارزیابی‌های تازه: <?= count($reassessment_reviews) ?> از ۳</p>
+                                        <?php foreach ($reassessment_reviews as $second_review): ?>
+                                            <div style="border-top:1px solid #e2e8f0;padding-top:7px;margin-top:7px">
+                                                <strong><?= [
+                                                    'confirm_report'=>'تأیید گزارش',
+                                                    'revise_execution_plan'=>'اصلاح برنامهٔ اجرا',
+                                                    'needs_more_review'=>'نیازمند بررسی بیشتر',
+                                                    'recommend_law_review'=>'پیشنهاد بازنگری قانون'
+                                                ][$second_review['outcome']] ?? 'نتیجهٔ ثبت‌شده' ?></strong>
+                                                <span class="meta"> — <?= community_laws_escape($second_review['created_at']) ?></span>
+                                                <p><?= nl2br(community_laws_escape($second_review['rationale'])) ?></p>
+                                                <?php if (!empty($second_review['evidence'])): ?>
+                                                    <p><strong>شواهد:</strong> <?= nl2br(community_laws_escape($second_review['evidence'])) ?></p>
+                                                <?php endif; ?>
+                                            </div>
+                                        <?php endforeach; ?>
+                                        <?php if ($reassessment_case && $reassessment_case['status']==='finalized'): ?>
+                                            <p><strong>نتیجهٔ نهایی:</strong> <?= [
+                                                'confirm_report'=>'تأیید گزارش',
+                                                'revise_execution_plan'=>'اصلاح برنامهٔ اجرا',
+                                                'needs_more_review'=>'نیازمند بررسی بیشتر',
+                                                'recommend_law_review'=>'پیشنهاد بازنگری قانون'
+                                            ][$reassessment_case['final_outcome']] ?? 'نتیجهٔ ثبت‌شده' ?></p>
+                                        <?php elseif ($can_reassess_outcome): ?>
+                                            <form method="post" action="community_law_outcome_action.php">
+                                                <input type="hidden" name="action" value="reassess">
+                                                <input type="hidden" name="csrf_token" value="<?= community_laws_escape($csrf_token) ?>">
+                                                <input type="hidden" name="community_id" value="<?= $community_id ?>">
+                                                <input type="hidden" name="report_id" value="<?= (int)$outcome_report['id'] ?>">
+                                                <label>نتیجهٔ پیشنهادی ارزیاب مستقل</label>
+                                                <select name="reassessment_outcome" required>
+                                                    <option value="">انتخاب نتیجه</option>
+                                                    <option value="confirm_report">تأیید گزارش</option>
+                                                    <option value="revise_execution_plan">اصلاح برنامهٔ اجرا</option>
+                                                    <option value="needs_more_review">نیازمند بررسی بیشتر</option>
+                                                    <option value="recommend_law_review">پیشنهاد بازنگری قانون</option>
+                                                </select>
+                                                <label>استدلال و بررسی شواهد</label>
+                                                <textarea name="reassessment_rationale" maxlength="20000" required></textarea>
+                                                <label>شواهد و منابع (اختیاری)</label>
+                                                <textarea name="reassessment_evidence" maxlength="20000"></textarea>
+                                                <button type="submit">ثبت ارزیابی مستقل مرحلهٔ دوم</button>
+                                            </form>
+                                        <?php elseif (!$has_executor_response || !$has_additional_evidence): ?>
+                                            <p class="muted">برای آغاز رسیدگی دوم، ابتدا باید هم پاسخ گزارش‌دهنده یا مسئول اجرا و هم شواهد تکمیلی عضو جامعه ثبت شوند.</p>
+                                        <?php endif; ?>
+                                        <p class="muted">این نتیجه گزارش اولیه را بازنویسی نمی‌کند و قانون را خودکار تعلیق یا لغو نمی‌کند. پیشنهاد بازنگری قانون باید از فرایند رسمی تغییر قانون عبور کند.</p>
+                                    </div>
                                 <?php endif; ?>
                                 <?php
                                 $can_review_outcome=(bool)$is_member &&
