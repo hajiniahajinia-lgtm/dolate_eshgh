@@ -151,14 +151,13 @@ function create_collective_knowledge_decision($conn, $topic_id, $fallback_user_i
         $purpose_label = $purpose === 'knowledge' ? 'شناختی' : ($purpose === 'execution' ? 'اجرایی' : 'ترکیبی');
         $topic_title = trim((string)$topic['title']);
         $entry_title = mb_substr('پروندهٔ دانش: ' . $topic_title, 0, 180, 'UTF-8');
-        $summary = mb_substr('پروندهٔ دانش جمعی برای موضوع «' . $topic_title . '». ماهیت موضوع: ' . $purpose_label . '. ایدهٔ منتخب و نتیجهٔ پذیرش جمعی و لازم‌الاجرا بودن در بخش‌های جداگانه ثبت شده‌اند.', 0, 1000, 'UTF-8');
+        $summary = mb_substr('پروندهٔ دانش جمعی برای موضوع «' . $topic_title . '». ماهیت موضوع: ' . $purpose_label . '. ایدهٔ منتخب فقط موضوع بررسی است و شواهد و ارزیابی دانش باید جداگانه سنجیده شوند.', 0, 1000, 'UTF-8');
         $idea_content = $topic['idea_content'] !== null ? (string)$topic['idea_content'] : null;
         $content = "موضوع: " . $topic_title . "\n\n";
         $content .= "ماهیت موضوع: " . $purpose_label . "\n\n";
         $content .= "شرح موضوع:\n" . trim((string)$topic['description']) . "\n\n";
-        $content .= "ایدهٔ منتخب بر اساس ارزیابی ثبت‌شده در سامانه:\n" . ($idea_content !== null && trim($idea_content) !== '' ? $idea_content : 'برای این موضوع ایده‌ای به‌عنوان منتخب ثبت نشده است.') . "\n\n";
-        $content .= "نتیجهٔ رأی پذیرش جمعی: " . $acceptance_status . "؛ موافق: " . $yes_count . "، مخالف: " . $no_count . "، درصد موافق خام: " . $yes_percent . "٪، درصد موافق وزنی: " . $weighted_yes_percent . "٪.\n";
-        $content .= "نتیجهٔ رأی لازم‌الاجرا بودن: " . $enforceability_status . "؛ موافق اجرا: " . $enforce_yes . "، مخالف اجرا: " . $enforce_no . ".\n\n";
+        $content .= "ایدهٔ منتخب در فرآیند جمعی (برای بررسی، نه اثبات صحت):\n" . ($idea_content !== null && trim($idea_content) !== '' ? $idea_content : 'برای این موضوع ایده‌ای به‌عنوان منتخب ثبت نشده است.') . "\n\n";
+        $content .= "یادداشت تفکیک: شمار رأی‌ها، نتیجهٔ تصمیم و وضعیت اجرای آن در دفتر مستقل تصمیم‌های جامعه نگهداری می‌شود و بخشی از محتوای دانش نیست.\n\n";
         $quality_notes = [];
         if (mb_strlen(trim($topic_title), 'UTF-8') < 10) $quality_notes[] = 'عنوان موضوع کوتاه است';
         if (trim((string)$topic['description']) === '') $quality_notes[] = 'شرح موضوع ثبت نشده است';
