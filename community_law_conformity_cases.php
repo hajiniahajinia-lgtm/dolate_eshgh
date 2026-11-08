@@ -91,8 +91,7 @@ body{font-family:Tahoma,Arial,sans-serif;background:#f5f6f8;color:#20242a;margin
 <?php if($f['evidence']): ?><pre><?=clcc_h($f['evidence'])?></pre><?php endif; ?>
 <?php if((int)$f['identified_by']!==$user_id && (int)$f['my_review']===0 && (int)$f['side_review']===0 && in_array($case['status'],['review_required','amendment_required'],true)): ?>
 <form method="post" action="community_law_conformity_action.php">
-<input type="hidden" name="csrf_token" value="<?=clcc_h($csrf)?>"><input type="hidden" name="community_id" value="<?=$community_id?>"><input type="hidden" name="conflict_id"><?php /* conflict id set below */ ?>
-<input type="hidden" name="conflict_id" value="<?=(int)$f['id']?>"><input type="hidden" name="reviewer_community_id" value="<?=$community_id?>">
+<input type="hidden" name="csrf_token" value="<?=clcc_h($csrf)?>"><input type="hidden" name="community_id" value="<?=$community_id?>"><input type="hidden" name="conflict_id" value="<?=(int)$f['id']?>"><input type="hidden" name="reviewer_community_id" value="<?=$community_id?>">
 <label>نتیجهٔ بررسی مستقل</label><select name="finding" required><option value="conflict_confirmed">تعارض تأیید می‌شود</option><option value="no_conflict">تعارض تأیید نمی‌شود</option></select>
 <label>استدلال مستند (حداقل ۲۰ نویسه)</label><textarea name="reasoning" minlength="20" maxlength="20000" required></textarea><label>شواهد تکمیلی</label><textarea name="evidence" maxlength="20000"></textarea>
 <button name="action" value="review_conflict">ثبت بررسی</button></form>
