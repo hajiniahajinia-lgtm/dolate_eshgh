@@ -34,6 +34,10 @@ $db->set_charset('utf8mb4');
 try {
     apply_implementation_sql(
         $db,
+        __DIR__ . '/../migrations/20261106_community_law_objections_schema_repair.sql'
+    );
+    apply_implementation_sql(
+        $db,
         __DIR__ . '/../migrations/20261107_community_law_framework.sql'
     );
     require_once __DIR__ . '/../community_law_helpers.php';
