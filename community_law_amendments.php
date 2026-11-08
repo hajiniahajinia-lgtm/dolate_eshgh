@@ -189,7 +189,7 @@ a{color:#1d4ed8}@media(max-width:600px){body{padding:5px}.card{padding:11px}inpu
 $amendment_version_id=(int)$draft['proposed_version_id'];
 $can_amendment_community_vote=false;
 $can_amendment_direct_vote=false;
-if($is_member && $draft['status']==='local_voting') {
+if($is_member && $draft['status']==='local_voting' && !empty($draft['vote_deadline']) && strtotime($draft['vote_deadline'])>time()) {
     $eligible_stmt=$conn->prepare('SELECT 1 FROM community_law_electorate WHERE law_version_id=? AND voting_community_id=? AND user_id=? LIMIT 1');
     if($eligible_stmt) {
         $eligible_stmt->bind_param('iii',$amendment_version_id,$community_id,$user_id);
@@ -229,7 +229,11 @@ if($is_member && $draft['status']==='local_voting') {
 <p class="muted">این اصلاحیه در جامعهٔ مبدأ در انتظار آغاز رأی‌گیری است.</p>
 <?php endif;?>
 <?php elseif($draft['status']==='local_voting'):?>
+<?php if(!empty($draft['vote_deadline']) && strtotime($draft['vote_deadline'])>time()):?>
 <p class="notice">رأی‌گیری اصلاحیه در جریان است. مهلت پایان: <?=clamp_h($draft['vote_deadline'])?>. قانون مصوب قبلی همچنان جاری است.</p>
+<?php else:?>
+<p class="notice warning">مهلت رأی‌گیری پایان یافته است؛ تا محاسبهٔ نتیجه، وضعیت اصلاحیه در انتظار شمارش باقی می‌ماند. قانون مصوب قبلی همچنان جاری است.</p>
+<?php endif;?>
 <?php if($can_amendment_community_vote):?>
 <form method="post" action="community_laws.php?community_id=<?=$community_id?>">
 <input type="hidden" name="csrf_token" value="<?=clamp_h($law_csrf)?>">
