@@ -139,6 +139,7 @@ try {
     // بررسی نهایی، مهلت اعتراض و ابلاغ اتمی؛ نسخه جاری تا پایان این مرحله همان نسخه پایه می‌ماند.
     $db->query("UPDATE community_law_review_cases SET status='screening_clear' WHERE law_version_id=".$second_version);
     $db->query("UPDATE community_law_authority_cases SET status='confirmed' WHERE law_version_id=".$second_version);
+    $db->query("UPDATE community_law_versions SET status='appeal_period' WHERE id=".$second_version);
     $db->query("INSERT INTO community_law_final_results (law_version_id,individual_vote_basis,final_status) VALUES (".$second_version.",'count','vote_passed')");
     $db->query("INSERT INTO community_law_implementations (law_version_id,community_id,responsible_user_id,local_plan,status,started_at,target_date,progress_report) VALUES (99002,90020,90200,'برنامه اجرای پایه','in_progress',NOW(),DATE_ADD(CURDATE(),INTERVAL 30 DAY),'پیشرفت ثبت‌شده پیش از اصلاحیه')");
     change_case_check(community_law_capture_charter_snapshot($db,$second_version),'final amendment review captures the current effective charter version');
