@@ -1,6 +1,7 @@
 <?php
 // منطق مشترک نهایی‌سازی رأی و ساخت پروندهٔ دانش.
 // این فایل از صفحات جامعه و رأی‌گیری فراخوانی می‌شود.
+require_once __DIR__ . '/community_decision_ledger.php';
 
 // ایجاد پروندهٔ دانش و snapshot تصمیم؛ این عملیات برای هر موضوع فقط یک‌بار انجام می‌شود.
 function create_collective_knowledge_decision($conn, $topic_id, $fallback_user_id) {
@@ -112,6 +113,61 @@ function create_collective_knowledge_decision($conn, $topic_id, $fallback_user_i
             $content .= "وضعیت کفایت اطلاعات اولیه: دارای عنوان، شرح و ایدهٔ منتخب؛ این موارد هنوز نیازمند بررسی و ارزیابی هستند.\n\n";
         }
         $content .= "یادآوری: انتخاب جمعی یا برتری یک ایده به‌تنهایی به معنای اثبات علمی یا تجربی آن نیست. شواهد و نتایج اجرا باید جداگانه بررسی و تکمیل شوند.";
+
+        // نخست نتیجهٔ جمعی در دفتر مستقل تصمیم ثبت و تثبیت می‌شود؛
+        // ساخت یا ارزیابی پروندهٔ دانش در تراکنش جداگانه انجام خواهد شد.
+        $decision_time_result = $conn->query("SELECT NOW() AS decided_at");
+        if (!$decision_time_result) throw new Exception("decision timestamp lookup failed: " . $conn->error);
+        $decision_time_row = $decision_time_result->fetch_assoc() ?: [];
+        $decision_time_result->free();
+        $decision_snapshot = [
+            'community_id' => $community_value,
+            'source_topic_id' => (int)$topic_id,
+            'source_idea_id' => $source_idea_id,
+            'topic_purpose_snapshot' => $purpose,
+            'selected_idea_content' => $idea_content,
+            'acceptance_status' => $acceptance_status,
+            'enforceability_status' => $enforceability_status,
+            'yes_count' => $yes_count,
+            'no_count' => $no_count,
+            'yes_weight' => $yes_weight,
+            'no_weight' => $no_weight,
+            'yes_percent' => $yes_percent,
+            'weighted_yes_percent' => $weighted_yes_percent,
+            'enforce_yes_count' => $enforce_yes,
+            'enforce_no_count' => $enforce_no,
+            'decided_at' => (string)($decision_time_row['decided_at'] ?? ''),
+        ];
+        if (!community_decision_record_snapshot($conn, $decision_snapshot)) {
+            throw new Exception("independent community decision snapshot could not be recorded");
+        }
+        if (!$conn->commit()) throw new Exception("decision ledger commit failed");
+
+        // از این نقطه به بعد، شکست کتابخانهٔ دانش نباید نتیجهٔ تصمیم را حذف کند.
+        if (!$conn->begin_transaction()) throw new Exception("knowledge transaction could not start");
+        $relock_meta = $conn->prepare(
+            "SELECT finalized FROM topic_voting_meta WHERE topic_id=? LIMIT 1 FOR UPDATE"
+        );
+        if (!$relock_meta) throw new Exception("meta relock prepare: " . $conn->error);
+        $relock_meta->bind_param("i", $topic_id);
+        if (!$relock_meta->execute()) throw new Exception("meta relock execute: " . $relock_meta->error);
+        $relocked_meta = $relock_meta->get_result()->fetch_assoc();
+        $relock_meta->close();
+        if (!$relocked_meta) throw new Exception("topic voting metadata disappeared before knowledge creation");
+
+        // درخواست هم‌زمان دیگری ممکن است در فاصلهٔ دو تراکنش پروندهٔ سازگاری قدیمی را ساخته باشد.
+        $legacy_existing_stmt = $conn->prepare(
+            "SELECT entry_id FROM collective_knowledge_decisions WHERE topic_id=? LIMIT 1"
+        );
+        if (!$legacy_existing_stmt) throw new Exception("legacy decision recheck prepare: " . $conn->error);
+        $legacy_existing_stmt->bind_param("i", $topic_id);
+        if (!$legacy_existing_stmt->execute()) throw new Exception("legacy decision recheck execute: " . $legacy_existing_stmt->error);
+        $legacy_existing = $legacy_existing_stmt->get_result()->fetch_assoc();
+        $legacy_existing_stmt->close();
+        if ($legacy_existing) {
+            if (!$conn->commit()) throw new Exception("knowledge retry commit failed");
+            return true;
+        }
 
         $creator_id = (int)$topic['user_id'] > 0 ? (int)$topic['user_id'] : (int)$fallback_user_id;
         $community_value = (int)$topic['community_id'];
