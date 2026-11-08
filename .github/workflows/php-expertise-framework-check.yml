@@ -34,6 +34,7 @@ on:
       - 'community_decision_ledger.php'
       - 'migrations/20261108_community_decision_ledger.sql'
       - 'tests/community_decision_ledger_integration_test.php'
+      - 'tests/community_decision_knowledge_separation_integration_test.php'
       - 'tests/community_law_implementation_integration_test.php'
       - 'community_decision_ledger.php'
       - 'migrations/20261108_community_decision_ledger.sql'
@@ -104,6 +105,7 @@ jobs:
           php -l tests/community_law_implementation_integration_test.php
           php -l community_decision_ledger.php
           php -l tests/community_decision_ledger_integration_test.php
+          php -l tests/community_decision_knowledge_separation_integration_test.php
       - name: Run community law hierarchy and charter amendment tests
         run: |
           php tests/community_law_hierarchy_helpers_test.php
@@ -143,3 +145,4 @@ jobs:
           php tests/community_charter_amendments_integration_test.php
           php tests/community_law_implementation_integration_test.php
           php tests/community_decision_ledger_integration_test.php
+          php tests/community_decision_knowledge_separation_integration_test.php
