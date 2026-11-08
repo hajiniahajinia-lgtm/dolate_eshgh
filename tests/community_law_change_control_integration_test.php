@@ -280,8 +280,12 @@ try {
     $db->query("INSERT INTO community_law_versions (id,law_id,version_number,title,law_text,proposed_by,status,approved_at) VALUES (99601,96001,1,'قانون آزمایش اعلان دامنه','متن قانون',90200,'approved',NOW())");
     $db->query("INSERT INTO community_law_scopes (law_version_id,scope_community_id,include_descendants) VALUES (99601,91020,1)");
     $db->query("INSERT INTO community_law_implementations (law_version_id,community_id,responsible_user_id,local_plan,status,started_at,target_date,progress_report) VALUES (99601,91030,90200,'برنامهٔ جامعهٔ متأثر','in_progress',NOW(),DATE_ADD(CURDATE(),INTERVAL 20 DAY),'گزارش پیشرفت حفظ‌شونده')");
-    $old_scope_map=[90010=>0,90020=>90010,90030=>90020,91010=>0,91020=>91010,91030=>91020];
-    $new_scope_map=[90010=>0,90020=>90010,90030=>90020,91010=>0,91020=>91010,91030=>91010];
+    // Use the complete database hierarchy: scope validation must see every
+    // community referenced by active and pending law scopes, not a partial fixture.
+    $old_scope_map=community_law_load_parent_map($db);
+    change_case_check(is_array($old_scope_map) && ($old_scope_map[91030]??null)===91020,'scope transition fixture loads the complete hierarchy');
+    $new_scope_map=$old_scope_map;
+    $new_scope_map[91030]=91010;
     change_case_check(
         community_law_record_hierarchy_scope_changes($db,$old_scope_map,$new_scope_map,91030,90200),
         'hierarchy scope exit is recorded and notified'
