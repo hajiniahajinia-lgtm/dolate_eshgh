@@ -614,11 +614,13 @@ if (!function_exists('community_law_change_mark_notice_read')) {
         string $notice_source
     ): bool {
         if ($community_id<=0 || $user_id<=0 || $notice_id<=0 ||
-            !in_array($notice_source,['change','scope'],true)) return false;
+            !in_array($notice_source,['change','scope','version'],true)) return false;
 
-        $table=$notice_source==='scope'
-            ? 'community_law_scope_notices'
-            : 'community_law_community_notices';
+        $table=match($notice_source) {
+            'scope'=>'community_law_scope_notices',
+            'version'=>'community_law_version_notices',
+            default=>'community_law_community_notices'
+        };
         $mark=$conn->prepare(
             "UPDATE {$table} SET read_at=NOW()
              WHERE id=? AND community_id=? AND read_at IS NULL
