@@ -1009,6 +1009,139 @@ if (!function_exists('community_law_submit_outcome_followup')) {
     }
 }
 
+
+if (!function_exists('community_law_review_disputed_outcome_followups')) {
+    /**
+     * رسیدگی دوم به گزارش مورد اختلاف؛ فقط پس از پاسخ مجری و شاهد تازه.
+     * سه ارزیاب تازه و مستقل، نتیجه‌ای append-only ثبت می‌کنند.
+     */
+    function community_law_review_disputed_outcome_followups(
+        mysqli $conn, int $report_id, int $reviewer_user_id,
+        string $outcome, string $rationale, ?string $evidence=null
+    ): array|false {
+        $allowed=['confirm_report','revise_execution_plan','needs_more_review','recommend_law_review'];
+        $rationale=trim($rationale);
+        if ($report_id<=0 || $reviewer_user_id<=0 || !in_array($outcome,$allowed,true) ||
+            $rationale==='' || mb_strlen($rationale)>20000 ||
+            ($evidence!==null && mb_strlen($evidence)>20000)) return false;
+
+        $stmt=$conn->prepare(
+            "SELECT r.law_id,r.law_version_id,r.community_id,r.submitted_by,r.review_status,
+                    i.responsible_user_id
+             FROM community_law_outcome_reports r
+             JOIN community_law_implementations i ON i.id=r.implementation_id
+             WHERE r.id=? LIMIT 1 FOR UPDATE"
+        );
+        if (!$stmt) return false;
+        $stmt->bind_param('i',$report_id);
+        if (!$stmt->execute()) { $stmt->close(); return false; }
+        $report=$stmt->get_result()->fetch_assoc();
+        $stmt->close();
+        if (!$report || $report['review_status']!=='disputed') return false;
+
+        $community_id=(int)$report['community_id'];
+        $member=$conn->prepare('SELECT 1 FROM community_members WHERE community_id=? AND user_id=? LIMIT 1');
+        if (!$member) return false;
+        $member->bind_param('ii',$community_id,$reviewer_user_id);
+        if (!$member->execute()) { $member->close(); return false; }
+        $is_member=(bool)$member->get_result()->fetch_row();
+        $member->close();
+        if (!$is_member || $reviewer_user_id===(int)$report['submitted_by'] ||
+            $reviewer_user_id===(int)($report['responsible_user_id']??0)) return false;
+
+        $prior=$conn->prepare(
+            "SELECT 1 FROM community_law_outcome_reviews
+             WHERE report_id=? AND reviewer_user_id=? LIMIT 1"
+        );
+        if (!$prior) return false;
+        $prior->bind_param('ii',$report_id,$reviewer_user_id);
+        if (!$prior->execute()) { $prior->close(); return false; }
+        $was_original_reviewer=(bool)$prior->get_result()->fetch_row();
+        $prior->close();
+        if ($was_original_reviewer) return false;
+
+        $followups=$conn->prepare(
+            "SELECT SUM(entry_type='executor_response') AS responses,
+                    SUM(entry_type='additional_evidence') AS evidence_count
+             FROM community_law_outcome_followups WHERE report_id=?"
+        );
+        if (!$followups) return false;
+        $followups->bind_param('i',$report_id);
+        if (!$followups->execute()) { $followups->close(); return false; }
+        $followup_summary=$followups->get_result()->fetch_assoc();
+        $followups->close();
+        if ((int)($followup_summary['responses']??0)<1 ||
+            (int)($followup_summary['evidence_count']??0)<1) return false;
+
+        $case=$conn->prepare(
+            "INSERT INTO community_law_outcome_reassessments
+             (report_id,law_id,law_version_id,community_id)
+             VALUES (?,?,?,?)
+             ON DUPLICATE KEY UPDATE id=LAST_INSERT_ID(id)"
+        );
+        if (!$case) return false;
+        $law_id=(int)$report['law_id']; $version_id=(int)$report['law_version_id'];
+        $case->bind_param('iiii',$report_id,$law_id,$version_id,$community_id);
+        if (!$case->execute()) { $case->close(); return false; }
+        $case_id=(int)$conn->insert_id;
+        $case->close();
+
+        $case_lock=$conn->prepare("SELECT status FROM community_law_outcome_reassessments WHERE id=? FOR UPDATE");
+        if (!$case_lock) return false;
+        $case_lock->bind_param('i',$case_id);
+        if (!$case_lock->execute()) { $case_lock->close(); return false; }
+        $case_row=$case_lock->get_result()->fetch_assoc();
+        $case_lock->close();
+        if (!$case_row || $case_row['status']!=='open') return false;
+
+        $insert=$conn->prepare(
+            "INSERT INTO community_law_outcome_reassessment_reviews
+             (reassessment_id,report_id,reviewer_user_id,outcome,rationale,evidence)
+             VALUES (?,?,?,?,?,?)"
+        );
+        if (!$insert) return false;
+        $insert->bind_param('iiisss',$case_id,$report_id,$reviewer_user_id,$outcome,$rationale,$evidence);
+        if (!$insert->execute()) { $insert->close(); return false; }
+        $insert->close();
+
+        $counts=$conn->prepare(
+            "SELECT COUNT(*) AS total, outcome, COUNT(*) AS votes
+             FROM community_law_outcome_reassessment_reviews
+             WHERE reassessment_id=? GROUP BY outcome ORDER BY votes DESC, outcome ASC"
+        );
+        if (!$counts) return false;
+        $counts->bind_param('i',$case_id);
+        if (!$counts->execute()) { $counts->close(); return false; }
+        $result=$counts->get_result(); $rows=[];
+        while ($item=$result->fetch_assoc()) $rows[]=$item;
+        $counts->close();
+        $total=0; foreach ($rows as $item) $total+=(int)$item['votes'];
+        $final_outcome=null;
+        if ($total>=3) {
+            $final_outcome=(int)$rows[0]['votes']>=2 ? (string)$rows[0]['outcome'] : 'needs_more_review';
+            $finish=$conn->prepare(
+                "UPDATE community_law_outcome_reassessments
+                 SET status='finalized',final_outcome=?,finalized_at=NOW()
+                 WHERE id=? AND status='open'"
+            );
+            if (!$finish) return false;
+            $finish->bind_param('si',$final_outcome,$case_id);
+            $ok=$finish->execute(); $finish->close();
+            if (!$ok) return false;
+        }
+
+        $details=json_encode([
+            'report_id'=>$report_id,'reassessment_id'=>$case_id,'outcome'=>$outcome,
+            'review_count'=>$total,'final_outcome'=>$final_outcome
+        ],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
+        if (!community_law_record_history(
+            $conn,$law_id,$version_id,$community_id,$reviewer_user_id,
+            'outcome_report_reassessed',$details
+        )) return false;
+        return ['review_count'=>$total,'final_outcome'=>$final_outcome,'status'=>$total>=3?'finalized':'open'];
+    }
+}
+
 if (!function_exists('community_law_charter_tables_ready')) {
     function community_law_charter_tables_ready(mysqli $conn): bool {
         $required = [
