@@ -28,6 +28,7 @@ try {
     change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_amendment_workflow.sql');
     change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_amendment_submission.sql');
     change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_amendment_voting.sql');
+    change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_amendment_parent_review.sql');
     require_once __DIR__.'/../community_law_helpers.php';
     require_once __DIR__.'/../community_law_amendment_helpers.php';
     require_once __DIR__.'/../community_law_change_helpers.php';
@@ -91,6 +92,43 @@ try {
     change_case_check($submitted && $submitted['conformity_status']==='amendment_in_progress','submission moves the conformity case into the amendment workflow without resolving the underlying conflict prematurely');
     $submission_event=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_amendment_events WHERE case_id=".(int)$amendment_id." AND event_type='amendment_submitted'")->fetch_assoc()['n'];
     change_case_check($submission_event===1,'explicit rule adoption and amendment submission are recorded as an immutable event');
+
+    // پس از رأی محلی مثبت، دو عضو مستقل جامعه مادر فقط سازگاری را ارزیابی می‌کنند.
+    $proposed_version_id=(int)$submitted['proposed_version_id'];
+    $db->query("UPDATE community_law_versions SET status='voting',vote_deadline=DATE_SUB(NOW(),INTERVAL 1 DAY) WHERE id=".$proposed_version_id);
+    $db->query("UPDATE community_law_amendment_cases SET status='parent_review' WHERE id=".(int)$amendment_id);
+    change_case_check(!community_law_submit_amendment_parent_review($db,$amendment_id,90010,90104,'conflict_remains',['ماده ناموجود'],'ارجاع نامعتبر نباید پذیرفته شود.'),'parent compatibility review cannot cite an article outside the amendment');
+    change_case_check(community_law_submit_amendment_parent_review($db,$amendment_id,90010,90104,'conflict_remains',['ماده ۳'],'در مادهٔ اصلاح‌شده هنوز تعارض مشخصی با قانون مادر باقی است.'),'parent reviewer can identify a remaining conflict in an amended article');
+    $one_parent_review=$db->query("SELECT status FROM community_law_amendment_cases WHERE id=".(int)$amendment_id)->fetch_assoc();
+    change_case_check($one_parent_review && $one_parent_review['status']==='parent_review','one parent reviewer cannot finalize compatibility alone');
+    change_case_check(community_law_submit_amendment_parent_review($db,$amendment_id,90010,90105,'compatible',[],'از نظر این ارزیاب، سایر مواد اصلاح‌شده سازگارند.'),'a second independent parent reviewer can submit a separate compatibility finding');
+    $parent_result=$db->query("SELECT a.status,c.status AS conformity_status,l.status AS law_status,l.current_version_id,v.law_text FROM community_law_amendment_cases a JOIN community_law_conformity_cases c ON c.id=a.conformity_case_id JOIN community_laws l ON l.id=a.law_id JOIN community_law_versions v ON v.id=a.proposed_version_id WHERE a.id=".(int)$amendment_id)->fetch_assoc();
+    change_case_check($parent_result && $parent_result['status']==='revision_required' && $parent_result['conformity_status']==='amendment_required','any independently documented remaining conflict returns only the amendment to the local community');
+    change_case_check($parent_result && $parent_result['law_status']==='approved' && (int)$parent_result['current_version_id']===99002 && $parent_result['law_text']==='متن اصلاح‌شدهٔ قانون محلی','parent review cannot replace local text or change the active approved law');
+    $parent_history=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_amendment_parent_reviews WHERE case_id=".(int)$amendment_id)->fetch_assoc()['n'];
+    change_case_check($parent_history===2,'both independent parent compatibility reviews are preserved');
+
+    // پس از اصلاح دوباره توسط جامعه محلی، دو تأیید سازگاری مرحله را به بررسی نهایی می‌برند.
+    $second_amendment_id=community_law_create_amendment_draft(
+        $db,$conformity_case_id,90020,90201,
+        'اصلاح دوباره پس از اعلام تعارض باقی‌مانده از سوی جامعه مادر.',
+        [[
+            'reference'=>'ماده ۳',
+            'previous_text'=>'متن قانون محلی',
+            'proposed_text'=>'متن اصلاح‌شدهٔ دوم قانون محلی',
+            'reason'=>'رفع تعارض باقی‌مانده طبق بررسی مستند'
+        ]]
+    );
+    change_case_check(is_int($second_amendment_id) && $second_amendment_id>0,'local community can submit a fresh version after the previous amendment is returned for revision');
+    change_case_check(community_law_submit_amendment_for_vote($db,$second_amendment_id,90020,90201,true),'revised amendment can explicitly adopt the same approved base voting rules');
+    $second_version=(int)$db->query("SELECT proposed_version_id FROM community_law_amendment_cases WHERE id=".(int)$second_amendment_id)->fetch_assoc()['proposed_version_id'];
+    $db->query("UPDATE community_law_versions SET status='voting',vote_deadline=DATE_SUB(NOW(),INTERVAL 1 DAY) WHERE id=".$second_version);
+    $db->query("UPDATE community_law_amendment_cases SET status='parent_review' WHERE id=".(int)$second_amendment_id);
+    change_case_check(community_law_submit_amendment_parent_review($db,$second_amendment_id,90010,90106,'compatible',[],'نسخه اصلاح‌شده با مواد لازم‌الاجرای قانون مادر سازگار است.'),'first parent reviewer can confirm compatibility of the revised amendment');
+    change_case_check(community_law_submit_amendment_parent_review($db,$second_amendment_id,90010,90107,'compatible',[],'بررسی مستقل دوم نیز سازگاری نسخه اصلاح‌شده را تأیید می‌کند.'),'second independent parent reviewer can confirm compatibility');
+    $approved_parent_review=$db->query("SELECT a.status,l.status AS law_status,l.current_version_id FROM community_law_amendment_cases a JOIN community_laws l ON l.id=a.law_id WHERE a.id=".(int)$second_amendment_id)->fetch_assoc();
+    change_case_check($approved_parent_review && $approved_parent_review['status']==='parent_review_approved' && $approved_parent_review['law_status']==='approved' && (int)$approved_parent_review['current_version_id']===99002,'two compatible parent reviews clear the amendment for independent final review without enacting it');
+
 
     change_case_check(community_law_create_amendment_draft($db,$conformity_case_id,90020,90200,'درخواست با متن تکراری.',[[
         'reference'=>'ماده ۴','previous_text'=>'متن محلی','proposed_text'=>'متن تازه','reason'=>'دلیل'
