@@ -63,6 +63,7 @@ on:
       - 'migrations/20261108_community_law_outcome_reassessments.sql'
       - 'migrations/20261108_community_law_outcome_corrective_actions.sql'
       - 'migrations/20261108_community_law_conformity_workflow.sql'
+      - 'community_law_conformity_helpers.php'
       - 'migrations/20261106_collective_knowledge_library.sql'
       - 'migrations/20261108_community_decision_ledger.sql'
       - 'migrations/20261108_community_decision_knowledge_link.sql'
@@ -80,6 +81,8 @@ on:
       - '.github/workflows/php-expertise-framework-check.yml'
   pull_request:
     paths:
+      - 'migrations/20261108_community_law_conformity_workflow.sql'
+      - 'community_law_conformity_helpers.php'
       - 'migrations/20261108_community_law_change_control.sql'
       - 'migrations/20261108_community_law_change_review.sql'
       - 'migrations/20261108_community_law_change_voting.sql'
