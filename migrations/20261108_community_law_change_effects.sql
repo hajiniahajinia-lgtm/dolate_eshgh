@@ -16,8 +16,8 @@ ALTER TABLE community_law_implementations
 
 ALTER TABLE community_law_community_notices
     MODIFY event_type ENUM(
-        'change_requested','change_vote_result','suspended','repealed',
-        'expiry_updated','reinstated'
+        'change_requested','change_vote_result','suspension_requested','suspended',
+        'repealed','expiry_review_requested','expiry_updated','reinstated'
     ) NOT NULL;
 
 CREATE TABLE IF NOT EXISTS community_law_change_implementation_snapshots (
