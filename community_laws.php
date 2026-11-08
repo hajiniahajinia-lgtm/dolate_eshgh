@@ -1683,6 +1683,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     throw new Exception('amendment tally status update failed');
                 }
                 $amendment_update->close();
+                if ($final_status!=='vote_passed') {
+                    $version_close=$conn->prepare("UPDATE community_law_versions SET status='rejected' WHERE id=? AND status='voting'");
+                    if (!$version_close) throw new Exception('amendment unsuccessful version close prepare failed');
+                    $version_close->bind_param('i',$version_id);
+                    if (!$version_close->execute() || $version_close->affected_rows!==1) throw new Exception('amendment unsuccessful version close failed');
+                    $version_close->close();
+                    $conformity_reopen=$conn->prepare(
+                        "UPDATE community_law_conformity_cases SET status='amendment_required'
+                         WHERE id=? AND status='amendment_in_progress'"
+                    );
+                    if (!$conformity_reopen) throw new Exception('amendment conformity reopen prepare failed');
+                    $conformity_id=(int)$record['conformity_case_id'];
+                    $conformity_reopen->bind_param('i',$conformity_id);
+                    if (!$conformity_reopen->execute() || $conformity_reopen->affected_rows!==1) {
+                        throw new Exception('amendment conformity reopen failed');
+                    }
+                    $conformity_reopen->close();
+                }
                 $amendment_details=json_encode([
                     'final_status'=>$final_status,'individual_turnout_percent'=>$individual_turnout_percent,
                     'individual_approval_percent'=>$individual_approval_percent,
