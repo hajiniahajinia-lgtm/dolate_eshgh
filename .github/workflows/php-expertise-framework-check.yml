@@ -37,6 +37,7 @@ on:
       - 'migrations/20261108_community_decision_ledger_backfill.sql'
       - 'migrations/20261108_community_law_decision_origin.sql'
       - 'migrations/20261108_community_law_decision_origin.sql'
+      - 'migrations/20261108_community_law_decision_origin.sql'
       - 'tests/community_decision_ledger_integration_test.php'
       - 'tests/community_decision_ledger_backfill_integration_test.php'
       - 'tests/community_decision_knowledge_separation_integration_test.php'
@@ -60,6 +61,7 @@ on:
       - 'migrations/20261107_community_law_framework.sql'
       - 'migrations/20261108_community_decision_ledger.sql'
       - 'migrations/20261108_community_decision_ledger_backfill.sql'
+      - 'migrations/20261108_community_law_decision_origin.sql'
       - 'community_law_helpers.php'
       - 'set_community_parent.php'
       - 'request_member_removal.php'
@@ -116,6 +118,7 @@ jobs:
           php -l tests/community_charter_amendments_integration_test.php
           php -l tests/community_law_implementation_integration_test.php
           php -l community_decision_ledger.php
+          php -l tests/community_law_decision_origin_migration_test.php
           php -l tests/community_decision_ledger_integration_test.php
           php -l tests/community_decision_ledger_backfill_integration_test.php
           php -l tests/community_decision_knowledge_separation_integration_test.php
@@ -157,6 +160,7 @@ jobs:
         run: |
           php tests/community_charter_amendments_integration_test.php
           php tests/community_law_implementation_integration_test.php
+          php tests/community_law_decision_origin_migration_test.php
           php tests/community_decision_ledger_integration_test.php
           php tests/community_decision_ledger_backfill_integration_test.php
           php tests/community_decision_knowledge_separation_integration_test.php
