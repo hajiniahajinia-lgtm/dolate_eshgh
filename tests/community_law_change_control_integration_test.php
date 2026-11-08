@@ -21,6 +21,8 @@ try {
     change_case_apply_sql($db,__DIR__.'/../migrations/20261107_community_law_voting_rules.sql');
     change_case_apply_sql($db,__DIR__.'/../migrations/20261107_community_law_legal_screening.sql');
     change_case_apply_sql($db,__DIR__.'/../migrations/20261107_community_law_authority_review.sql');
+    change_case_apply_sql($db,__DIR__.'/../migrations/20261107_community_law_final_review_appeals.sql');
+    change_case_apply_sql($db,__DIR__.'/../migrations/20261107_community_charter_foundation.sql');
     change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_decision_origin.sql');
     change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_change_control.sql');
     change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_change_review.sql');
@@ -39,7 +41,7 @@ try {
     $db->query("CREATE TABLE IF NOT EXISTS communities (id INT PRIMARY KEY, parent_community_id INT NULL)");
     $db->query("CREATE TABLE IF NOT EXISTS community_members (community_id INT NOT NULL, user_id INT NOT NULL, PRIMARY KEY(community_id,user_id))");
     $db->query("INSERT INTO communities (id,parent_community_id) VALUES (90010,NULL),(90020,90010) ON DUPLICATE KEY UPDATE parent_community_id=VALUES(parent_community_id)");
-    $db->query("INSERT INTO community_members (community_id,user_id) VALUES (90010,90100),(90020,90200),(90010,90101),(90010,90102),(90010,90103),(90010,90104),(90010,90105),(90010,90106),(90010,90107),(90010,90108),(90020,90201),(90020,90202),(90020,90203),(90020,90204) ON DUPLICATE KEY UPDATE user_id=VALUES(user_id)");
+    $db->query("INSERT INTO community_members (community_id,user_id) VALUES (90010,90100),(90020,90200),(90010,90101),(90010,90102),(90010,90103),(90010,90104),(90010,90105),(90010,90106),(90010,90107),(90010,90108),(90020,90201),(90020,90202),(90020,90203),(90020,90204),(90020,90205),(90020,90206),(90020,90207) ON DUPLICATE KEY UPDATE user_id=VALUES(user_id)");
     $db->query("INSERT INTO community_laws (id,law_code,originating_community_id,created_by,status,current_version_id,effective_at) VALUES (9501,'LAW-CHANGE-TEST',90010,90100,'approved',99001,NOW())");
     $db->query("INSERT INTO community_law_versions (id,law_id,version_number,title,law_text,proposed_by,status,approved_at) VALUES (99001,9501,1,'قانون آزمایشی','متن قانون',90100,'approved',NOW())");
     $db->query("INSERT INTO community_law_scopes (law_version_id,scope_community_id,include_descendants) VALUES (99001,90010,1)");
@@ -133,6 +135,33 @@ try {
     change_case_check(community_law_submit_amendment_parent_review($db,$second_amendment_id,90010,90107,'compatible',[],'بررسی مستقل دوم نیز سازگاری نسخه اصلاح‌شده را تأیید می‌کند.'),'second independent parent reviewer can confirm compatibility');
     $approved_parent_review=$db->query("SELECT a.status,l.status AS law_status,l.current_version_id FROM community_law_amendment_cases a JOIN community_laws l ON l.id=a.law_id WHERE a.id=".(int)$second_amendment_id)->fetch_assoc();
     change_case_check($approved_parent_review && $approved_parent_review['status']==='parent_review_approved' && $approved_parent_review['law_status']==='approved' && (int)$approved_parent_review['current_version_id']===99002,'two compatible parent reviews clear the amendment for independent final review without enacting it');
+
+    // بررسی نهایی، مهلت اعتراض و ابلاغ اتمی؛ نسخه جاری تا پایان این مرحله همان نسخه پایه می‌ماند.
+    $db->query("UPDATE community_law_review_cases SET status='screening_clear' WHERE law_version_id=".$second_version);
+    $db->query("UPDATE community_law_authority_cases SET status='confirmed' WHERE law_version_id=".$second_version);
+    $db->query("INSERT INTO community_law_final_results (law_version_id,individual_vote_basis,final_status) VALUES (".$second_version.",'count','vote_passed')");
+    $db->query("INSERT INTO community_law_implementations (law_version_id,community_id,responsible_user_id,local_plan,status,started_at,target_date,progress_report) VALUES (99002,90020,90200,'برنامه اجرای پایه','in_progress',NOW(),DATE_ADD(CURDATE(),INTERVAL 30 DAY),'پیشرفت ثبت‌شده پیش از اصلاحیه')");
+    change_case_check(community_law_capture_charter_snapshot($db,$second_version),'final amendment review captures the current effective charter version');
+    $parent_scopes=[];
+    $parent_scope_result=$db->query("SELECT scope_community_id,include_descendants FROM community_law_scopes WHERE law_version_id=99001 ORDER BY scope_community_id");
+    while($scope_row=$parent_scope_result->fetch_assoc()) $parent_scopes[]=$scope_row;
+    $parent_scope_fingerprint=hash('sha256',json_encode($parent_scopes));
+    $db->query("INSERT INTO community_law_final_review_references (law_version_id,reference_law_id,reference_law_version_id,reference_origin_community_id,relation_type,scope_fingerprint) VALUES (".$second_version.",9501,99001,90010,'higher','".$db->real_escape_string($parent_scope_fingerprint)."')");
+    $db->query("INSERT INTO community_law_final_review_cases (law_version_id,status,reviewer_quorum,appeal_period_days,appeal_deadline,opened_by,review_completed_at) VALUES (".$second_version.",'appeal_period',3,7,DATE_SUB(NOW(),INTERVAL 1 DAY),90201,NOW())");
+    foreach([90205,90206,90207] as $final_reviewer) {
+        $db->query("INSERT INTO community_law_final_review_electorate (law_version_id,user_id) VALUES (".$second_version.",".$final_reviewer.")");
+        $db->query("INSERT INTO community_law_final_review_assessments
+            (law_version_id,reviewer_user_id,verdict,charter_and_rights,non_discrimination,power_concentration,
+             human_and_social_impact,environmental_impact,economic_and_resource_impact,
+             future_generations_and_other_life,implementation_and_accountability,reasoning)
+            VALUES (".$second_version.",".$final_reviewer.",'confirm','pass','pass','pass','pass','pass','pass','pass','pass','بررسی نهایی مستقل و بدون تعارض')");
+    }
+    change_case_check(community_law_enact_amendment($db,9502,$second_version,90020,90201),'amendment is activated only after the complete final review and expired appeal period');
+    $activated=$db->query("SELECT l.status AS law_status,l.current_version_id,base.status AS base_status,newv.status AS new_status,a.status AS amendment_status,c.status AS conformity_status,fc.status AS final_review_status,impl.status AS implementation_status,impl.progress_report FROM community_laws l JOIN community_law_versions base ON base.id=99002 JOIN community_law_versions newv ON newv.id=".(int)$second_version." JOIN community_law_amendment_cases a ON a.id=".(int)$second_amendment_id." JOIN community_law_conformity_cases c ON c.id=".(int)$conformity_case_id." JOIN community_law_final_review_cases fc ON fc.law_version_id=".(int)$second_version." JOIN community_law_implementations impl ON impl.law_version_id=".(int)$second_version." AND impl.community_id=90020 WHERE l.id=9502")->fetch_assoc();
+    change_case_check($activated && $activated['law_status']==='approved' && (int)$activated['current_version_id']===$second_version && $activated['base_status']==='superseded' && $activated['new_status']==='approved' && $activated['amendment_status']==='approved' && $activated['conformity_status']==='resolved' && $activated['final_review_status']==='enacted','amendment activation atomically advances the law pointer and preserves the superseded version');
+    change_case_check($activated && $activated['implementation_status']==='in_progress' && $activated['progress_report']==='پیشرفت ثبت‌شده پیش از اصلاحیه','implementation progress and accountability history are carried into the enacted amendment');
+    change_case_check(!community_law_enact_amendment($db,9502,$second_version,90020,90201),'an already enacted amendment cannot be activated a second time');
+
 
 
     change_case_check(community_law_create_amendment_draft($db,$conformity_case_id,90020,90200,'درخواست با متن تکراری.',[[
