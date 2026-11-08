@@ -17,6 +17,7 @@ function clor_redirect(int $community_id,string $status): void {
 }
 if (!community_law_tables_ready($conn)) clor_redirect($community_id,'schema');
 try {
+    if (!$conn->begin_transaction()) throw new RuntimeException('transaction start failed');
     $report_id=community_law_submit_outcome_report(
         $conn,
         (int)($_POST['law_id']??0),
@@ -30,8 +31,11 @@ try {
         trim((string)($_POST['evidence']??''))?:null,
         trim((string)($_POST['metrics_json']??''))?:null
     );
-    clor_redirect($community_id,$report_id===false?'outcome_report_failed':'outcome_report_saved');
+    if ($report_id===false) { $conn->rollback(); clor_redirect($community_id,'outcome_report_failed'); }
+    if (!$conn->commit()) throw new RuntimeException('transaction commit failed');
+    clor_redirect($community_id,'outcome_report_saved');
 } catch (Throwable $e) {
+    $conn->rollback();
     error_log('[Dolate Eshgh law outcome report] '.$e->getMessage());
     clor_redirect($community_id,'outcome_report_failed');
 }
