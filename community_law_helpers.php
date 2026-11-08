@@ -10,6 +10,7 @@ if (!function_exists('community_law_tables_ready')) {
         $required = [
             'community_laws',
             'community_law_versions',
+            'community_decision_records',
             'community_law_scopes',
             'community_law_electorate',
             'community_law_votes',
@@ -69,7 +70,19 @@ if (!function_exists('community_law_tables_ready')) {
         $row = $stmt->get_result()->fetch_assoc();
         $stmt->close();
 
-        return (int)($row['total'] ?? 0) === count($required);
+        if ((int)($row['total'] ?? 0) !== count($required)) return false;
+
+        $decision_link_column = $conn->query(
+            "SELECT 1 FROM information_schema.columns
+             WHERE table_schema=DATABASE()
+               AND table_name='community_law_versions'
+               AND column_name='source_decision_id'
+             LIMIT 1"
+        );
+        if (!$decision_link_column) return false;
+        $has_decision_link = (bool)$decision_link_column->fetch_row();
+        $decision_link_column->free();
+        return $has_decision_link;
     }
 }
 
