@@ -16,6 +16,8 @@ $member_stmt->bind_param('ii',$community_id,$user_id); $member_stmt->execute();
 $is_member=(bool)$member_stmt->get_result()->fetch_row(); $member_stmt->close();
 if (empty($_SESSION['community_law_amendment_csrf'])) $_SESSION['community_law_amendment_csrf']=bin2hex(random_bytes(32));
 $csrf=$_SESSION['community_law_amendment_csrf'];
+if (empty($_SESSION['community_law_csrf'])) $_SESSION['community_law_csrf']=bin2hex(random_bytes(32));
+$law_csrf=$_SESSION['community_law_csrf'];
 function clamp_h($v): string { return htmlspecialchars((string)$v,ENT_QUOTES,'UTF-8'); }
 $status=(string)($_GET['status']??'');
 if ($_SERVER['REQUEST_METHOD']==='POST') {
@@ -74,7 +76,8 @@ $drafts=[];
 if ($schema_ready) {
     $stmt=$conn->prepare(
         "SELECT a.id,a.status,a.rationale,a.created_at,a.base_version_id,a.proposed_version_id,
-                v.version_number,v.law_text,v.status AS version_status,l.law_code,a.voting_rules_source_version_id
+                v.version_number,v.law_text,v.status AS version_status,v.vote_deadline,v.vote_started_at,
+                l.id AS law_id,l.current_version_id,l.law_code,a.voting_rules_source_version_id
          FROM community_law_amendment_cases a
          JOIN community_law_versions v ON v.id=a.proposed_version_id
          JOIN community_laws l ON l.id=a.law_id
@@ -152,7 +155,25 @@ a{color:#1d4ed8}@media(max-width:600px){body{padding:5px}.card{padding:11px}inpu
 <section class="card">
 <h3>پیش‌نویس‌ها و نسخه‌های پیشنهادی</h3>
 <?php if(!$drafts):?><p class="muted">هنوز پیش‌نویس اصلاحیه‌ای ثبت نشده است.</p><?php else:?>
-<?php foreach($drafts as $draft):?><details class="article"><summary>اصلاحیه #<?=(int)$draft['id']?> — نسخهٔ پیشنهادی <?=(int)$draft['version_number']?> — <?=clamp_h($draft['status'])?></summary>
+<?php foreach($drafts as $draft):
+$amendment_version_id=(int)$draft['proposed_version_id'];
+$can_amendment_community_vote=false;
+$can_amendment_direct_vote=false;
+if($is_member && $draft['status']==='local_voting') {
+    $eligible_stmt=$conn->prepare('SELECT 1 FROM community_law_electorate WHERE law_version_id=? AND voting_community_id=? AND user_id=? LIMIT 1');
+    if($eligible_stmt) {
+        $eligible_stmt->bind_param('iii',$amendment_version_id,$community_id,$user_id);
+        if($eligible_stmt->execute()) $can_amendment_community_vote=(bool)$eligible_stmt->get_result()->fetch_row();
+        $eligible_stmt->close();
+    }
+    $direct_stmt=$conn->prepare('SELECT 1 FROM community_law_direct_electorate WHERE law_version_id=? AND user_id=? LIMIT 1');
+    if($direct_stmt) {
+        $direct_stmt->bind_param('ii',$amendment_version_id,$user_id);
+        if($direct_stmt->execute()) $can_amendment_direct_vote=(bool)$direct_stmt->get_result()->fetch_row();
+        $direct_stmt->close();
+    }
+}
+?><details class="article"><summary>اصلاحیه #<?=(int)$draft['id']?> — نسخهٔ پیشنهادی <?=(int)$draft['version_number']?> — <?=clamp_h($draft['status'])?></summary>
 <p><?=clamp_h($draft['rationale'])?></p><pre><?=clamp_h($draft['law_text'])?></pre>
 <?php if($draft['status']==='draft'):?>
 <form method="post">
@@ -164,7 +185,47 @@ a{color:#1d4ed8}@media(max-width:600px){body{padding:5px}.card{padding:11px}inpu
 <button type="submit" name="submit_amendment_for_vote" value="1">ارسال اصلاحیه برای رأی جامعهٔ محلی</button>
 </form>
 <?php elseif($draft['status']==='submitted'):?>
-<p class="notice">اصلاحیه ارسال شده و قواعد رأی‌گیریِ نسخهٔ مبنا با منشأ مشخص ثبت شده است. آغاز رأی‌گیری در گام بعدی به موتور رأی‌گیری متصل می‌شود.</p>
+<p class="notice">اصلاحیه ارسال شده است. قواعد رأی‌گیری از نسخهٔ مصوب مبنا گرفته شده و منشأ آن ثبت شده است؛ قانون جاری هنوز تغییر نکرده است.</p>
+<form method="post" action="community_laws.php?community_id=<?=$community_id?>">
+<input type="hidden" name="csrf_token" value="<?=clamp_h($law_csrf)?>">
+<input type="hidden" name="law_id" value="<?=(int)$draft['law_id']?>">
+<input type="hidden" name="version_id" value="<?=$amendment_version_id?>">
+<button type="submit" name="start_law_vote" value="1">آغاز رأی‌گیری اصلاحیه در جامعهٔ محلی</button>
+</form>
+<?php elseif($draft['status']==='local_voting'):?>
+<p class="notice">رأی‌گیری اصلاحیه در جریان است. مهلت پایان: <?=clamp_h($draft['vote_deadline'])?>. قانون مصوب قبلی همچنان جاری است.</p>
+<?php if($can_amendment_community_vote):?>
+<form method="post" action="community_laws.php?community_id=<?=$community_id?>">
+<input type="hidden" name="csrf_token" value="<?=clamp_h($law_csrf)?>">
+<input type="hidden" name="version_id" value="<?=$amendment_version_id?>">
+<label>رأی جامعهٔ محلی</label><select name="vote"><option value="yes">موافق</option><option value="no">مخالف</option><option value="abstain">ممتنع</option></select>
+<label>توضیح (اختیاری)</label><textarea name="comment" maxlength="5000"></textarea>
+<button type="submit" name="cast_law_vote" value="1">ثبت یا اصلاح رأی جامعه‌ای</button>
+</form>
+<?php endif;?>
+<?php if($can_amendment_direct_vote):?>
+<form method="post" action="community_laws.php?community_id=<?=$community_id?>">
+<input type="hidden" name="csrf_token" value="<?=clamp_h($law_csrf)?>">
+<input type="hidden" name="version_id" value="<?=$amendment_version_id?>">
+<label>رأی مستقیم فردی</label><select name="direct_vote"><option value="yes">موافق</option><option value="no">مخالف</option><option value="abstain">ممتنع</option></select>
+<label>توضیح (اختیاری)</label><textarea name="direct_comment" maxlength="5000"></textarea>
+<button type="submit" name="cast_law_direct_vote" value="1">ثبت یا اصلاح رأی مستقیم</button>
+</form>
+<?php endif;?>
+<?php if($is_member && !empty($draft['vote_deadline']) && strtotime($draft['vote_deadline'])<=time()):?>
+<form method="post" action="community_laws.php?community_id=<?=$community_id?>">
+<input type="hidden" name="csrf_token" value="<?=clamp_h($law_csrf)?>">
+<input type="hidden" name="law_id" value="<?=(int)$draft['law_id']?>">
+<input type="hidden" name="version_id" value="<?=$amendment_version_id?>">
+<button type="submit" name="finalize_law_tally" value="1">محاسبهٔ نتیجهٔ رأی‌گیری</button>
+</form>
+<?php endif;?>
+<?php elseif($draft['status']==='parent_review'):?>
+<p class="notice">رأی محلی اصلاحیه پذیرفته شده است. مرحلهٔ بعد، بررسی انطباق با قانون مادر است؛ تا پایان آن قانون جاری تغییر نمی‌کند.</p>
+<?php elseif($draft['status']==='vote_insufficient'):?>
+<p class="notice warning">حدنصاب مشارکت رأی‌گیری تأمین نشد؛ این نتیجه به‌معنای رد ماهوی اصلاحیه نیست.</p>
+<?php elseif($draft['status']==='rejected'):?>
+<p class="notice warning">اصلاحیه در رأی محلی پذیرفته نشد؛ نسخهٔ مصوب قبلی همچنان معتبر است.</p>
 <?php endif;?>
 </details><?php endforeach;?>
 <?php endif;?>
