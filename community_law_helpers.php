@@ -875,6 +875,16 @@ if (!function_exists('community_law_review_outcome_report')) {
         $member->close();
         if (!$is_member) return false;
 
+        $already_reviewed=$conn->prepare(
+            'SELECT 1 FROM community_law_outcome_reviews WHERE report_id=? AND reviewer_user_id=? LIMIT 1'
+        );
+        if (!$already_reviewed) return false;
+        $already_reviewed->bind_param('ii',$report_id,$reviewer_user_id);
+        if (!$already_reviewed->execute()) { $already_reviewed->close(); return false; }
+        $has_reviewed=(bool)$already_reviewed->get_result()->fetch_row();
+        $already_reviewed->close();
+        if ($has_reviewed) return false;
+
         $insert=$conn->prepare(
             "INSERT INTO community_law_outcome_reviews
                 (report_id,reviewer_user_id,verdict,rationale,human_impact,social_impact,
