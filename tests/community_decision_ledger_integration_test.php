@@ -40,7 +40,7 @@ try {
     );
     require_once __DIR__ . '/../community_decision_ledger.php';
 
-    $db->query('DELETE FROM community_decision_records WHERE source_topic_id IN (990001, 990002)');
+    $db->query('DELETE FROM community_decision_records WHERE source_topic_id IN (990001, 990002, 990003)');
 
     $columns = $db->query(
         "SELECT COLUMN_NAME FROM information_schema.columns
@@ -88,6 +88,33 @@ try {
         $stored['acceptance_status'] === 'accepted' &&
         $stored['enforceability_status'] === 'not_enforceable',
         'the decision outcome and topic-purpose snapshot are persisted'
+    );
+
+    $noIdeaSnapshot = $snapshot;
+    $noIdeaSnapshot['source_topic_id'] = 990003;
+    $noIdeaSnapshot['source_idea_id'] = null;
+    $noIdeaSnapshot['selected_idea_content'] = null;
+    $noIdeaSnapshot['acceptance_status'] = 'no_votes';
+    $noIdeaSnapshot['enforceability_status'] = 'undecided';
+    $noIdeaSnapshot['yes_count'] = 0;
+    $noIdeaSnapshot['no_count'] = 0;
+    $noIdeaSnapshot['yes_weight'] = 0;
+    $noIdeaSnapshot['no_weight'] = 0;
+    $noIdeaSnapshot['yes_percent'] = 0;
+    $noIdeaSnapshot['weighted_yes_percent'] = 0;
+    $noIdeaSnapshot['enforce_yes_count'] = 0;
+    $noIdeaSnapshot['enforce_no_count'] = 0;
+    decision_ledger_check(
+        community_decision_record_snapshot($db, $noIdeaSnapshot),
+        'a knowledge-oriented topic with no selected idea can still have an independent outcome record'
+    );
+    $noIdeaStored = $db->query(
+        'SELECT source_idea_id, acceptance_status FROM community_decision_records WHERE source_topic_id=990003'
+    )->fetch_assoc();
+    decision_ledger_check(
+        $noIdeaStored && $noIdeaStored['source_idea_id'] === null &&
+        $noIdeaStored['acceptance_status'] === 'no_votes',
+        'a decision record preserves a null selected idea and no-vote outcome'
     );
 
     $changedRetry = $snapshot;
