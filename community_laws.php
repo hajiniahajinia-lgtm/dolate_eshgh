@@ -944,7 +944,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 throw new RuntimeException('invalid_law_vote_state');
             }
 
-            if (!$is_amendment_vote) {
             $screening_stmt = $conn->prepare(
                 "SELECT status FROM community_law_review_cases
                  WHERE law_version_id=? FOR UPDATE"
@@ -970,7 +969,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $authority_stmt->close();
             if (!$authority_case || $authority_case['status'] !== 'confirmed') {
                 throw new RuntimeException('authority_review_required');
-            }
             }
 
             // آغاز رأی‌گیری بدون قواعد تصویبِ تکمیل و تأییدشده مجاز نیست.
