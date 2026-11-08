@@ -286,6 +286,18 @@ try {
     change_case_check(is_array($old_scope_map) && ($old_scope_map[91030]??null)===91020,'scope transition fixture loads the complete hierarchy');
     $new_scope_map=$old_scope_map;
     $new_scope_map[91030]=91010;
+    $scope_debug=$db->query("SELECT l.id,l.status,l.current_version_id,v.status AS version_status FROM community_laws l JOIN community_law_versions v ON v.id=l.current_version_id ORDER BY l.id")->fetch_all(MYSQLI_ASSOC);
+    $pending_debug=community_law_hierarchy_change_has_pending_review_dependency($db,$old_scope_map,$new_scope_map);
+    $scope_debug_ids=[];
+    foreach ($scope_debug as $debug_law) {
+        $scope_debug_ids[]=[
+            'law_id'=>(int)$debug_law['id'],
+            'law_status'=>$debug_law['status'],
+            'version_status'=>$debug_law['version_status'],
+            'scope_ids'=>community_law_scope_ids_for_parent_map($db,(int)$debug_law['current_version_id'],$old_scope_map)
+        ];
+    }
+    fwrite(STDERR,"SCOPE DEBUG ".json_encode(['pending_dependency'=>$pending_debug,'laws'=>$scope_debug_ids],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)."\\n");
     change_case_check(
         community_law_record_hierarchy_scope_changes($db,$old_scope_map,$new_scope_map,91030,90200),
         'hierarchy scope exit is recorded and notified'
