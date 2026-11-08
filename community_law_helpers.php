@@ -1094,6 +1094,17 @@ if (!function_exists('community_law_review_disputed_outcome_followups')) {
         $case_lock->close();
         if (!$case_row || $case_row['status']!=='open') return false;
 
+        $already=$conn->prepare(
+            "SELECT 1 FROM community_law_outcome_reassessment_reviews
+             WHERE reassessment_id=? AND reviewer_user_id=? LIMIT 1"
+        );
+        if (!$already) return false;
+        $already->bind_param('ii',$case_id,$reviewer_user_id);
+        if (!$already->execute()) { $already->close(); return false; }
+        $has_already_reviewed=(bool)$already->get_result()->fetch_row();
+        $already->close();
+        if ($has_already_reviewed) return false;
+
         $insert=$conn->prepare(
             "INSERT INTO community_law_outcome_reassessment_reviews
              (reassessment_id,report_id,reviewer_user_id,outcome,rationale,evidence)
