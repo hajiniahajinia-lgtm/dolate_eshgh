@@ -91,6 +91,28 @@ if ($schema_ready) {
             while($row=$res->fetch_assoc()) {
                 $visible=(int)$row['originating_community_id']===$community_id ||
                     community_law_scope_match_checked($conn,(int)$row['proposed_version_id'],$community_id)===true;
+                if (!$visible && $row['status']==='local_voting') {
+                    $snapshot_member=$conn->prepare(
+                        'SELECT 1 FROM community_law_electorate WHERE law_version_id=? AND voting_community_id=? AND user_id=? LIMIT 1'
+                    );
+                    if ($snapshot_member) {
+                        $version_for_snapshot=(int)$row['proposed_version_id'];
+                        $snapshot_member->bind_param('iii',$version_for_snapshot,$community_id,$user_id);
+                        if ($snapshot_member->execute()) $visible=(bool)$snapshot_member->get_result()->fetch_row();
+                        $snapshot_member->close();
+                    }
+                    if (!$visible) {
+                        $direct_snapshot=$conn->prepare(
+                            'SELECT 1 FROM community_law_direct_electorate WHERE law_version_id=? AND user_id=? LIMIT 1'
+                        );
+                        if ($direct_snapshot) {
+                            $version_for_snapshot=(int)$row['proposed_version_id'];
+                            $direct_snapshot->bind_param('ii',$version_for_snapshot,$user_id);
+                            if ($direct_snapshot->execute()) $visible=(bool)$direct_snapshot->get_result()->fetch_row();
+                            $direct_snapshot->close();
+                        }
+                    }
+                }
                 if ($visible) $drafts[]=$row;
             }
         }
@@ -121,7 +143,7 @@ a{color:#1d4ed8}@media(max-width:600px){body{padding:5px}.card{padding:11px}inpu
 <p class="muted">این بخش فقط برای پرونده‌هایی فعال است که تعارض ماده‌ای آن‌ها با قانون مادر مستند و تأیید شده باشد. متن مصوب قبلی تغییر نمی‌کند؛ پیشنهاد، نسخهٔ تازه و مستقل می‌سازد.</p>
 <p><a href="community_laws.php?community_id=<?=$community_id?>">بازگشت به قوانین جامعه</a> — <a href="community_law_conformity_cases.php?community_id=<?=$community_id?>">پرونده‌های هم‌ترازی</a></p>
 </section>
-<?php if($status==='submitted_for_vote'):?><section class="card notice">اصلاحیه برای رأی محلی ارسال شد. قانون مصوب جاری بدون تغییر باقی مانده است.</section><?php elseif($status==='submission_failed'):?><section class="card notice warning">ارسال انجام نشد؛ عضویت، وضعیت نسخهٔ مبنا و وجود قواعد رأی‌گیریِ مصوب را بررسی کنید.</section><?php elseif($status==='draft_created'):?><section class="card notice">پیش‌نویس اصلاحیه و نسخهٔ تازه ساخته شد. هنوز هیچ رأی‌گیری یا تغییر قانونی انجام نشده است.</section><?php elseif($status==='save_failed'):?><section class="card notice warning">پیش‌نویس ساخته نشد. عضویت، پروندهٔ تعارض، متن دقیق ماده و نبود اصلاحیهٔ باز را بررسی کنید.</section><?php endif;?>
+<?php if($status==='amendment_voting_started'):?><section class="card notice">رأی‌گیری اصلاحیه آغاز شد؛ قانون مصوب قبلی همچنان جاری است.</section><?php elseif($status==='amendment_vote_saved'):?><section class="card notice">رأی شما در پروندهٔ اصلاحیه ثبت شد.</section><?php elseif($status==='amendment_tally_saved'):?><section class="card notice">نتیجهٔ رأی محلی ثبت شد. مرحلهٔ بعد، در صورت پذیرش، بررسی انطباق با قانون مادر است.</section><?php elseif($status==='submitted_for_vote'):?><section class="card notice">اصلاحیه برای رأی محلی ارسال شد. قانون مصوب جاری بدون تغییر باقی مانده است.</section><?php elseif($status==='submission_failed'):?><section class="card notice warning">ارسال انجام نشد؛ عضویت، وضعیت نسخهٔ مبنا و وجود قواعد رأی‌گیریِ مصوب را بررسی کنید.</section><?php elseif($status==='draft_created'):?><section class="card notice">پیش‌نویس اصلاحیه و نسخهٔ تازه ساخته شد. هنوز هیچ رأی‌گیری یا تغییر قانونی انجام نشده است.</section><?php elseif($status==='save_failed'):?><section class="card notice warning">پیش‌نویس ساخته نشد. عضویت، پروندهٔ تعارض، متن دقیق ماده و نبود اصلاحیهٔ باز را بررسی کنید.</section><?php endif;?>
 <?php if(!$schema_ready):?>
 <section class="card notice warning">ساختار اصلاحیه هنوز نصب نشده است؛ این صفحه هیچ تغییری در داده‌ها ایجاد نمی‌کند.</section>
 <?php elseif(!$is_member):?>
