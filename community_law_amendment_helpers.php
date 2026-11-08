@@ -618,7 +618,7 @@ if (!function_exists('community_law_submit_amendment_parent_review')) {
 
             $lock=$conn->prepare(
                 "SELECT a.id,a.status,a.proposed_by,a.law_id,a.proposed_version_id,a.conformity_case_id,
-                        a.base_version_id,c.parent_community_id,c.parent_law_version_id,c.community_id,
+                        a.base_version_id,c.parent_community_id,c.parent_law_version_id AS parent_version_id,c.community_id,
                         l.status AS local_law_status,l.current_version_id,
                         base.status AS base_status,proposed.status AS proposed_status,
                         pl.status AS parent_law_status,pl.current_version_id AS parent_current_version_id,
