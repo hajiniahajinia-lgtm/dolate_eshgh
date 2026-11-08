@@ -1045,7 +1045,7 @@ document.addEventListener('DOMContentLoaded',function(){
             <summary><?= htmlspecialchars($loser_group['title'],ENT_QUOTES,'UTF-8') ?> (<?= count($loser_group['items']) ?>)</summary>
             <div class="archive-subgroup-body">
             <?php if(!empty($loser_group['items'])): foreach($loser_group['items'] as $row): ?>
-        <div class="card">
+        <div class="card" id="topic-card-<?= (int)$row['id'] ?>">
             <div class="title-wrap">
               <div class="title" tabindex="0"><?= htmlspecialchars($row['title'], ENT_QUOTES, 'UTF-8') ?></div>
               <?php if (trim((string)($row['description'] ?? '')) !== ''): ?>
