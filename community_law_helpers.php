@@ -1935,32 +1935,20 @@ if (!function_exists('community_law_create_outcome_corrective_action')) {
 
         $community_id=(int)$row['community_id'];
         $membership=$conn->prepare(
-            'SELECT COUNT(*) AS total FROM community_members WHERE community_id=? AND user_id IN (?,?)'
+            'SELECT SUM(user_id=?) AS actor_member,SUM(user_id=?) AS executor_member
+             FROM community_members WHERE community_id=? AND user_id IN (?,?)'
         );
         if (!$membership) return false;
         $responsible_id=(int)$row['responsible_user_id'];
-        $membership->bind_param('iii',$community_id,$actor_user_id,$responsible_id);
+        $membership->bind_param('iiiii',$actor_user_id,$responsible_id,$community_id,$actor_user_id,$responsible_id);
         if (!$membership->execute()) { $membership->close(); return false; }
-        $member_count=(int)$membership->get_result()->fetch_assoc()['total'];
+        $membership_row=$membership->get_result()->fetch_assoc();
         $membership->close();
-        if ($member_count<1) return false;
+        if ((int)($membership_row['actor_member']??0)<1 ||
+            (int)($membership_row['executor_member']??0)<1) return false;
 
-        $insert=$conn->prepare(
-            "INSERT INTO community_law_outcome_corrective_actions
-             (reassessment_id,report_id,law_id,law_version_id,community_id,created_by,
-              responsible_user_id,title,action_details,success_criteria,target_date)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?)"
-        );
-        if (!$insert) return false;
         $reassessment_id=(int)$row['reassessment_id']; $law_id=(int)$row['law_id'];
         $version_id=(int)$row['law_version_id'];
-        $insert->bind_param(
-            'iiiii iissss',
-            $reassessment_id,$report_id,$law_id,$version_id,$community_id,$actor_user_id,
-            $responsible_id,$title,$action_details,$success_criteria,$target_date
-        );
-        // Bind types without spaces for mysqli.
-        $insert->close();
         $insert=$conn->prepare(
             "INSERT INTO community_law_outcome_corrective_actions
              (reassessment_id,report_id,law_id,law_version_id,community_id,created_by,
