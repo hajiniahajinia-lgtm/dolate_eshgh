@@ -21,6 +21,14 @@ $status=(string)($_GET['status']??'');
 if ($_SERVER['REQUEST_METHOD']==='POST') {
     if (!$is_member || !isset($_POST['csrf_token']) || !is_string($_POST['csrf_token']) ||
         !hash_equals($csrf,$_POST['csrf_token'])) { http_response_code(403); exit('درخواست معتبر نیست.'); }
+    if (isset($_POST['submit_amendment_for_vote'])) {
+        $submitted=community_law_submit_amendment_for_vote(
+            $conn,(int)($_POST['amendment_id']??0),$community_id,$user_id,
+            isset($_POST['adopt_base_rules']) && (string)$_POST['adopt_base_rules']==='1'
+        );
+        header('Location: community_law_amendments.php?community_id='.$community_id.'&status='.($submitted?'submitted_for_vote':'submission_failed'));
+        exit;
+    }
     $articles=[];
     for ($i=1;$i<=5;$i++) {
         $reference=trim((string)($_POST['article_reference_'.$i]??''));
@@ -66,7 +74,7 @@ $drafts=[];
 if ($schema_ready) {
     $stmt=$conn->prepare(
         "SELECT a.id,a.status,a.rationale,a.created_at,a.base_version_id,a.proposed_version_id,
-                v.version_number,v.law_text,l.law_code
+                v.version_number,v.law_text,v.status AS version_status,l.law_code,a.voting_rules_source_version_id
          FROM community_law_amendment_cases a
          JOIN community_law_versions v ON v.id=a.proposed_version_id
          JOIN community_laws l ON l.id=a.law_id
@@ -102,7 +110,7 @@ a{color:#1d4ed8}@media(max-width:600px){body{padding:5px}.card{padding:11px}inpu
 <p class="muted">این بخش فقط برای پرونده‌هایی فعال است که تعارض ماده‌ای آن‌ها با قانون مادر مستند و تأیید شده باشد. متن مصوب قبلی تغییر نمی‌کند؛ پیشنهاد، نسخهٔ تازه و مستقل می‌سازد.</p>
 <p><a href="community_laws.php?community_id=<?=$community_id?>">بازگشت به قوانین جامعه</a> — <a href="community_law_conformity_cases.php?community_id=<?=$community_id?>">پرونده‌های هم‌ترازی</a></p>
 </section>
-<?php if($status==='draft_created'):?><section class="card notice">پیش‌نویس اصلاحیه و نسخهٔ تازه ساخته شد. هنوز هیچ رأی‌گیری یا تغییر قانونی انجام نشده است.</section><?php elseif($status==='save_failed'):?><section class="card notice warning">پیش‌نویس ساخته نشد. عضویت، پروندهٔ تعارض، متن دقیق ماده و نبود اصلاحیهٔ باز را بررسی کنید.</section><?php endif;?>
+<?php if($status==='submitted_for_vote'):?><section class="card notice">اصلاحیه برای رأی محلی ارسال شد. قانون مصوب جاری بدون تغییر باقی مانده است.</section><?php elseif($status==='submission_failed'):?><section class="card notice warning">ارسال انجام نشد؛ عضویت، وضعیت نسخهٔ مبنا و وجود قواعد رأی‌گیریِ مصوب را بررسی کنید.</section><?php elseif($status==='draft_created'):<section class="card notice">پیش‌نویس اصلاحیه و نسخهٔ تازه ساخته شد. هنوز هیچ رأی‌گیری یا تغییر قانونی انجام نشده است.</section><?php elseif($status==='save_failed'):?><section class="card notice warning">پیش‌نویس ساخته نشد. عضویت، پروندهٔ تعارض، متن دقیق ماده و نبود اصلاحیهٔ باز را بررسی کنید.</section><?php endif;?>
 <?php if(!$schema_ready):?>
 <section class="card notice warning">ساختار اصلاحیه هنوز نصب نشده است؛ این صفحه هیچ تغییری در داده‌ها ایجاد نمی‌کند.</section>
 <?php elseif(!$is_member):?>
@@ -145,7 +153,20 @@ a{color:#1d4ed8}@media(max-width:600px){body{padding:5px}.card{padding:11px}inpu
 <h3>پیش‌نویس‌ها و نسخه‌های پیشنهادی</h3>
 <?php if(!$drafts):?><p class="muted">هنوز پیش‌نویس اصلاحیه‌ای ثبت نشده است.</p><?php else:?>
 <?php foreach($drafts as $draft):?><details class="article"><summary>اصلاحیه #<?=(int)$draft['id']?> — نسخهٔ پیشنهادی <?=(int)$draft['version_number']?> — <?=clamp_h($draft['status'])?></summary>
-<p><?=clamp_h($draft['rationale'])?></p><pre><?=clamp_h($draft['law_text'])?></pre></details><?php endforeach;?>
+<p><?=clamp_h($draft['rationale'])?></p><pre><?=clamp_h($draft['law_text'])?></pre>
+<?php if($draft['status']==='draft'):?>
+<form method="post">
+<input type="hidden" name="csrf_token" value="<?=clamp_h($csrf)?>">
+<input type="hidden" name="community_id" value="<?=$community_id?>">
+<input type="hidden" name="amendment_id" value="<?=(int)$draft['id']?>">
+<label><input type="checkbox" name="adopt_base_rules" value="1" required style="width:auto"> می‌پذیرم که همین قواعد رأی‌گیریِ قبلاً تصویب‌شده برای نسخهٔ مبنا، بدون تغییر و با ثبت منشأ، مبنای رأی‌گیری این اصلاحیه باشد.</label>
+<p class="muted">قواعد جدیدی ساخته یا بی‌سابقه تصویب نمی‌شود؛ نسخهٔ دقیق قواعد مصوب مبنا برای این اصلاحیه snapshot می‌شود. اگر قواعد مصوبی برای نسخهٔ مبنا وجود نداشته باشد، ارسال ممکن نیست.</p>
+<button type="submit" name="submit_amendment_for_vote" value="1">ارسال اصلاحیه برای رأی جامعهٔ محلی</button>
+</form>
+<?php elseif($draft['status']==='submitted'):?>
+<p class="notice">اصلاحیه ارسال شده و قواعد رأی‌گیریِ نسخهٔ مبنا با منشأ مشخص ثبت شده است. آغاز رأی‌گیری در گام بعدی به موتور رأی‌گیری متصل می‌شود.</p>
+<?php endif;?>
+</details><?php endforeach;?>
 <?php endif;?>
 </section>
 <?php endif;?>
