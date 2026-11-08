@@ -107,7 +107,8 @@ if ($schema_ready) {
             $res=$stmt->get_result();
             while($row=$res->fetch_assoc()) {
                 $visible=(int)$row['originating_community_id']===$community_id ||
-                    ($row['status']==='parent_review' && (int)$row['parent_community_id']===$community_id && $is_member) ||
+                    (in_array($row['status'],['parent_review','parent_review_approved','revision_required'],true) &&
+                        (int)$row['parent_community_id']===$community_id && $is_member) ||
                     community_law_scope_match_checked($conn,(int)$row['proposed_version_id'],$community_id)===true;
                 if (!$visible && in_array($row['status'],['local_voting','parent_review','vote_insufficient','rejected','approved'],true)) {
                     $snapshot_member=$conn->prepare(
