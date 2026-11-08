@@ -9,6 +9,10 @@ on:
       - 'expertise_action.php'
       - 'votes.php'
       - 'community_laws.php'
+      - 'archived_topics.php'
+      - 'knowledge_library.php'
+      - 'archived_topics.php'
+      - 'knowledge_library.php'
       - 'community.php'
       - 'collective_knowledge_finalizer.php'
       - 'community_charter_amendment_action.php'
@@ -99,6 +103,8 @@ jobs:
           php -l expertise_action.php
           php -l votes.php
           php -l community_laws.php
+          php -l archived_topics.php
+          php -l knowledge_library.php
           php -l community.php
           php -l collective_knowledge_finalizer.php
           php -l community_charter_amendment_action.php
