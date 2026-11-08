@@ -51,10 +51,10 @@ $outcome_reports_ready=false;
 if ($schema_ready) {
     $outcome_table_check=$conn->query(
         "SELECT COUNT(*) AS total FROM information_schema.tables
-         WHERE table_schema=DATABASE() AND table_name IN ('community_law_outcome_reports','community_law_outcome_reviews')"
+         WHERE table_schema=DATABASE() AND table_name IN ('community_law_outcome_reports','community_law_outcome_reviews','community_law_outcome_followups')"
     );
     $outcome_reports_ready=$outcome_table_check &&
-        (int)$outcome_table_check->fetch_assoc()['total']===2;
+        (int)$outcome_table_check->fetch_assoc()['total']===3;
     if ($outcome_table_check) $outcome_table_check->free();
 }
 
@@ -3748,6 +3748,8 @@ $status_messages = [
     'outcome_review_verified' => 'گزارش با رأی دست‌کم دو ارزیاب از سه ارزیاب مستقل تأیید شد.',
     'outcome_review_disputed' => 'گزارش با رأی ارزیابان مورد اختلاف قرار گرفت و برای رسیدگی بیشتر علامت‌گذاری شد.',
     'outcome_review_failed' => 'ارزیابی ثبت نشد؛ عضویت در جامعه، تعارض منافع یا ثبت ارزیابی قبلی را بررسی کنید.',
+    'outcome_followup_saved' => 'پاسخ یا شواهد تکمیلی ثبت شد و در تاریخچهٔ پرونده باقی می‌ماند.',
+    'outcome_followup_failed' => 'ثبت پاسخ یا شواهد انجام نشد؛ فقط اعضای جامعهٔ مربوط و افراد مجاز می‌توانند اقدام کنند.',
     'submitted_for_review' => 'پیشنهاد برای غربالگری حقوقی مستقل ارسال شد؛ رأی‌گیری تا تکمیل این مرحله متوقف است.',
     'legal_assessment_saved' => 'ارزیابی مستقل ثبت شد.',
     'legal_assessment_not_allowed' => 'شما برای ارزیابی این پیشنهاد واجد شرایط نیستید یا مرحله بررسی بسته شده است.',
@@ -4001,6 +4003,28 @@ details>summary{cursor:pointer;font-weight:bold}
                     }
                 }
             }
+            $outcome_followups_by_report=[];
+            if ($outcome_reports && $outcome_reports_ready) {
+                $outcome_report_ids=array_values(array_filter(array_map(
+                    static fn($row)=>(int)$row['id'],
+                    $outcome_reports
+                ),static fn($id)=>$id>0));
+                if ($outcome_report_ids) {
+                    $report_id_list=implode(',', $outcome_report_ids);
+                    $followup_result=$conn->query(
+                        "SELECT report_id,submitted_by,entry_type,body,evidence,created_at
+                         FROM community_law_outcome_followups
+                         WHERE report_id IN ($report_id_list)
+                         ORDER BY report_id,id"
+                    );
+                    if ($followup_result) {
+                        while ($followup_row=$followup_result->fetch_assoc()) {
+                            $outcome_followups_by_report[(int)$followup_row['report_id']][]=$followup_row;
+                        }
+                        $followup_result->free();
+                    }
+                }
+            }
             $can_submit_outcome_report=false;
             if ($is_member && $outcome_reports_ready) {
                 foreach ($implementation_rows as $implementation_row) {
@@ -4133,6 +4157,56 @@ details>summary{cursor:pointer;font-weight:bold}
                                         <?php endforeach; ?>
                                     </div>
                                 <?php endforeach; ?>
+                                <?php foreach (($outcome_followups_by_report[(int)$outcome_report['id']] ?? []) as $followup): ?>
+                                    <div class="notice" style="margin-top:8px;background:#fff;border-color:#dbe4ee">
+                                        <strong><?= $followup['entry_type']==='executor_response'?'پاسخ گزارش‌دهنده یا مسئول اجرا':'شواهد تکمیلی عضو جامعه' ?></strong>
+                                        <span class="meta"> — <?= community_laws_escape($followup['created_at']) ?></span>
+                                        <p><?= nl2br(community_laws_escape($followup['body'])) ?></p>
+                                        <?php if (!empty($followup['evidence'])): ?>
+                                            <p><strong>مدارک:</strong> <?= nl2br(community_laws_escape($followup['evidence'])) ?></p>
+                                        <?php endif; ?>
+                                    </div>
+                                <?php endforeach; ?>
+                                <?php
+                                $can_add_outcome_evidence=(bool)$is_member &&
+                                    (int)$outcome_report['community_id']===$community_id &&
+                                    $outcome_report['review_status']==='disputed';
+                                $can_add_executor_response=$can_add_outcome_evidence &&
+                                    ($user_id===(int)$outcome_report['submitted_by'] ||
+                                     $user_id===(int)($outcome_report['responsible_user_id']??0));
+                                ?>
+                                <?php if ($can_add_outcome_evidence): ?>
+                                    <details style="margin-top:8px">
+                                        <summary>افزودن پاسخ یا شواهد برای رسیدگی تکمیلی</summary>
+                                        <p class="muted">این ثبت، گزارش و ارزیابی‌های قبلی را تغییر نمی‌دهد و به‌تنهایی قانون را تعلیق نمی‌کند.</p>
+                                        <?php if ($can_add_executor_response): ?>
+                                            <form method="post" action="community_law_outcome_action.php">
+                                                <input type="hidden" name="action" value="followup">
+                                                <input type="hidden" name="entry_type" value="executor_response">
+                                                <input type="hidden" name="csrf_token" value="<?= community_laws_escape($csrf_token) ?>">
+                                                <input type="hidden" name="community_id" value="<?= $community_id ?>">
+                                                <input type="hidden" name="report_id" value="<?= (int)$outcome_report['id'] ?>">
+                                                <label>پاسخ مستند گزارش‌دهنده یا مسئول اجرا</label>
+                                                <textarea name="body" maxlength="20000" required></textarea>
+                                                <label>مدارک و منابع پاسخ (اختیاری)</label>
+                                                <textarea name="followup_evidence" maxlength="20000"></textarea>
+                                                <button type="submit">ثبت پاسخ</button>
+                                            </form>
+                                        <?php endif; ?>
+                                        <form method="post" action="community_law_outcome_action.php">
+                                            <input type="hidden" name="action" value="followup">
+                                            <input type="hidden" name="entry_type" value="additional_evidence">
+                                            <input type="hidden" name="csrf_token" value="<?= community_laws_escape($csrf_token) ?>">
+                                            <input type="hidden" name="community_id" value="<?= $community_id ?>">
+                                            <input type="hidden" name="report_id" value="<?= (int)$outcome_report['id'] ?>">
+                                            <label>شواهد یا توضیحات تکمیلی عضو جامعه</label>
+                                            <textarea name="body" maxlength="20000" required></textarea>
+                                            <label>مدارک و منابع (اختیاری)</label>
+                                            <textarea name="followup_evidence" maxlength="20000"></textarea>
+                                            <button type="submit">ثبت شواهد تکمیلی</button>
+                                        </form>
+                                    </details>
+                                <?php endif; ?>
                                 <?php
                                 $can_review_outcome=(bool)$is_member &&
                                     (int)$outcome_report['community_id']===$community_id &&
