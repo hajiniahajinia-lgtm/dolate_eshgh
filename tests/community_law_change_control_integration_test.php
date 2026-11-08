@@ -20,6 +20,7 @@ try {
     change_case_apply_sql($db,__DIR__.'/../migrations/20261107_community_law_framework.sql');
     change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_change_control.sql');
     change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_change_review.sql');
+    change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_change_voting.sql');
     require_once __DIR__.'/../community_law_change_helpers.php';
 
     $db->query("CREATE TABLE IF NOT EXISTS communities (id INT PRIMARY KEY, parent_community_id INT NULL)");
@@ -44,16 +45,26 @@ try {
         $review_status=community_law_submit_change_assessment($db,$case_id,(int)$reviewer['reviewer_user_id'],$verdict,'بررسی مستند و مستقل انجام شد و دلایل کافی ثبت گردید.');
         change_case_check($review_status!==false,'assigned reviewer assessment is accepted');
     }
-    $reviewed=$db->query('SELECT status,review_result FROM community_law_change_cases WHERE id='.(int)$case_id)->fetch_assoc();
-    change_case_check($reviewed && $reviewed['status']==='awaiting_vote' && $reviewed['review_result']==='supported','four of five independent assessments refer the case to parent-community voting');
+    $reviewed=$db->query('SELECT status,review_result,electorate_count FROM community_law_change_cases WHERE id='.(int)$case_id)->fetch_assoc();
+    change_case_check($reviewed && $reviewed['status']==='awaiting_vote' && $reviewed['review_result']==='supported' && (int)$reviewed['electorate_count']===6,'four of five independent assessments snapshot the parent-community electorate and open voting');
+    foreach (array_slice($reviewers,0,4) as $reviewer) {
+        change_case_check(community_law_change_cast_vote($db,$case_id,(int)$reviewer['reviewer_user_id'],'yes'),'eligible parent-community voter can vote yes');
+    }
+    change_case_check(community_law_change_cast_vote($db,$case_id,(int)$reviewers[4]['reviewer_user_id'],'no'),'eligible parent-community voter can vote no');
+    change_case_check(!community_law_change_cast_vote($db,$case_id,200,'yes'),'a child-community member outside the captured parent electorate cannot vote');
+    $db->query('UPDATE community_law_change_cases SET vote_closes_at=DATE_SUB(NOW(),INTERVAL 1 SECOND) WHERE id='.(int)$case_id);
+    change_case_check(community_law_change_finalize_vote($db,$case_id)==='approved','two-thirds turnout and approval thresholds approve the request');
+    change_case_check(!community_law_change_cast_vote($db,$case_id,(int)$reviewers[0]['reviewer_user_id'],'no'),'votes are closed after the deadline');
+    $vote_case=$db->query('SELECT status,vote_result FROM community_law_change_cases WHERE id='.(int)$case_id)->fetch_assoc();
+    change_case_check($vote_case && $vote_case['status']==='approved' && $vote_case['vote_result']==='approved','vote outcome is permanently recorded');
     $law=$db->query("SELECT status,repealed_at FROM community_laws WHERE id=501")->fetch_assoc();
     change_case_check($law && $law['status']==='approved' && $law['repealed_at']===null,'submitting an emergency request never suspends or repeals the law automatically');
 
     change_case_check(community_law_open_change_case($db,501,999,20,'repeal','درخواست نامعتبر')===false,'non-member cannot submit a change request');
     change_case_check(community_law_open_change_case($db,501,200,20,'repeal','')===false,'empty reasons are rejected');
     change_case_check(community_law_open_change_case($db,501,200,20,'repeal','درخواست اضطراری',null,true)===false,'emergency flag is restricted to suspension requests');
-    $history=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_history WHERE law_id=501 AND event_type IN ('change_case_submitted','change_case_independent_review_completed')")->fetch_assoc()['n'];
-    change_case_check($history===2,'request submission and completed independent review are recorded in permanent law history');
+    $history=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_history WHERE law_id=501 AND event_type IN ('change_case_submitted','change_case_independent_review_completed','change_case_parent_vote_finalized')")->fetch_assoc()['n'];
+    change_case_check($history===3,'request, independent review and parent vote are recorded in permanent law history');
     fwrite(STDOUT,"OK: community law change-control integration checks passed.\n");
 } finally { $db->close(); }
 ?>
