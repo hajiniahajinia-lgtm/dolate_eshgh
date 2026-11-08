@@ -18,6 +18,24 @@ function clor_redirect(int $community_id,string $status): void {
 if (!community_law_tables_ready($conn)) clor_redirect($community_id,'schema');
 try {
     if (!$conn->begin_transaction()) throw new RuntimeException('transaction start failed');
+    if (($_POST['action']??'')==='review') {
+        $review_result=community_law_review_outcome_report(
+            $conn,
+            (int)($_POST['report_id']??0),
+            $user_id,
+            (string)($_POST['verdict']??''),
+            trim((string)($_POST['rationale']??'')),
+            trim((string)($_POST['human_impact']??''))?:null,
+            trim((string)($_POST['social_impact']??''))?:null,
+            trim((string)($_POST['environmental_impact']??''))?:null,
+            trim((string)($_POST['economic_impact']??''))?:null,
+            trim((string)($_POST['review_evidence']??''))?:null
+        );
+        if ($review_result===false) { $conn->rollback(); clor_redirect($community_id,'outcome_review_failed'); }
+        if (!$conn->commit()) throw new RuntimeException('review transaction commit failed');
+        $review_status=$review_result['review_status'];
+        clor_redirect($community_id,$review_status==='verified'?'outcome_review_verified':($review_status==='disputed'?'outcome_review_disputed':'outcome_review_saved'));
+    }
     $report_id=community_law_submit_outcome_report(
         $conn,
         (int)($_POST['law_id']??0),
