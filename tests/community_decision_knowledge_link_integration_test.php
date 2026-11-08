@@ -7,7 +7,7 @@ $db=new mysqli($host,$user,$pass,$name,$port);
 try {
  $db->query("CREATE TABLE community_decision_records (
    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-   source_topic_id INT NOT NULL, community_id INT NOT NULL,
+   source_topic_id INT NOT NULL, source_idea_id INT NULL, community_id INT NOT NULL,
    record_status VARCHAR(20) NOT NULL DEFAULT 'recorded',
    acceptance_status VARCHAR(20) NOT NULL DEFAULT 'accepted',
    enforceability_status VARCHAR(20) NOT NULL DEFAULT 'undecided',
