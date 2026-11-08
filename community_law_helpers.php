@@ -942,6 +942,73 @@ if (!function_exists('community_law_review_outcome_report')) {
 }
 
 
+
+if (!function_exists('community_law_submit_outcome_followup')) {
+    /**
+     * پاسخ مستند مسئول اجرا/گزارش‌دهنده یا شاهد تکمیلی عضو جامعه را ثبت می‌کند.
+     * هر ورودی مستقل و تغییرناپذیر است؛ اختلاف، وضعیت قانون را تغییر نمی‌دهد.
+     */
+    function community_law_submit_outcome_followup(
+        mysqli $conn, int $report_id, int $actor_user_id,
+        string $entry_type, string $body, ?string $evidence=null
+    ): int|false {
+        $body=trim($body);
+        if ($report_id<=0 || $actor_user_id<=0 ||
+            !in_array($entry_type,['executor_response','additional_evidence'],true) ||
+            $body==='' || mb_strlen($body)>20000 ||
+            ($evidence!==null && mb_strlen($evidence)>20000)) return false;
+
+        $report=$conn->prepare(
+            "SELECT r.law_id,r.law_version_id,r.community_id,r.submitted_by,r.review_status,
+                    i.responsible_user_id
+             FROM community_law_outcome_reports r
+             JOIN community_law_implementations i ON i.id=r.implementation_id
+             WHERE r.id=? LIMIT 1 FOR UPDATE"
+        );
+        if (!$report) return false;
+        $report->bind_param('i',$report_id);
+        if (!$report->execute()) { $report->close(); return false; }
+        $row=$report->get_result()->fetch_assoc();
+        $report->close();
+        if (!$row || $row['review_status']!=='disputed') return false;
+
+        $community_id=(int)$row['community_id'];
+        $member=$conn->prepare(
+            'SELECT 1 FROM community_members WHERE community_id=? AND user_id=? LIMIT 1'
+        );
+        if (!$member) return false;
+        $member->bind_param('ii',$community_id,$actor_user_id);
+        if (!$member->execute()) { $member->close(); return false; }
+        $is_member=(bool)$member->get_result()->fetch_row();
+        $member->close();
+        if (!$is_member) return false;
+
+        if ($entry_type==='executor_response' &&
+            $actor_user_id!==(int)$row['submitted_by'] &&
+            $actor_user_id!==(int)($row['responsible_user_id']??0)) return false;
+
+        $insert=$conn->prepare(
+            "INSERT INTO community_law_outcome_followups
+             (report_id,community_id,submitted_by,entry_type,body,evidence)
+             VALUES (?,?,?,?,?,?)"
+        );
+        if (!$insert) return false;
+        $insert->bind_param('iiisss',$report_id,$community_id,$actor_user_id,$entry_type,$body,$evidence);
+        if (!$insert->execute()) { $insert->close(); return false; }
+        $followup_id=(int)$conn->insert_id;
+        $insert->close();
+
+        $details=json_encode([
+            'report_id'=>$report_id,'followup_id'=>$followup_id,'entry_type'=>$entry_type
+        ],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
+        if (!community_law_record_history(
+            $conn,(int)$row['law_id'],(int)$row['law_version_id'],$community_id,
+            $actor_user_id,'outcome_report_followup_added',$details
+        )) return false;
+        return $followup_id;
+    }
+}
+
 if (!function_exists('community_law_charter_tables_ready')) {
     function community_law_charter_tables_ready(mysqli $conn): bool {
         $required = [
