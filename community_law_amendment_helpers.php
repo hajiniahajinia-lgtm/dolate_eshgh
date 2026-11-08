@@ -799,6 +799,8 @@ if (!function_exists('community_law_enact_amendment')) {
                         v.status AS version_status,fc.status AS final_status,fc.appeal_deadline,fc.reviewer_quorum,
                         rc.status AS screening_status,ac.status AS authority_status,fr.final_status AS vote_result,
                         a.id AS amendment_case_id,a.status AS amendment_status,a.base_version_id,a.conformity_case_id,
+                        cc.parent_community_id,child.parent_community_id AS current_parent_community_id,
+                        cc.parent_law_id,cc.parent_law_version_id,
                         base.status AS base_version_status
                  FROM community_law_versions v
                  JOIN community_laws l ON l.id=v.law_id
@@ -808,6 +810,8 @@ if (!function_exists('community_law_enact_amendment')) {
                  JOIN community_law_final_results fr ON fr.law_version_id=v.id
                  JOIN community_law_amendment_cases a ON a.proposed_version_id=v.id
                  JOIN community_law_versions base ON base.id=a.base_version_id AND base.law_id=l.id
+                 JOIN community_law_conformity_cases cc ON cc.id=a.conformity_case_id
+                 JOIN communities child ON child.id=cc.community_id
                  WHERE l.id=? AND v.id=? FOR UPDATE"
             );
             if (!$lock) throw new RuntimeException('amendment enactment lock prepare failed');
@@ -817,6 +821,7 @@ if (!function_exists('community_law_enact_amendment')) {
             $lock->close();
             if (!$row || (int)$row['originating_community_id']!==$community_id ||
                 $row['law_status']!=='approved' || $row['version_status']!=='appeal_period' ||
+                (int)$row['current_parent_community_id']!==(int)$row['parent_community_id'] ||
                 $row['amendment_status']!=='parent_review_approved' ||
                 (int)$row['current_version_id']!==(int)$row['base_version_id'] ||
                 $row['base_version_status']!=='approved' ||
