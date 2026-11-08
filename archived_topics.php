@@ -22,6 +22,15 @@ if (empty($_SESSION['community_duty_csrf'])) { $_SESSION['community_duty_csrf'] 
 $community_duty_csrf = $_SESSION['community_duty_csrf'];
 require_once __DIR__ . '/community_member_removal_helpers.php';
 $community_removal_ready = community_removal_tables_ready($conn);
+
+// دفتر تصمیم مستقل و اختیاری است؛ آرشیو در نصب‌های قدیمی نیز بدون خطا کار می‌کند.
+$decision_ledger_ready = false;
+$decision_ledger_check = $conn->query("SELECT COUNT(*) AS total FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='community_decision_records'");
+if ($decision_ledger_check) {
+    $decision_ledger_ready = (int)($decision_ledger_check->fetch_assoc()['total'] ?? 0) === 1;
+    $decision_ledger_check->close();
+}
+if ($decision_ledger_ready) require_once __DIR__ . '/community_decision_ledger.php';
 if ($community_removal_ready) community_removal_finalize_expired($conn, $community_id);
 $arch_count = 0;
 $arch_count_stmt = $conn->prepare("SELECT COUNT(*) AS total FROM topics t JOIN topic_voting_meta m ON m.topic_id=t.id WHERE t.community_id=? AND m.finalized=1 AND m.finalized_at IS NOT NULL");
@@ -251,6 +260,13 @@ while($row=$result->fetch_assoc()){
     $participation=participation_percent($conn,$topic_id,(int)$row['community_id']);
     $enforce=get_enforce_stats($conn,$topic_id);
     $winner_idea=get_winner_idea($conn,$topic_id);
+    $decision_link = null;
+    if ($decision_ledger_ready) {
+        $candidate_link = community_decision_get_knowledge_link($conn, $topic_id);
+        if ($candidate_link && (int)$candidate_link['community_id'] === (int)$row['community_id']) {
+            $decision_link = $candidate_link;
+        }
+    }
 
     $creator_name='ناشناس';
     if(!empty($row['user_id'])){
@@ -320,6 +336,7 @@ while($row=$result->fetch_assoc()){
         'participation'=>$participation,
         'enforce'=>$enforce,
         'idea'=>$winner_idea,
+        'decision_link'=>$decision_link,
         'winner_enforceable'=>$winner_idea_is_enforceable,
         'execution_candidates'=>$execution_candidates,
         'election'=>$election,
@@ -933,6 +950,17 @@ document.addEventListener('DOMContentLoaded',function(){
             <div class="idea-box" id="idea-box-<?= $row['id'] ?>">
                 <?= nl2br(htmlspecialchars($row['idea']['idea_content'])) ?>
                 <div class="meta">ایده‌دهنده: <?= htmlspecialchars($row['idea']['idea_author'] ?? 'ناشناس') ?></div>
+            </div>
+            <?php endif; ?>
+
+            <?php if(!empty($row['decision_link'])): ?>
+            <div style="margin-top:9px;padding:9px 11px;border:1px solid #cbd5e1;border-radius:8px;background:#f8fafc;font-size:12px;line-height:1.9">
+              <strong>📋 پروندهٔ تصمیم جامعه</strong>
+              <div>شناسهٔ تصمیم: <?= (int)$row['decision_link']['decision_id'] ?> · پذیرش جمعی: <?= $row['decision_link']['acceptance_status']==='accepted'?'پذیرفته‌شده':($row['decision_link']['acceptance_status']==='not_accepted'?'پذیرفته‌نشده':'بدون رأی') ?></div>
+              <div>وضعیت الزام: <?= $row['decision_link']['enforceability_status']==='enforceable'?'لازم‌الاجرا':($row['decision_link']['enforceability_status']==='not_enforceable'?'غیرلازم‌الاجرا':'تعیین‌نشده') ?></div>
+              <?php if(!empty($row['decision_link']['knowledge_entry_id'])): ?>
+              <a href="knowledge_library.php?id=<?= (int)$row['decision_link']['knowledge_entry_id'] ?>">مشاهدهٔ پروندهٔ دانش مرتبط</a>
+              <?php else: ?><span class="meta">برای این تصمیم هنوز پروندهٔ دانش پیوند نخورده است.</span><?php endif; ?>
             </div>
             <?php endif; ?>
 
