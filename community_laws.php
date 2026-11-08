@@ -2909,7 +2909,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $lock = $conn->prepare(
                 "SELECT l.id AS law_id, l.originating_community_id, l.status AS law_status,
                         l.current_version_id, v.version_number, v.status AS version_status,
-                        v.source_topic_id, v.source_idea_id, fc.status AS final_status,
+                        v.source_topic_id, v.source_idea_id, v.source_decision_id, fc.status AS final_status,
                         rc.status AS screening_status, ac.status AS authority_status,
                         (SELECT COUNT(*) FROM community_law_appeals ap
                          WHERE ap.law_version_id=v.id
@@ -2973,17 +2973,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $insert = $conn->prepare(
                 "INSERT INTO community_law_versions
                     (law_id, version_number, title, law_text, implementation_plan,
-                     change_summary, source_topic_id, source_idea_id, proposed_by, status)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft')"
+                     change_summary, source_topic_id, source_idea_id, source_decision_id, proposed_by, status)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft')"
             );
             if (!$insert) throw new Exception('revision insert prepare failed');
             $source_topic_id = $previous['source_topic_id'] !== null ? (int)$previous['source_topic_id'] : null;
             $source_idea_id = $previous['source_idea_id'] !== null ? (int)$previous['source_idea_id'] : null;
+            $source_decision_id = $previous['source_decision_id'] !== null ? (int)$previous['source_decision_id'] : null;
             $law_id = (int)$previous['law_id'];
             $insert->bind_param(
-                'iissssiii',
+                'iissssiiii',
                 $law_id, $next_version, $title, $law_text, $implementation_plan,
-                $change_summary, $source_topic_id, $source_idea_id, $user_id
+                $change_summary, $source_topic_id, $source_idea_id, $source_decision_id, $user_id
             );
             if (!$insert->execute()) throw new Exception('revision insert failed');
             $new_version_id = (int)$conn->insert_id;
@@ -3484,6 +3485,7 @@ if ($schema_ready) {
         "SELECT l.id AS law_id, l.law_code, l.originating_community_id,
                 l.status AS law_status, v.id AS version_id, v.title,
                 v.law_text, v.implementation_plan, v.source_topic_id, v.source_idea_id,
+                v.source_decision_id,
                 v.status AS version_status, fc.status AS final_status,
                 fc.reviewer_quorum, fc.appeal_period_days, fc.appeal_deadline,
                 (SELECT COUNT(*) FROM community_law_final_review_assessments a
