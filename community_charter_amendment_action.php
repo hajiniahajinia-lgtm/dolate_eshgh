@@ -385,33 +385,7 @@ try {
             throw new RuntimeException('برای آغاز بررسی مستقل دست‌کم پنج ارزیاب و سه رأی‌دهنده دیگر لازم است.');
         }
         cam_secure_shuffle($candidates);
-        $reviewer_ids = array_slice($candidates, 0, 5);
-        $reviewer_map = array_fill_keys($reviewer_ids, true);
-
-        $reviewer_insert = $conn->prepare(
-            "INSERT INTO community_charter_amendment_reviewers (amendment_id,reviewer_user_id)
-             VALUES (?,?)"
-        );
-        if (!$reviewer_insert) throw new RuntimeException('ثبت ارزیابان مستقل ممکن نیست.');
-        foreach ($reviewer_ids as $reviewer_id) {
-            $reviewer_insert->bind_param('ii', $amendment_id, $reviewer_id);
-            if (!$reviewer_insert->execute()) throw new RuntimeException('ثبت ارزیاب مستقل انجام نشد.');
-        }
-        $reviewer_insert->close();
-
-        $electorate_insert = $conn->prepare(
-            "INSERT INTO community_charter_amendment_electorate (amendment_id,user_id) VALUES (?,?)"
-        );
-        if (!$electorate_insert) throw new RuntimeException('ثبت فهرست رأی‌دهندگان ممکن نیست.');
-        $electorate_count = 0;
-        foreach ($candidates as $candidate_id) {
-            if (isset($reviewer_map[$candidate_id])) continue;
-            $electorate_insert->bind_param('ii', $amendment_id, $candidate_id);
-            if (!$electorate_insert->execute()) throw new RuntimeException('ثبت رأی‌دهندگان انجام نشد.');
-            $electorate_count++;
-        }
-        $electorate_insert->close();
-        if ($electorate_count < 3) throw new RuntimeException('فهرست رأی‌دهندگان برای رأی‌گیری معتبر کافی نیست.');
+        community_charter_assign_review_panel($conn, $amendment_id, $candidates);
 
         $update = $conn->prepare(
             "UPDATE community_charter_amendments
@@ -742,16 +716,7 @@ try {
         $all_users->free();
         if (count($appeal_candidates) < 3) throw new RuntimeException('برای رسیدگی مستقل به اعتراض سه ارزیاب بی‌طرف در دسترس نیست.');
         cam_secure_shuffle($appeal_candidates);
-        $assignment = $conn->prepare(
-            "INSERT INTO community_charter_amendment_appeal_reviewer_assignments
-                (appeal_id,reviewer_user_id) VALUES (?,?)"
-        );
-        if (!$assignment) throw new RuntimeException('تخصیص ارزیابان اعتراض ممکن نیست.');
-        foreach (array_slice($appeal_candidates, 0, 3) as $reviewer_id) {
-            $assignment->bind_param('ii', $appeal_id, $reviewer_id);
-            if (!$assignment->execute()) throw new RuntimeException('تخصیص ارزیاب اعتراض انجام نشد.');
-        }
-        $assignment->close();
+        community_charter_assign_appeal_reviewers($conn, $appeal_id, $appeal_candidates);
 
         $under_review = $conn->prepare(
             "UPDATE community_charter_amendment_appeals SET status='under_review' WHERE id=?"
