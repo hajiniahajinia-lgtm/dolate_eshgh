@@ -704,6 +704,12 @@ if (!function_exists('community_law_submit_amendment_parent_review')) {
                 if (!$case_update->execute() || $case_update->affected_rows!==1) throw new RuntimeException('parent review case update failed');
                 $case_update->close();
                 if ($conformity_next==='amendment_required') {
+                    $proposed_version_id=(int)$row['proposed_version_id'];
+                    $close_version=$conn->prepare("UPDATE community_law_versions SET status='rejected' WHERE id=? AND status='voting'");
+                    if (!$close_version) throw new RuntimeException('returned amendment version close prepare failed');
+                    $close_version->bind_param('i',$proposed_version_id);
+                    if (!$close_version->execute() || $close_version->affected_rows!==1) throw new RuntimeException('returned amendment version close failed');
+                    $close_version->close();
                     $conformity_id=(int)$row['conformity_case_id'];
                     $conformity_update=$conn->prepare("UPDATE community_law_conformity_cases SET status='amendment_required' WHERE id=? AND status='amendment_in_progress'");
                     if (!$conformity_update) throw new RuntimeException('parent review conformity update prepare failed');
