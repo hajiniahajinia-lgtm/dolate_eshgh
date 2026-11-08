@@ -23,6 +23,9 @@ try {
     change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_change_voting.sql');
     change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_change_effects.sql');
     change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_conformity_workflow.sql');
+    change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_amendment_workflow.sql');
+    require_once __DIR__.'/../community_law_helpers.php';
+    require_once __DIR__.'/../community_law_amendment_helpers.php';
     require_once __DIR__.'/../community_law_change_helpers.php';
     require_once __DIR__.'/../community_law_conformity_helpers.php';
 
@@ -52,6 +55,32 @@ try {
     change_case_check($confirmed && $confirmed['finding']==='conflict_confirmed' && $confirmed['status']==='amendment_required','two-sided confirmed conflict requires a local amendment and records the finding');
     $review_history=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_history WHERE law_id=9502 AND event_type='conformity_conflict_reviewed'")->fetch_assoc()['n'];
     change_case_check($review_history===2,'both independent reviews are preserved in the local law history');
+
+    // پیشنهاد اصلاح فقط مواد مشخص را تغییر می‌دهد و نسخه مصوب را دست‌نخورده نگه می‌دارد.
+    $amendment_id=community_law_create_amendment_draft(
+        $db,$conformity_case_id,90020,90201,
+        'اصلاح مادهٔ مشخص‌شده برای رفع تعارض تأییدشده با قانون مادر.',
+        [[
+            'reference'=>'ماده ۳',
+            'previous_text'=>'متن قانون محلی آزمایشی',
+            'proposed_text'=>'متن اصلاح‌شدهٔ قانون محلی آزمایشی',
+            'reason'=>'رفع تعارض مستند با مادهٔ قانون مادر'
+        ]],
+        'ارجاع به پرونده تعارض و شواهد ثبت‌شده'
+    );
+    change_case_check(is_int($amendment_id) && $amendment_id>0,'a local member can create a versioned amendment draft for a confirmed conformity conflict');
+    $amendment=$db->query("SELECT a.status,a.base_version_id,a.proposed_version_id,v.version_number,v.status AS version_status,v.law_text,l.current_version_id,base.law_text AS base_text,base.status AS base_status FROM community_law_amendment_cases a JOIN community_law_versions v ON v.id=a.proposed_version_id JOIN community_law_versions base ON base.id=a.base_version_id JOIN community_laws l ON l.id=a.law_id WHERE a.id=".$amendment_id)->fetch_assoc();
+    change_case_check($amendment && $amendment['status']==='draft' && $amendment['version_status']==='draft' && (int)$amendment['version_number']===2,'amendment creates a separate draft version without approving it');
+    change_case_check($amendment && (int)$amendment['current_version_id']===99002 && $amendment['base_status']==='approved' && $amendment['base_text']==='متن قانون محلی آزمایشی','the approved base version remains unchanged and current until the full approval workflow completes');
+    change_case_check($amendment && $amendment['law_text']==='متن اصلاح‌شدهٔ قانون محلی آزمایشی','only the explicitly selected article text is replaced in the new draft');
+    $amendment_articles=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_amendment_articles WHERE case_id=".$amendment_id)->fetch_assoc()['n'];
+    change_case_check($amendment_articles===1,'article reference, previous wording, proposed wording and reason are separately preserved');
+    change_case_check(community_law_create_amendment_draft($db,$conformity_case_id,90020,90200,'درخواست با متن تکراری.',[[
+        'reference'=>'ماده ۴','previous_text'=>'متن محلی','proposed_text'=>'متن تازه','reason'=>'دلیل'
+    ]])===false,'a second parallel amendment is blocked while the first is open');
+    change_case_check(community_law_create_amendment_draft($db,$conformity_case_id,90010,90100,'درخواست جامعه مادر.',[[
+        'reference'=>'ماده ۳','previous_text'=>'متن قانون محلی آزمایشی','proposed_text'=>'متن دیگر','reason'=>'دلیل'
+    ]])===false,'parent-community members cannot author a local law amendment in place of the local community');
 
     // مسیر مستقل: هر دو جامعه تعارض را رد می‌کنند؛ پرونده باید حل‌شده شود.
     $db->query("INSERT INTO community_laws (id,law_code,originating_community_id,created_by,status,current_version_id,effective_at) VALUES (9503,'LAW-LOCAL-NO-CONFLICT-TEST',90020,90200,'approved',99003,NOW())");
