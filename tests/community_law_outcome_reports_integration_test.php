@@ -20,7 +20,6 @@ $port=(int)(getenv('DB_PORT')?:3306);
 $db=new mysqli($host,$user,$password,$name,$port);
 $db->set_charset('utf8mb4');
 try {
-    outcome_apply_sql($db,__DIR__.'/../migrations/20261106_collective_knowledge_library.sql');
     outcome_apply_sql($db,__DIR__.'/../migrations/20261106_community_law_objections_schema_repair.sql');
     outcome_apply_sql($db,__DIR__.'/../migrations/20261107_community_law_framework.sql');
     outcome_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_decision_origin.sql');
@@ -38,6 +37,21 @@ try {
         enforceability_status ENUM('enforceable','not_enforceable','undecided') NOT NULL DEFAULT 'undecided',
         record_status ENUM('recorded','superseded','voided') NOT NULL DEFAULT 'recorded',
         decided_at DATETIME NOT NULL
+    ) ENGINE=InnoDB");
+    $db->query("CREATE TEMPORARY TABLE collective_knowledge_entries (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        version_no INT UNSIGNED NOT NULL DEFAULT 1,
+        title VARCHAR(180) NOT NULL,
+        entry_type VARCHAR(30) NOT NULL,
+        summary VARCHAR(1000) NOT NULL,
+        content MEDIUMTEXT NOT NULL,
+        evidence TEXT NULL,
+        visibility VARCHAR(20) NOT NULL DEFAULT 'community',
+        community_id INT NULL,
+        source_topic_id INT NULL,
+        source_idea_id INT NULL,
+        status VARCHAR(30) NOT NULL DEFAULT 'unreviewed',
+        created_by INT NOT NULL
     ) ENGINE=InnoDB");
     $db->query("CREATE TEMPORARY TABLE community_members (community_id INT NOT NULL,user_id INT NOT NULL,PRIMARY KEY(community_id,user_id)) ENGINE=InnoDB");
     $db->query("INSERT INTO community_members VALUES (920,9700),(920,9701),(920,9702),(920,9703),(920,9704),(920,9706),(920,9707),(920,9708)");
