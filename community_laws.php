@@ -899,10 +899,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $lock = $conn->prepare(
                 "SELECT l.status, l.current_version_id, v.status AS version_status,
                         v.source_topic_id,a.id AS amendment_case_id,a.status AS amendment_status,
-                        a.base_version_id AS amendment_base_version_id
+                        a.base_version_id AS amendment_base_version_id,
+                        cc.status AS conformity_status,pl.status AS parent_law_status,
+                        pl.current_version_id AS parent_current_version_id,
+                        pl.effective_at AS parent_effective_at,pl.expires_at AS parent_expires_at,
+                        pl.repealed_at AS parent_repealed_at,pv.status AS parent_version_status,
+                        cc.parent_law_version_id
                  FROM community_laws l
                  JOIN community_law_versions v ON v.law_id=l.id
                  LEFT JOIN community_law_amendment_cases a ON a.proposed_version_id=v.id
+                 LEFT JOIN community_law_conformity_cases cc ON cc.id=a.conformity_case_id
+                 LEFT JOIN community_laws pl ON pl.id=cc.parent_law_id
+                 LEFT JOIN community_law_versions pv ON pv.id=cc.parent_law_version_id AND pv.law_id=pl.id
                  WHERE l.id=? AND v.id=? AND l.originating_community_id=?
                  FOR UPDATE"
             );
@@ -921,6 +929,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $record['status'] === 'approved' &&
                 $record['version_status'] === 'proposed' &&
                 $record['amendment_status'] === 'submitted' &&
+                $record['conformity_status'] === 'amendment_required' &&
+                $record['parent_law_status'] === 'approved' &&
+                $record['parent_version_status'] === 'approved' &&
+                (int)$record['parent_current_version_id'] === (int)$record['parent_law_version_id'] &&
+                empty($record['parent_repealed_at']) &&
+                (empty($record['parent_effective_at']) || strtotime($record['parent_effective_at']) <= time()) &&
+                (empty($record['parent_expires_at']) || strtotime($record['parent_expires_at']) > time()) &&
                 (int)$record['current_version_id'] === (int)$record['amendment_base_version_id'];
             if (!$standard_vote_state && !$amendment_vote_state) {
                 throw new RuntimeException('invalid_law_vote_state');
