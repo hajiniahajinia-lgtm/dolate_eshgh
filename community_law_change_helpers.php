@@ -37,6 +37,7 @@ if (!function_exists('community_law_open_change_case')) {
             if (!$date || $date->format('Y-m-d H:i:s')!==$requested_effective_at) return false;
         }
         if ($request_type==='review_expiry' && $requested_effective_at===null) return false;
+        if ($request_type==='review_expiry' && strtotime($requested_effective_at)<=time()+8*86400) return false;
         if ($request_type!=='review_expiry' && $requested_effective_at!==null) return false;
 
         $member=$conn->prepare('SELECT 1 FROM community_members WHERE community_id=? AND user_id=? LIMIT 1');
@@ -71,7 +72,7 @@ if (!function_exists('community_law_open_change_case')) {
         $effective=$law_row['effective_at'];
         if ($request_type==='suspend' &&
             ($law_status!=='approved' || ($effective!==null && strtotime($effective)>time()) ||
-             ($expiry!==null && strtotime($expiry)<=time()))) return false;
+             ($expiry!==null && strtotime($expiry)<=time()+8*86400))) return false;
         if ($request_type==='repeal' && !in_array($law_status,['approved','suspended'],true)) return false;
         if ($request_type==='review_expiry' && $law_status!=='approved') return false;
         if ($request_type==='reinstate' &&
