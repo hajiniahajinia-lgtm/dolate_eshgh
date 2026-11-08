@@ -286,6 +286,7 @@ if (!function_exists('community_law_submit_change_assessment')) {
                     $new_status='review_complete'; $review_result='inconclusive';
                 }
                 $summary_text=json_encode([
+                    'case_id'=>$case_id,
                     'reviewer_count'=>(int)$summary['total'],
                     'uphold_count'=>(int)$summary['uphold_count'],
                     'dismiss_count'=>(int)$summary['dismiss_count'],
@@ -497,6 +498,7 @@ if (!function_exists('community_law_change_apply_approved_case')) {
             return false;
         }
 
+        $effect['case_id']=$case_id;
         $effect_json=json_encode($effect,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
         if (!is_string($effect_json) || !community_law_record_history(
             $conn,$law_id,$version_id,$origin_id,$actor_user_id,$history_event,$effect_json
@@ -560,6 +562,7 @@ if (!function_exists('community_law_change_finalize_vote')) {
             elseif ($approval_ok) { $result='approved'; $status='approved'; }
             else { $result='rejected'; $status='rejected'; }
             $note=json_encode([
+                'case_id'=>$case_id,
                 'electorate'=>$electorate,'turnout'=>$turnout,'yes'=>$yes,'no'=>$no,
                 'abstain'=>$turnout-$valid_votes,'turnout_required'=>'2/3',
                 'approval_required'=>'2/3','result'=>$result,'law_effect_applied'=>($status==='approved')
