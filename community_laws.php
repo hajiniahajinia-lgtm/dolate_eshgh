@@ -47,6 +47,16 @@ function community_laws_redirect(int $community_id, string $status): void {
 }
 
 $schema_ready = community_law_tables_ready($conn);
+$outcome_reports_ready=false;
+if ($schema_ready) {
+    $outcome_table_check=$conn->query(
+        "SELECT COUNT(*) AS total FROM information_schema.tables
+         WHERE table_schema=DATABASE() AND table_name='community_law_outcome_reports'"
+    );
+    $outcome_reports_ready=$outcome_table_check &&
+        (int)$outcome_table_check->fetch_assoc()['total']===1;
+    if ($outcome_table_check) $outcome_table_check->free();
+}
 
 // فهرست تصمیم‌های پذیرفته‌شده فقط از دفتر مستقل تصمیم‌ها خوانده می‌شود.
 $decision_ledger_ready = false;
@@ -3929,6 +3939,33 @@ details>summary{cursor:pointer;font-weight:bold}
                 }
                 $implementation_stmt->close();
             }
+            $outcome_reports=[];
+            if ($outcome_reports_ready) {
+                $reports_sql="SELECT r.id,r.community_id,cm.name AS community_name,r.submitted_by,
+                                     r.report_type,r.period_start,r.period_end,r.summary,r.evidence,
+                                     r.metrics_json,r.review_status,r.created_at
+                              FROM community_law_outcome_reports r
+                              JOIN communities cm ON cm.id=r.community_id
+                              WHERE r.law_id=? AND r.law_version_id=?";
+                if (!$show_all_implementations) $reports_sql.=" AND r.community_id=?";
+                $reports_sql.=" ORDER BY r.created_at DESC,r.id DESC LIMIT 100";
+                $reports_stmt=$conn->prepare($reports_sql);
+                if ($reports_stmt) {
+                    $reports_law_id=(int)$law['law_id'];
+                    $reports_version_id=(int)$law['version_id'];
+                    if ($show_all_implementations) {
+                        $reports_stmt->bind_param('ii',$reports_law_id,$reports_version_id);
+                    } else {
+                        $reports_community_id=$community_id;
+                        $reports_stmt->bind_param('iii',$reports_law_id,$reports_version_id,$reports_community_id);
+                    }
+                    if ($reports_stmt->execute()) {
+                        $reports_result=$reports_stmt->get_result();
+                        while ($report_row=$reports_result->fetch_assoc()) $outcome_reports[]=$report_row;
+                    }
+                    $reports_stmt->close();
+                }
+            }
             ?>
             <div class="card" style="background:#fbfdff;box-shadow:none">
                 <strong><?= community_laws_escape($law['title']) ?></strong>
@@ -4007,6 +4044,59 @@ details>summary{cursor:pointer;font-weight:bold}
                                 <?php endif; ?>
                             </div>
                         <?php endforeach; ?>
+                    <?php endif; ?>
+                </details>
+                <details style="margin-top:10px">
+                    <summary>گزارش پیشرفت و پیامدهای واقعی قانون (<?= count($outcome_reports) ?>)</summary>
+                    <?php if (!$outcome_reports_ready): ?>
+                        <p class="muted">ساختار ثبت گزارش هنوز نصب نشده است؛ پس از نصب migration این بخش فعال می‌شود.</p>
+                    <?php elseif (!$outcome_reports): ?>
+                        <p class="muted">هنوز گزارشی برای این نسخهٔ قانون ثبت نشده است.</p>
+                    <?php else: ?>
+                        <?php foreach ($outcome_reports as $outcome_report): ?>
+                            <div class="notice" style="background:#f8fafc;border-color:#dbe4ee">
+                                <strong><?= $outcome_report['report_type']==='outcome'?'ارزیابی پیامد':'گزارش پیشرفت' ?> — <?= community_laws_escape($outcome_report['community_name']) ?></strong>
+                                <div class="meta">
+                                    دوره: <?= community_laws_escape($outcome_report['period_start']) ?> تا <?= community_laws_escape($outcome_report['period_end']) ?>
+                                    — ثبت: <?= community_laws_escape($outcome_report['created_at']) ?>
+                                    — وضعیت بررسی: <?= $outcome_report['review_status']==='submitted'?'ثبت‌شده؛ هنوز تأیید نشده':$outcome_report['review_status'] ?>
+                                </div>
+                                <p><?= nl2br(community_laws_escape($outcome_report['summary'])) ?></p>
+                                <?php if (!empty($outcome_report['evidence'])): ?>
+                                    <p><strong>شواهد:</strong></p>
+                                    <p><?= nl2br(community_laws_escape($outcome_report['evidence'])) ?></p>
+                                <?php endif; ?>
+                                <?php if (!empty($outcome_report['metrics_json'])): ?>
+                                    <p><strong>شاخص‌های عددی:</strong></p>
+                                    <pre style="white-space:pre-wrap;overflow-wrap:anywhere"><?= community_laws_escape(json_encode(json_decode($outcome_report['metrics_json'],true),JSON_UNESCAPED_UNICODE|JSON_PRETTY_PRINT)) ?></pre>
+                                <?php endif; ?>
+                            </div>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                    <?php if ($is_member && $outcome_reports_ready): ?>
+                        <p class="muted">گزارش فقط برای جامعه‌ای ثبت می‌شود که عضو آن هستید. ثبت گزارش به معنی تأیید صحت یا موفقیت آن نیست.</p>
+                        <form method="post" action="community_law_outcome_action.php">
+                            <input type="hidden" name="csrf_token" value="<?= community_laws_escape($csrf_token) ?>">
+                            <input type="hidden" name="community_id" value="<?= $community_id ?>">
+                            <input type="hidden" name="law_id" value="<?= (int)$law['law_id'] ?>">
+                            <input type="hidden" name="law_version_id" value="<?= (int)$law['version_id'] ?>">
+                            <label>نوع گزارش</label>
+                            <select name="report_type" required>
+                                <option value="progress">گزارش پیشرفت اجرا</option>
+                                <option value="outcome">ارزیابی پیامد و نتیجه</option>
+                            </select>
+                            <label>شروع دوره (میلادی)</label>
+                            <input type="date" name="period_start" required>
+                            <label>پایان دوره (میلادی)</label>
+                            <input type="date" name="period_end" required>
+                            <label>شرح نتیجه، پیشرفت یا پیامدهای مشاهده‌شده</label>
+                            <textarea name="summary" maxlength="30000" required></textarea>
+                            <label>شواهد و منابع (اختیاری)</label>
+                            <textarea name="evidence" maxlength="30000"></textarea>
+                            <label>شاخص‌های عددی به قالب JSON (اختیاری)</label>
+                            <textarea name="metrics_json" placeholder='{"beneficiaries":120,"incidents":3}'></textarea>
+                            <button type="submit">ثبت گزارش مستقل</button>
+                        </form>
                     <?php endif; ?>
                 </details>
                 <?php if (!empty($law['source_decision_id']) || !empty($law['source_topic_id'])): ?>
