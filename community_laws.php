@@ -3901,6 +3901,34 @@ details>summary{cursor:pointer;font-weight:bold}
                 }
                 $version_history_stmt->close();
             }
+            $implementation_rows=[];
+            $implementation_sql="SELECT i.community_id,cm.name AS community_name,i.responsible_user_id,
+                                        i.local_plan,i.status,i.started_at,i.target_date,i.completed_at,i.progress_report
+                                 FROM community_law_implementations i
+                                 JOIN communities cm ON cm.id=i.community_id
+                                 WHERE i.law_version_id=?";
+            $show_all_implementations=$is_member &&
+                (int)$law['originating_community_id']===$community_id;
+            if (!$show_all_implementations) $implementation_sql.=" AND i.community_id=?";
+            $implementation_sql.=" ORDER BY cm.name ASC";
+            $implementation_stmt=$conn->prepare($implementation_sql);
+            if ($implementation_stmt) {
+                if ($show_all_implementations) {
+                    $implementation_version_id=(int)$law['version_id'];
+                    $implementation_stmt->bind_param('i',$implementation_version_id);
+                } else {
+                    $implementation_version_id=(int)$law['version_id'];
+                    $implementation_community_id=$community_id;
+                    $implementation_stmt->bind_param('ii',$implementation_version_id,$implementation_community_id);
+                }
+                if ($implementation_stmt->execute()) {
+                    $implementation_result=$implementation_stmt->get_result();
+                    while ($implementation_row=$implementation_result->fetch_assoc()) {
+                        $implementation_rows[]=$implementation_row;
+                    }
+                }
+                $implementation_stmt->close();
+            }
             ?>
             <div class="card" style="background:#fbfdff;box-shadow:none">
                 <strong><?= community_laws_escape($law['title']) ?></strong>
@@ -3933,6 +3961,50 @@ details>summary{cursor:pointer;font-weight:bold}
                                 <hr style="border:0;border-top:1px solid #dbe4ee;margin:12px 0">
                                 <p><strong>متن نسخهٔ فعلی — نسخهٔ <?= (int)$law['version_number'] ?></strong></p>
                                 <div class="law-text"><?= community_laws_escape($law['law_text']) ?></div>
+                            </div>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </details>
+                <details style="margin-top:10px">
+                    <summary>وضعیت اجرای قانون در جوامع مشمول (<?= count($implementation_rows) ?>)</summary>
+                    <?php if (!$implementation_rows): ?>
+                        <p class="muted">برای این جامعه هنوز گزارش اجرایی ثبت نشده یا دسترسی به گزارش‌های سایر زیرجامعه‌ها وجود ندارد.</p>
+                    <?php else: ?>
+                        <?php foreach ($implementation_rows as $implementation): ?>
+                            <?php
+                            $implementation_status_labels=[
+                                'pending'=>'در انتظار آغاز',
+                                'in_progress'=>'در حال اجرا',
+                                'blocked'=>'با مانع روبه‌رو',
+                                'completed'=>'تکمیل‌شده',
+                                'not_applicable'=>'غیرقابل اعمال',
+                                'suspended'=>'متوقف به‌علت تعلیق قانون'
+                            ];
+                            ?>
+                            <div class="notice" style="background:#f8fafc;border-color:#dbe4ee">
+                                <strong><?= community_laws_escape($implementation['community_name']) ?></strong>
+                                <div class="meta">
+                                    وضعیت: <?= community_laws_escape($implementation_status_labels[$implementation['status']] ?? $implementation['status']) ?>
+                                    <?php if (!empty($implementation['responsible_user_id'])): ?>
+                                        — مسئول اجرا تعیین شده است
+                                    <?php else: ?>
+                                        — مسئول اجرا هنوز تعیین نشده است
+                                    <?php endif; ?>
+                                </div>
+                                <?php if (!empty($implementation['local_plan'])): ?>
+                                    <p><strong>برنامهٔ محلی اجرا:</strong></p>
+                                    <div class="law-text"><?= community_laws_escape($implementation['local_plan']) ?></div>
+                                <?php endif; ?>
+                                <?php if (!empty($implementation['target_date'])): ?>
+                                    <p class="meta">تاریخ هدف: <?= community_laws_escape($implementation['target_date']) ?></p>
+                                <?php endif; ?>
+                                <?php if (!empty($implementation['progress_report'])): ?>
+                                    <p><strong>گزارش پیشرفت و پیامدها:</strong></p>
+                                    <div class="law-text"><?= community_laws_escape($implementation['progress_report']) ?></div>
+                                <?php endif; ?>
+                                <?php if (!empty($implementation['completed_at'])): ?>
+                                    <p class="meta">تاریخ تکمیل: <?= community_laws_escape($implementation['completed_at']) ?></p>
+                                <?php endif; ?>
                             </div>
                         <?php endforeach; ?>
                     <?php endif; ?>
