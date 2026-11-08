@@ -2,7 +2,11 @@ name: PHP syntax check - expertise and community laws
 
 on:
   push:
-    branches:
+    br
+      - 'migrations/20261106_collective_knowledge_library.sql'
+      - 'migrations/20261108_community_decision_ledger.sql'
+      - 'migrations/20261108_community_decision_knowledge_link.sql'
+      - 'migrations/20261108_community_law_decision_origin.sql'anches:
       - feature/community-law-framework
     paths:
       - 'expertise.php'
@@ -62,6 +66,10 @@ on:
       - 'migrations/20261108_community_law_outcome_followups.sql'
       - 'migrations/20261108_community_law_outcome_reassessments.sql'
       - 'migrations/20261108_community_law_outcome_corrective_actions.sql'
+      - 'migrations/20261106_collective_knowledge_library.sql'
+      - 'migrations/20261108_community_decision_ledger.sql'
+      - 'migrations/20261108_community_decision_knowledge_link.sql'
+      - 'migrations/20261108_community_law_decision_origin.sql'
       - 'tests/community_law_outcome_reports_integration_test.php'
       - 'community_law_outcome_action.php'
       - 'migrations/20261108_community_law_outcome_reports.sql'
