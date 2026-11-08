@@ -33,6 +33,7 @@ $db = new mysqli($host, $user, $password, $name, $port);
 $db->set_charset('utf8mb4');
 
 $tables = [
+    'collective_knowledge_entries',
     'topic_enforce_votes',
     'topic_voting_ballots',
     'topic_winners',
@@ -113,6 +114,39 @@ try {
         $stored['acceptance_status'] === 'accepted' &&
         $stored['enforceability_status'] === 'not_enforceable',
         'the collective decision remains committed even when the knowledge library write fails'
+    );
+
+    // اکنون کتابخانه را ایجاد می‌کنیم و همان نهایی‌سازی را دوباره اجرا می‌کنیم؛
+    // نتیجهٔ تصمیم باید مستقل بماند و محتوای دانش نباید رأی‌ها را تکرار کند.
+    $db->query("CREATE TABLE collective_knowledge_entries (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        version_no INT UNSIGNED NOT NULL DEFAULT 1,
+        title VARCHAR(180) NOT NULL,
+        entry_type VARCHAR(30) NOT NULL,
+        summary VARCHAR(1000) NOT NULL,
+        content MEDIUMTEXT NOT NULL,
+        evidence TEXT NULL,
+        visibility VARCHAR(20) NOT NULL DEFAULT 'community',
+        community_id INT NULL,
+        source_topic_id INT NULL,
+        source_idea_id INT NULL,
+        status VARCHAR(30) NOT NULL DEFAULT 'unreviewed',
+        created_by INT NOT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    decision_separation_check(
+        create_collective_knowledge_decision($db, 990010, 5) === true,
+        'knowledge can be created later without rewriting the committed decision snapshot'
+    );
+
+    $knowledge = $db->query(
+        'SELECT content FROM collective_knowledge_entries WHERE source_topic_id=990010 LIMIT 1'
+    )->fetch_assoc();
+    decision_separation_check(
+        $knowledge &&
+        str_contains($knowledge['content'], 'دفتر مستقل تصمیم‌های جامعه') &&
+        !str_contains($knowledge['content'], 'نتیجهٔ رأی پذیرش جمعی') &&
+        !str_contains($knowledge['content'], 'نتیجهٔ رأی لازم‌الاجرا بودن'),
+        'knowledge content references the separate decision ledger but does not absorb voting outcomes'
     );
 
     fwrite(STDOUT, "OK: decision and knowledge persistence are transactionally separated.\n");
