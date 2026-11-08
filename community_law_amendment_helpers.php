@@ -278,6 +278,7 @@ if (!function_exists('community_law_submit_amendment_for_vote')) {
             $source_rules->close();
             if (!$rules) throw new RuntimeException('approved base voting rules are required');
 
+            $new_version_id=(int)$row['proposed_version_id'];
             $rule_insert=$conn->prepare(
                 "INSERT INTO community_law_voting_rules
                     (law_version_id,jurisdiction_level,
@@ -286,27 +287,20 @@ if (!function_exists('community_law_submit_amendment_for_vote')) {
                      community_aggregate_quorum_percent,community_aggregate_approval_percent,
                      require_community_approval,individual_vote_basis,community_vote_basis,
                      status,configured_by,configured_at,approved_at)
-                 VALUES (?,?,?,?,?,?,?,?,?,?,?,'approved',?,NOW(),NOW())"
+                 SELECT ?,jurisdiction_level,
+                        individual_quorum_percent,individual_approval_percent,
+                        community_quorum_percent,community_approval_percent,
+                        community_aggregate_quorum_percent,community_aggregate_approval_percent,
+                        require_community_approval,individual_vote_basis,community_vote_basis,
+                        'approved',?,NOW(),NOW()
+                 FROM community_law_voting_rules
+                 WHERE law_version_id=? AND status='approved'"
             );
             if (!$rule_insert) throw new RuntimeException('amendment voting rules snapshot prepare failed');
-            $new_version_id=(int)$row['proposed_version_id'];
-            $jurisdiction=(string)$rules['jurisdiction_level'];
-            $individual_quorum=(float)$rules['individual_quorum_percent'];
-            $individual_approval=(float)$rules['individual_approval_percent'];
-            $community_quorum=$rules['community_quorum_percent']!==null?(float)$rules['community_quorum_percent']:null;
-            $community_approval=$rules['community_approval_percent']!==null?(float)$rules['community_approval_percent']:null;
-            $aggregate_quorum=$rules['community_aggregate_quorum_percent']!==null?(float)$rules['community_aggregate_quorum_percent']:null;
-            $aggregate_approval=$rules['community_aggregate_approval_percent']!==null?(float)$rules['community_aggregate_approval_percent']:null;
-            $require_community=(int)$rules['require_community_approval'];
-            $individual_basis=(string)$rules['individual_vote_basis'];
-            $community_basis=$rules['community_vote_basis'];
-            $rule_insert->bind_param(
-                'isddddddissi',
-                $new_version_id,$jurisdiction,$individual_quorum,$individual_approval,
-                $community_quorum,$community_approval,$aggregate_quorum,$aggregate_approval,
-                $require_community,$individual_basis,$community_basis,$user_id
-            );
-            if (!$rule_insert->execute()) throw new RuntimeException('amendment voting rules snapshot failed');
+            $rule_insert->bind_param('iii',$new_version_id,$user_id,$base_version_id);
+            if (!$rule_insert->execute() || $rule_insert->affected_rows!==1) {
+                throw new RuntimeException('amendment voting rules snapshot failed');
+            }
             $rule_insert->close();
 
             $version_update=$conn->prepare(
