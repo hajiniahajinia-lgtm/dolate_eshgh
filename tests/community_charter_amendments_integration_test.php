@@ -24,87 +24,9 @@ function apply_sql_file(mysqli $db, string $path): void {
 
 function try_activate_amendment(mysqli $db, int $amendmentId): bool {
     try {
-        $db->begin_transaction();
-
-        $activeResult = $db->query(
-            "SELECT id FROM community_charter_versions
-             WHERE status='effective' AND effective_at<=NOW() FOR UPDATE"
-        );
-        $activeIds = [];
-        while ($row = $activeResult->fetch_assoc()) $activeIds[] = (int)$row['id'];
-        $activeResult->free();
-        if (count($activeIds) !== 1) throw new RuntimeException('No unique active charter.');
-
-        $stmt = $db->prepare(
-            "SELECT base_charter_version_id, proposed_charter_version_id, status,
-                    (appeal_closes_at IS NOT NULL AND appeal_closes_at<=NOW()) AS appeal_closed
-             FROM community_charter_amendments WHERE id=? FOR UPDATE"
-        );
-        $stmt->bind_param('i', $amendmentId);
-        $stmt->execute();
-        $amendment = $stmt->get_result()->fetch_assoc();
-        $stmt->close();
-
-        if (!$amendment || $amendment['status'] !== 'appeal_period' ||
-            (int)$amendment['base_charter_version_id'] !== $activeIds[0] ||
-            (int)$amendment['appeal_closed'] !== 1) {
-            throw new RuntimeException('Amendment is not eligible for activation.');
-        }
-
-        $stmt = $db->prepare(
-            "SELECT COUNT(*) AS total FROM community_charter_amendment_appeals
-             WHERE amendment_id=? AND status IN ('submitted','under_review')"
-        );
-        $stmt->bind_param('i', $amendmentId);
-        $stmt->execute();
-        $openAppeals = (int)$stmt->get_result()->fetch_assoc()['total'];
-        $stmt->close();
-        if ($openAppeals > 0) throw new RuntimeException('Open appeal blocks activation.');
-
-        $stmt = $db->prepare(
-            "UPDATE community_charter_amendments SET status='approved_pending_activation'
-             WHERE id=? AND status='appeal_period'"
-        );
-        $stmt->bind_param('i', $amendmentId);
-        $stmt->execute();
-        if ($stmt->affected_rows !== 1) throw new RuntimeException('Could not reserve activation.');
-        $stmt->close();
-
-        $oldId = $activeIds[0];
-        $stmt = $db->prepare(
-            "UPDATE community_charter_versions SET status='superseded'
-             WHERE id=? AND status='effective'"
-        );
-        $stmt->bind_param('i', $oldId);
-        $stmt->execute();
-        if ($stmt->affected_rows !== 1) throw new RuntimeException('Could not supersede old charter.');
-        $stmt->close();
-
-        $newId = (int)$amendment['proposed_charter_version_id'];
-        $stmt = $db->prepare(
-            "UPDATE community_charter_versions
-             SET status='effective', approved_at=NOW(), effective_at=NOW()
-             WHERE id=? AND status='draft'"
-        );
-        $stmt->bind_param('i', $newId);
-        $stmt->execute();
-        if ($stmt->affected_rows !== 1) throw new RuntimeException('Proposed version is not draft.');
-        $stmt->close();
-
-        $stmt = $db->prepare(
-            "UPDATE community_charter_amendments
-             SET status='activated', activated_at=NOW()
-             WHERE id=? AND status='approved_pending_activation'"
-        );
-        $stmt->bind_param('i', $amendmentId);
-        $stmt->execute();
-        if ($stmt->affected_rows !== 1) throw new RuntimeException('Could not finalize amendment.');
-        $stmt->close();
-
-        $db->commit();
+        community_charter_amendment_activate($db, $amendmentId);
         return true;
     } catch (Throwable $error) {
-        try { $db->rollback(); } catch (Throwable $ignored) {}
         return false;
     }
 }
