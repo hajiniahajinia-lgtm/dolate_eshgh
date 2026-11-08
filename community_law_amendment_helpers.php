@@ -698,9 +698,12 @@ if (!function_exists('community_law_submit_amendment_parent_review')) {
                 } else {
                     $next_status='parent_review_approved';
                 }
-                $case_update=$conn->prepare("UPDATE community_law_amendment_cases SET status=?,decided_at=NOW() WHERE id=? AND status='parent_review'");
+                $decision_note=$next_status==='revision_required'
+                    ? 'دو بررسی مستقل جامعهٔ مادر نشان دادند که دست‌کم یک مادهٔ اصلاح‌شده هنوز نیازمند رفع تعارض است؛ جامعهٔ محلی متن اصلاحی تازه را خود تهیه می‌کند.'
+                    : 'دو بررسی مستقل جامعهٔ مادر سازگاری مواد اصلاح‌شده را تأیید کردند؛ پرونده برای بررسی نهایی مستقل آماده است.';
+                $case_update=$conn->prepare("UPDATE community_law_amendment_cases SET status=?,decided_at=NOW(),decision_note=? WHERE id=? AND status='parent_review'");
                 if (!$case_update) throw new RuntimeException('parent review case update prepare failed');
-                $case_update->bind_param('si',$next_status,$amendment_id);
+                $case_update->bind_param('ssi',$next_status,$decision_note,$amendment_id);
                 if (!$case_update->execute() || $case_update->affected_rows!==1) throw new RuntimeException('parent review case update failed');
                 $case_update->close();
                 if ($conformity_next==='amendment_required') {
