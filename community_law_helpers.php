@@ -779,18 +779,18 @@ if (!function_exists('community_law_submit_outcome_report')) {
         if (!$is_member) return false;
 
         $implementation=$conn->prepare(
-            "SELECT i.id
+            "SELECT i.id, i.status
              FROM community_law_implementations i
              JOIN community_law_versions v ON v.id=i.law_version_id
              WHERE v.law_id=? AND i.law_version_id=? AND i.community_id=?
-             LIMIT 1"
+             LIMIT 1 FOR UPDATE"
         );
         if (!$implementation) return false;
         $implementation->bind_param('iii',$law_id,$law_version_id,$community_id);
         if (!$implementation->execute()) { $implementation->close(); return false; }
         $implementation_row=$implementation->get_result()->fetch_assoc();
         $implementation->close();
-        if (!$implementation_row) return false;
+        if (!$implementation_row || $implementation_row['status']==='not_applicable') return false;
         $implementation_id=(int)$implementation_row['id'];
 
         $insert=$conn->prepare(
@@ -1919,7 +1919,8 @@ if (!function_exists('community_law_create_outcome_corrective_action')) {
 
         $stmt=$conn->prepare(
             "SELECT r.law_id,r.law_version_id,r.community_id,r.implementation_id,
-                    i.responsible_user_id,ra.id AS reassessment_id,ra.final_outcome,ra.status AS reassessment_status
+                    i.responsible_user_id,i.status AS implementation_status,
+                    ra.id AS reassessment_id,ra.final_outcome,ra.status AS reassessment_status
              FROM community_law_outcome_reports r
              JOIN community_law_implementations i ON i.id=r.implementation_id
              JOIN community_law_outcome_reassessments ra ON ra.report_id=r.id
@@ -1929,7 +1930,8 @@ if (!function_exists('community_law_create_outcome_corrective_action')) {
         $stmt->bind_param('i',$report_id);
         if (!$stmt->execute()) { $stmt->close(); return false; }
         $row=$stmt->get_result()->fetch_assoc(); $stmt->close();
-        if (!$row || $row['reassessment_status']!=='finalized' ||
+        if (!$row || $row['implementation_status']==='not_applicable' ||
+            $row['reassessment_status']!=='finalized' ||
             $row['final_outcome']!=='revise_execution_plan' ||
             (int)$row['responsible_user_id']<=0) return false;
 
