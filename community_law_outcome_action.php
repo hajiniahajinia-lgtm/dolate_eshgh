@@ -19,9 +19,9 @@ if (!community_law_tables_ready($conn)) clor_redirect($community_id,'schema');
 $outcome_schema_check=$conn->query(
     "SELECT COUNT(*) AS total FROM information_schema.tables
      WHERE table_schema=DATABASE()
-       AND table_name IN ('community_law_outcome_reports','community_law_outcome_reviews','community_law_outcome_followups','community_law_outcome_reassessments','community_law_outcome_reassessment_reviews')"
+       AND table_name IN ('community_law_outcome_reports','community_law_outcome_reviews','community_law_outcome_followups','community_law_outcome_reassessments','community_law_outcome_reassessment_reviews','community_law_outcome_corrective_actions','community_law_outcome_corrective_updates')"
 );
-$outcome_schema_ready=$outcome_schema_check && (int)$outcome_schema_check->fetch_assoc()['total']===5;
+$outcome_schema_ready=$outcome_schema_check && (int)$outcome_schema_check->fetch_assoc()['total']===7;
 if ($outcome_schema_check) $outcome_schema_check->free();
 if (!$outcome_schema_ready) clor_redirect($community_id,'schema');
 try {
@@ -39,6 +39,29 @@ try {
         if ($followup_id===false) { $conn->rollback(); clor_redirect($community_id,'outcome_followup_failed'); }
         if (!$conn->commit()) throw new RuntimeException('follow-up transaction commit failed');
         clor_redirect($community_id,'outcome_followup_saved');
+    }
+    if (($_POST['action']??'')==='create_corrective_action') {
+        $action_id=community_law_create_outcome_corrective_action(
+            $conn,(int)($_POST['report_id']??0),$user_id,
+            (string)($_POST['action_title']??''),
+            (string)($_POST['action_details']??''),
+            (string)($_POST['success_criteria']??''),
+            (string)($_POST['target_date']??'')
+        );
+        if ($action_id===false) { $conn->rollback(); clor_redirect($community_id,'outcome_corrective_action_failed'); }
+        if (!$conn->commit()) throw new RuntimeException('corrective action commit failed');
+        clor_redirect($community_id,'outcome_corrective_action_saved');
+    }
+    if (($_POST['action']??'')==='update_corrective_action') {
+        $update_id=community_law_submit_outcome_corrective_update(
+            $conn,(int)($_POST['corrective_action_id']??0),$user_id,
+            (string)($_POST['corrective_status']??''),
+            (string)($_POST['corrective_update_text']??''),
+            trim((string)($_POST['corrective_evidence']??''))?:null
+        );
+        if ($update_id===false) { $conn->rollback(); clor_redirect($community_id,'outcome_corrective_update_failed'); }
+        if (!$conn->commit()) throw new RuntimeException('corrective update commit failed');
+        clor_redirect($community_id,'outcome_corrective_update_saved');
     }
     if (($_POST['action']??'')==='reassess') {
         $reassessment_result=community_law_review_disputed_outcome_followups(
