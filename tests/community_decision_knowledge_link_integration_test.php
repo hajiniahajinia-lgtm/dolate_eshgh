@@ -4,8 +4,12 @@ mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 $host=getenv('DB_HOST')?:'127.0.0.1'; $name=getenv('DB_NAME')?:'dolate_charter_ci';
 $user=getenv('DB_USER')?:'root'; $pass=getenv('DB_PASSWORD')?:''; $port=(int)(getenv('DB_PORT')?:3306);
 $db=new mysqli($host,$user,$pass,$name,$port);
+$tableExisted = (int)$db->query(
+ "SELECT COUNT(*) AS total FROM information_schema.tables
+  WHERE table_schema=DATABASE() AND table_name='community_decision_records'"
+)->fetch_assoc()['total'] > 0;
 try {
- $db->query("CREATE TABLE community_decision_records (
+ $db->query("CREATE TABLE IF NOT EXISTS community_decision_records (
    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
    source_topic_id INT NOT NULL, source_idea_id INT NULL, community_id INT NOT NULL,
    record_status VARCHAR(20) NOT NULL DEFAULT 'recorded',
@@ -27,5 +31,9 @@ try {
  if(!community_decision_attach_knowledge_entry($db,987650,12345)) throw new RuntimeException('Idempotent retry of the same knowledge link failed');
  if(community_decision_attach_knowledge_entry($db,987650,54321)) throw new RuntimeException('Existing knowledge link was overwritten');
  echo "OK: decision-to-knowledge reference is idempotent and protected from overwrite.\n";
-} finally { $db->query("DROP TABLE IF EXISTS community_decision_records"); $db->close(); }
+} finally {
+ if (!$tableExisted) $db->query("DROP TABLE IF EXISTS community_decision_records");
+ else $db->query("DELETE FROM community_decision_records WHERE source_topic_id=987650");
+ $db->close();
+}
 ?>
