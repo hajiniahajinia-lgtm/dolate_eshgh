@@ -1665,7 +1665,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                  JOIN community_law_versions v ON v.id=e.law_version_id
                  JOIN community_laws l ON l.id=v.law_id
                  WHERE e.law_version_id=? AND e.user_id=?
-                   AND v.status='voting' AND l.status='voting'
+                   AND v.status='voting' AND (
+                    l.status='voting' OR (
+                        l.status='approved' AND EXISTS (
+                            SELECT 1 FROM community_law_amendment_cases a
+                            WHERE a.proposed_version_id=v.id AND a.status='local_voting'
+                              AND a.base_version_id=l.current_version_id
+                        )
+                    )
+                )
                    AND v.vote_deadline > NOW()
                  LIMIT 1 FOR UPDATE"
             );
@@ -1716,7 +1724,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
              JOIN community_law_versions v ON v.id=e.law_version_id
              JOIN community_laws l ON l.id=v.law_id
              WHERE e.law_version_id=? AND e.voting_community_id=? AND e.user_id=?
-               AND v.status='voting' AND l.status='voting'
+               AND v.status='voting' AND (
+                    l.status='voting' OR (
+                        l.status='approved' AND EXISTS (
+                            SELECT 1 FROM community_law_amendment_cases a
+                            WHERE a.proposed_version_id=v.id AND a.status='local_voting'
+                              AND a.base_version_id=l.current_version_id
+                        )
+                    )
+                )
                AND v.vote_deadline > NOW()
              LIMIT 1"
         );
@@ -1769,7 +1785,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
              JOIN community_law_versions v ON v.id=e.law_version_id
              JOIN community_laws l ON l.id=v.law_id
              WHERE e.law_version_id=? AND e.voting_community_id=? AND e.user_id=?
-               AND v.status='voting' AND l.status='voting'
+               AND v.status='voting' AND (
+                    l.status='voting' OR (
+                        l.status='approved' AND EXISTS (
+                            SELECT 1 FROM community_law_amendment_cases a
+                            WHERE a.proposed_version_id=v.id AND a.status='local_voting'
+                              AND a.base_version_id=l.current_version_id
+                        )
+                    )
+                )
                AND v.vote_deadline > NOW()
              LIMIT 1"
         );
