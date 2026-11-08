@@ -97,6 +97,7 @@ on:
       - 'tests/community_law_outcome_reports_integration_test.php'
       - 'tests/migration_order_test.php'
       - 'tests/community_law_amendment_vote_contract_test.php'
+      - 'tests/community_law_amendment_notice_contract_test.php'
       - '.github/workflows/php-expertise-framework-check.yml'
       - 'migrations/20261108_community_law_z3_version_notices.sql'
       - 'community_law_amendment_helpers.php'
@@ -193,6 +194,7 @@ on:
       - 'community_law_change_cases.php'
       - 'tests/community_law_change_control_integration_test.php'
       - 'tests/migration_order_test.php'
+      - 'tests/community_law_amendment_notice_contract_test.php'
 jobs:
   php-lint:
     runs-on: ubuntu-latest
@@ -224,6 +226,7 @@ jobs:
           php -l tests/community_law_change_control_integration_test.php
           php -l tests/migration_order_test.php
           php -l tests/community_law_amendment_vote_contract_test.php
+          php -l tests/community_law_amendment_notice_contract_test.php
           php -l set_community_parent.php
           php -l profile.php
           php -l create_community.php
@@ -251,6 +254,8 @@ jobs:
         run: php tests/migration_order_test.php
       - name: Verify amendment vote-engine regression contract
         run: php tests/community_law_amendment_vote_contract_test.php
+      - name: Verify atomic amendment notice contract
+        run: php tests/community_law_amendment_notice_contract_test.php
       - name: Run community law hierarchy and charter amendment tests
         run: |
           php tests/community_law_hierarchy_helpers_test.php
