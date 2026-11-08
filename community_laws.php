@@ -3141,7 +3141,8 @@ if ($schema_ready) {
         "SELECT l.id AS law_id, l.law_code, l.originating_community_id,
                 l.effective_at, l.expires_at,
                 v.id AS version_id, v.version_number, v.title, v.law_text,
-                v.implementation_plan, v.approved_at
+                v.implementation_plan, v.approved_at,
+                v.source_topic_id, v.source_idea_id, v.source_decision_id
          FROM community_laws l
          JOIN community_law_versions v ON v.id=l.current_version_id
          WHERE l.status='approved' AND v.status='approved'
@@ -3848,6 +3849,14 @@ details>summary{cursor:pointer;font-weight:bold}
                     <?= $law['originating_community_id'] === $community_id ? '— مصوب همین جامعه' : '— قانون بالادستی' ?>
                 </div>
                 <div class="law-text"><?= community_laws_escape($law['law_text']) ?></div>
+                <?php if (!empty($law['source_decision_id'])): ?>
+                    <p class="meta" style="margin-top:9px;padding:8px 10px;background:#f3f7fc;border-radius:7px">
+                        📋 منشأ این قانون: تصمیم جمعی شمارهٔ <?= (int)$law['source_decision_id'] ?>
+                        <?php if (!empty($law['source_topic_id'])): ?>
+                            — <a href="archived_topics.php?community_id=<?= (int)$law['originating_community_id'] ?>">مشاهدهٔ آرشیو تصمیم‌های جامعهٔ مبدأ</a>
+                        <?php endif; ?>
+                    </p>
+                <?php endif; ?>
                 <?php if (!empty($law['implementation_plan'])): ?>
                     <details style="margin-top:10px">
                         <summary>برنامه اجرایی</summary>
