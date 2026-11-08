@@ -3881,6 +3881,27 @@ details>summary{cursor:pointer;font-weight:bold}
         <p class="muted">هنوز قانون مصوب و لازم‌الاجرایی برای این جامعه ثبت نشده است.</p>
     <?php else: ?>
         <?php foreach ($effective_laws as $law): ?>
+            <?php
+            $previous_versions=[];
+            $version_history_stmt=$conn->prepare(
+                "SELECT id,version_number,title,law_text,change_summary,approved_at,created_at
+                 FROM community_law_versions
+                 WHERE law_id=? AND id<>? AND status='superseded'
+                 ORDER BY version_number DESC LIMIT 20"
+            );
+            if ($version_history_stmt) {
+                $history_law_id=(int)$law['law_id'];
+                $current_version_id=(int)$law['version_id'];
+                $version_history_stmt->bind_param('ii',$history_law_id,$current_version_id);
+                if ($version_history_stmt->execute()) {
+                    $version_history_result=$version_history_stmt->get_result();
+                    while ($version_history_row=$version_history_result->fetch_assoc()) {
+                        $previous_versions[]=$version_history_row;
+                    }
+                }
+                $version_history_stmt->close();
+            }
+            ?>
             <div class="card" style="background:#fbfdff;box-shadow:none">
                 <strong><?= community_laws_escape($law['title']) ?></strong>
                 <div class="meta">
@@ -3891,6 +3912,31 @@ details>summary{cursor:pointer;font-weight:bold}
                         : '— قانون بالادستی از جامعهٔ «' . community_laws_escape($law['originating_community_name']) . '» (شناسهٔ جامعه: ' . (int)$law['originating_community_id'] . ')' ?>
                 </div>
                 <div class="law-text"><?= community_laws_escape($law['law_text']) ?></div>
+                <details style="margin-top:10px">
+                    <summary>سوابق نسخه‌ها و مقایسه با نسخهٔ فعلی (<?= count($previous_versions) ?> نسخهٔ پیشین)</summary>
+                    <?php if (!$previous_versions): ?>
+                        <p class="muted">این نخستین نسخهٔ ثبت‌شده و مصوب این قانون است؛ هنوز نسخهٔ اصلاح‌شده‌ای ندارد.</p>
+                    <?php else: ?>
+                        <p class="muted">نسخهٔ فعلی در بالای پرونده نمایش داده شده است. متن و خلاصهٔ تغییرات نسخه‌های پیشین در ادامه برای مقایسه حفظ شده‌اند.</p>
+                        <?php foreach ($previous_versions as $previous_version): ?>
+                            <div class="notice" style="background:#f8fafc;border-color:#dbe4ee">
+                                <strong>نسخهٔ <?= (int)$previous_version['version_number'] ?> — <?= community_laws_escape($previous_version['title']) ?></strong>
+                                <div class="meta">
+                                    تصویب: <?= community_laws_escape($previous_version['approved_at'] ?? 'تاریخ ثبت نشده') ?>
+                                    — ثبت: <?= community_laws_escape($previous_version['created_at']) ?>
+                                </div>
+                                <?php if (!empty($previous_version['change_summary'])): ?>
+                                    <p><strong>خلاصهٔ تغییرات ثبت‌شده در نسخهٔ بعدی:</strong></p>
+                                    <p><?= nl2br(community_laws_escape($previous_version['change_summary'])) ?></p>
+                                <?php endif; ?>
+                                <div class="law-text"><?= community_laws_escape($previous_version['law_text']) ?></div>
+                                <hr style="border:0;border-top:1px solid #dbe4ee;margin:12px 0">
+                                <p><strong>متن نسخهٔ فعلی — نسخهٔ <?= (int)$law['version_number'] ?></strong></p>
+                                <div class="law-text"><?= community_laws_escape($law['law_text']) ?></div>
+                            </div>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </details>
                 <?php if (!empty($law['source_decision_id']) || !empty($law['source_topic_id'])): ?>
                     <p class="meta" style="margin-top:9px;padding:8px 10px;background:#f3f7fc;border-radius:7px">
                         📋 منشأ این قانون:
