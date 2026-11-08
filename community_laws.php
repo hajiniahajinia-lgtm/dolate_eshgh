@@ -3974,6 +3974,29 @@ details>summary{cursor:pointer;font-weight:bold}
                     $reports_stmt->close();
                 }
             }
+            $outcome_reviews_by_report=[];
+            if ($outcome_reports && $outcome_reports_ready) {
+                $outcome_report_ids=array_values(array_filter(array_map(
+                    static fn($row)=>(int)$row['id'],
+                    $outcome_reports
+                ),static fn($id)=>$id>0));
+                if ($outcome_report_ids) {
+                    $report_id_list=implode(',', $outcome_report_ids);
+                    $review_result=$conn->query(
+                        "SELECT report_id,verdict,rationale,human_impact,social_impact,
+                                environmental_impact,economic_impact,evidence,created_at
+                         FROM community_law_outcome_reviews
+                         WHERE report_id IN ($report_id_list)
+                         ORDER BY report_id,id"
+                    );
+                    if ($review_result) {
+                        while ($review_row=$review_result->fetch_assoc()) {
+                            $outcome_reviews_by_report[(int)$review_row['report_id']][]=$review_row;
+                        }
+                        $review_result->free();
+                    }
+                }
+            }
             $can_submit_outcome_report=false;
             if ($is_member && $outcome_reports_ready) {
                 foreach ($implementation_rows as $implementation_row) {
@@ -4088,6 +4111,24 @@ details>summary{cursor:pointer;font-weight:bold}
                                     <p><strong>شاخص‌های عددی:</strong></p>
                                     <pre style="white-space:pre-wrap;overflow-wrap:anywhere"><?= community_laws_escape(json_encode(json_decode($outcome_report['metrics_json'],true),JSON_UNESCAPED_UNICODE|JSON_PRETTY_PRINT)) ?></pre>
                                 <?php endif; ?>
+                                <?php foreach (($outcome_reviews_by_report[(int)$outcome_report['id']] ?? []) as $outcome_review): ?>
+                                    <div class="notice" style="margin-top:8px;background:#fff;border-color:#dbe4ee">
+                                        <strong><?= $outcome_review['verdict']==='confirm'?'ارزیابی موافق':'ارزیابی منتقدانه' ?></strong>
+                                        <span class="meta"> — <?= community_laws_escape($outcome_review['created_at']) ?></span>
+                                        <p><?= nl2br(community_laws_escape($outcome_review['rationale'])) ?></p>
+                                        <?php foreach ([
+                                            'human_impact'=>'اثر انسانی',
+                                            'social_impact'=>'اثر اجتماعی',
+                                            'environmental_impact'=>'اثر زیست‌محیطی',
+                                            'economic_impact'=>'اثر اقتصادی',
+                                            'evidence'=>'شواهد ارزیاب'
+                                        ] as $impact_key=>$impact_label): ?>
+                                            <?php if (!empty($outcome_review[$impact_key])): ?>
+                                                <p><strong><?= $impact_label ?>:</strong> <?= nl2br(community_laws_escape($outcome_review[$impact_key])) ?></p>
+                                            <?php endif; ?>
+                                        <?php endforeach; ?>
+                                    </div>
+                                <?php endforeach; ?>
                                 <?php
                                 $can_review_outcome=(bool)$is_member &&
                                     (int)$outcome_report['community_id']===$community_id &&
