@@ -63,7 +63,7 @@ function community_decision_record_snapshot(mysqli $conn, array $decision): bool
     }
 
     $stmt->bind_param(
-        'iiissssiidddd iis',
+        'iiissssiiddddiis',
         $communityId,
         $topicId,
         $ideaId,
