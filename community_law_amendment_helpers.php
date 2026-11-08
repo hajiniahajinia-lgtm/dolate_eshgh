@@ -312,7 +312,7 @@ if (!function_exists('community_law_submit_amendment_for_vote')) {
                         a.community_id,l.status AS law_status,l.current_version_id,l.originating_community_id,
                         base.status AS base_status,base.version_number,
                         proposed.status AS proposed_status,
-                        c.status AS conformity_status,c.parent_community_id,
+                        c.status AS conformity_status,c.parent_community_id,c.parent_law_version_id,
                         pl.status AS parent_law_status,pl.current_version_id AS parent_current_version_id,
                         pl.effective_at AS parent_effective_at,pl.expires_at AS parent_expires_at,
                         pl.repealed_at AS parent_repealed_at,pv.status AS parent_version_status
