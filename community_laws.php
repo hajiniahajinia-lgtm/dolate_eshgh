@@ -3052,6 +3052,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$is_member) community_laws_redirect($community_id, 'not_member');
         $version_id = (int)($_POST['law_version_id'] ?? 0);
         if ($version_id <= 0) community_laws_redirect($community_id, 'enactment_not_ready');
+
+        $amendment_lookup=$conn->prepare('SELECT law_id FROM community_law_amendment_cases WHERE proposed_version_id=? LIMIT 1');
+        if (!$amendment_lookup) community_laws_redirect($community_id,'save_error');
+        $amendment_lookup->bind_param('i',$version_id);
+        if (!$amendment_lookup->execute()) { $amendment_lookup->close(); community_laws_redirect($community_id,'save_error'); }
+        $amendment_row=$amendment_lookup->get_result()->fetch_assoc();
+        $amendment_lookup->close();
+        if ($amendment_row) {
+            $amendment_enacted=community_law_enact_amendment(
+                $conn,(int)$amendment_row['law_id'],$version_id,$community_id,$user_id
+            );
+            community_laws_redirect($community_id,$amendment_enacted?'law_enacted':'enactment_not_ready');
+        }
+
         if (!$conn->begin_transaction()) community_laws_redirect($community_id, 'save_error');
         try {
             // اعتبار snapshot مرجع‌ها تا پایان بررسی نهایی حفظ می‌شود؛
