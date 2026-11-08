@@ -600,4 +600,43 @@ if (!function_exists('community_law_change_finalize_vote')) {
         }
     }
 }
+
+if (!function_exists('community_law_change_mark_notice_read')) {
+    /**
+     * فقط عضو همان جامعه می‌تواند اعلان همان جامعه را بخواند؛
+     * منبع اعلان نیز باید صریحاً change یا scope باشد.
+     */
+    function community_law_change_mark_notice_read(
+        mysqli $conn,
+        int $community_id,
+        int $user_id,
+        int $notice_id,
+        string $notice_source
+    ): bool {
+        if ($community_id<=0 || $user_id<=0 || $notice_id<=0 ||
+            !in_array($notice_source,['change','scope'],true)) return false;
+
+        $member=$conn->prepare(
+            'SELECT 1 FROM community_members WHERE community_id=? AND user_id=? LIMIT 1'
+        );
+        if (!$member) return false;
+        $member->bind_param('ii',$community_id,$user_id);
+        $member_ok=$member->execute() && (bool)$member->get_result()->fetch_row();
+        $member->close();
+        if (!$member_ok) return false;
+
+        $table=$notice_source==='scope'
+            ? 'community_law_scope_notices'
+            : 'community_law_community_notices';
+        $mark=$conn->prepare(
+            "UPDATE {$table} SET read_at=NOW()
+             WHERE id=? AND community_id=? AND read_at IS NULL"
+        );
+        if (!$mark) return false;
+        $mark->bind_param('ii',$notice_id,$community_id);
+        $ok=$mark->execute() && $mark->affected_rows===1;
+        $mark->close();
+        return $ok;
+    }
+}
 ?>
