@@ -33,7 +33,9 @@ on:
       - 'tests/community_charter_amendments_integration_test.php'
       - 'community_decision_ledger.php'
       - 'migrations/20261108_community_decision_ledger.sql'
+      - 'migrations/20261108_community_decision_ledger_backfill.sql'
       - 'tests/community_decision_ledger_integration_test.php'
+      - 'tests/community_decision_ledger_backfill_integration_test.php'
       - 'tests/community_decision_knowledge_separation_integration_test.php'
       - 'tests/community_law_implementation_integration_test.php'
       - '.github/workflows/php-expertise-framework-check.yml'
@@ -53,6 +55,7 @@ on:
       - 'community_decision_ledger.php'
       - 'migrations/20261107_community_law_framework.sql'
       - 'migrations/20261108_community_decision_ledger.sql'
+      - 'migrations/20261108_community_decision_ledger_backfill.sql'
       - 'community_law_helpers.php'
       - 'set_community_parent.php'
       - 'request_member_removal.php'
@@ -69,6 +72,7 @@ on:
       - 'tests/community_charter_amendments_integration_test.php'
       - 'tests/community_law_implementation_integration_test.php'
       - 'tests/community_decision_ledger_integration_test.php'
+      - 'tests/community_decision_ledger_backfill_integration_test.php'
       - 'tests/community_decision_knowledge_separation_integration_test.php'
       - '.github/workflows/php-expertise-framework-check.yml'
 
@@ -109,6 +113,7 @@ jobs:
           php -l tests/community_law_implementation_integration_test.php
           php -l community_decision_ledger.php
           php -l tests/community_decision_ledger_integration_test.php
+          php -l tests/community_decision_ledger_backfill_integration_test.php
           php -l tests/community_decision_knowledge_separation_integration_test.php
       - name: Run community law hierarchy and charter amendment tests
         run: |
@@ -149,4 +154,5 @@ jobs:
           php tests/community_charter_amendments_integration_test.php
           php tests/community_law_implementation_integration_test.php
           php tests/community_decision_ledger_integration_test.php
+          php tests/community_decision_ledger_backfill_integration_test.php
           php tests/community_decision_knowledge_separation_integration_test.php
