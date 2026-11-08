@@ -3024,13 +3024,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         l.originating_community_id, v.status AS version_status,
                         fc.status AS final_status, fc.appeal_deadline,
                         rc.status AS screening_status, ac.status AS authority_status,
-                        fr.final_status AS vote_result
+                        fr.final_status AS vote_result,
+                        a.id AS amendment_case_id,a.status AS amendment_status,
+                        a.base_version_id AS amendment_base_version_id,
+                        a.conformity_case_id
                  FROM community_law_versions v
                  JOIN community_laws l ON l.id=v.law_id
                  JOIN community_law_final_review_cases fc ON fc.law_version_id=v.id
                  JOIN community_law_review_cases rc ON rc.law_version_id=v.id
                  JOIN community_law_authority_cases ac ON ac.law_version_id=v.id
                  JOIN community_law_final_results fr ON fr.law_version_id=v.id
+                 LEFT JOIN community_law_amendment_cases a ON a.proposed_version_id=v.id
                  WHERE v.id=? FOR UPDATE"
             );
             if (!$lock) throw new Exception('enactment lock prepare failed');
@@ -3038,16 +3042,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!$lock->execute()) throw new Exception('enactment lock failed');
             $law = $lock->get_result()->fetch_assoc();
             $lock->close();
+            $is_amendment_enactment=$law && !empty($law['amendment_case_id']);
+            $standard_enactment_state=$law &&
+                $law['law_status']==='appeal_period' &&
+                (int)$law['current_version_id']===$version_id;
+            $amendment_enactment_state=$is_amendment_enactment &&
+                $law['law_status']==='approved' &&
+                $law['amendment_status']==='parent_review_approved' &&
+                (int)$law['current_version_id']===(int)$law['amendment_base_version_id'];
             if (
-                !$law || (int)$law['originating_community_id'] !== $community_id ||
-                (int)$law['current_version_id'] !== $version_id ||
-                $law['law_status'] !== 'appeal_period' ||
-                $law['version_status'] !== 'appeal_period' ||
-                $law['screening_status'] !== 'screening_clear' ||
-                $law['authority_status'] !== 'confirmed' ||
-                $law['vote_result'] !== 'vote_passed' ||
-                !in_array($law['final_status'], ['appeal_period','appeal_hold'], true) ||
-                empty($law['appeal_deadline']) || strtotime($law['appeal_deadline']) > time()
+                !$law || (int)$law['originating_community_id']!==$community_id ||
+                (!$standard_enactment_state && !$amendment_enactment_state) ||
+                $law['version_status']!=='appeal_period' ||
+                $law['screening_status']!=='screening_clear' ||
+                $law['authority_status']!=='confirmed' ||
+                $law['vote_result']!=='vote_passed' ||
+                !in_array($law['final_status'],['appeal_period','appeal_hold'],true) ||
+                empty($law['appeal_deadline']) || strtotime($law['appeal_deadline'])>time()
             ) throw new RuntimeException('enactment_not_ready');
 
             // ابلاغ فقط وقتی مجاز است که snapshot منشور هنوز دقیقاً نسخه جاری و کامل باشد.
@@ -3127,6 +3138,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!$active_reference_scan) throw new Exception('active reference rescan failed');
             while ($active_reference = $active_reference_scan->fetch_assoc()) {
                 $active_version_id = (int)$active_reference['current_version_id'];
+                if ($is_amendment_enactment && (int)$active_reference['law_id']===(int)$law['law_id']) {
+                    // نسخهٔ پایهٔ همین قانون قرار است به‌صورت اتمی با نسخهٔ اصلاحی جایگزین شود.
+                    continue;
+                }
                 $applies_now = false;
                 foreach ($candidate_scope_ids as $target_community_id) {
                     $scope_match = community_law_scope_match_checked(
@@ -3176,11 +3191,58 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 !in_array((int)$law['originating_community_id'], $implementation_community_ids, true)
             ) throw new RuntimeException('law_scope_unresolved');
 
-            $law_update = $conn->prepare(
-                "UPDATE community_laws
-                 SET status='approved', effective_at=NOW()
-                 WHERE id=? AND status='appeal_period' AND current_version_id=?"
-            );
+            if ($is_amendment_enactment) {
+                $law_update=$conn->prepare(
+                    "UPDATE community_laws SET current_version_id=?
+                     WHERE id=? AND status='approved' AND current_version_id=?"
+                );
+                if (!$law_update) throw new Exception('amendment enactment law update prepare failed');
+                $base_version_id=(int)$law['amendment_base_version_id'];
+                $law_update->bind_param('iii',$version_id,$law['law_id'],$base_version_id);
+                if (!$law_update->execute() || $law_update->affected_rows!==1) throw new Exception('amendment enactment law update failed');
+                $law_update->close();
+
+                $base_update=$conn->prepare("UPDATE community_law_versions SET status='superseded' WHERE id=? AND law_id=? AND status='approved'");
+                if (!$base_update) throw new Exception('amendment base version supersede prepare failed');
+                $base_update->bind_param('ii',$base_version_id,$law['law_id']);
+                if (!$base_update->execute() || $base_update->affected_rows!==1) throw new Exception('amendment base version supersede failed');
+                $base_update->close();
+
+                $amendment_update=$conn->prepare("UPDATE community_law_amendment_cases SET status='approved',decided_at=NOW(),decision_note='نسخه اصلاحی پس از رأی محلی، بررسی انطباق، بررسی نهایی و پایان مهلت اعتراض ابلاغ شد.' WHERE id=? AND status='parent_review_approved'");
+                if (!$amendment_update) throw new Exception('amendment enactment case prepare failed');
+                $amendment_id=(int)$law['amendment_case_id'];
+                $amendment_update->bind_param('i',$amendment_id);
+                if (!$amendment_update->execute() || $amendment_update->affected_rows!==1) throw new Exception('amendment enactment case update failed');
+                $amendment_update->close();
+
+                $conformity_update=$conn->prepare("UPDATE community_law_conformity_cases SET status='resolved',resolved_at=NOW() WHERE id=? AND status='amendment_in_progress'");
+                if (!$conformity_update) throw new Exception('amendment enactment conformity prepare failed');
+                $conformity_id=(int)$law['conformity_case_id'];
+                $conformity_update->bind_param('i',$conformity_id);
+                if (!$conformity_update->execute() || $conformity_update->affected_rows!==1) throw new Exception('amendment enactment conformity update failed');
+                $conformity_update->close();
+
+                $amendment_event_details=json_encode([
+                    'base_version_id'=>$base_version_id,'enacted_version_id'=>$version_id,
+                    'law_current_version_updated'=>true,'previous_version_preserved_as_superseded'=>true
+                ],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
+                $amendment_event=$conn->prepare("INSERT INTO community_law_amendment_events (case_id,actor_user_id,event_type,details) VALUES (?,?,'amendment_enacted',?)");
+                if (!$amendment_event) throw new Exception('amendment enactment event prepare failed');
+                $amendment_event->bind_param('iis',$amendment_id,$user_id,$amendment_event_details);
+                if (!$amendment_event->execute()) throw new Exception('amendment enactment event failed');
+                $amendment_event->close();
+            } else {
+                $law_update = $conn->prepare(
+                    "UPDATE community_laws
+                     SET status='approved', effective_at=NOW()
+                     WHERE id=? AND status='appeal_period' AND current_version_id=?"
+                );
+                if (!$law_update) throw new Exception('enactment law update prepare failed');
+                $law_update->bind_param('ii', $law['law_id'], $version_id);
+                if (!$law_update->execute() || $law_update->affected_rows !== 1) throw new Exception('enactment law update failed');
+                $law_update->close();
+            }
+
             $version_update = $conn->prepare(
                 "UPDATE community_law_versions SET status='approved', approved_at=NOW()
                  WHERE id=? AND status='appeal_period'"
@@ -3189,21 +3251,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 "UPDATE community_law_final_review_cases SET status='enacted', enacted_at=NOW()
                  WHERE law_version_id=? AND status IN ('appeal_period','appeal_hold')"
             );
-            if (!$law_update || !$version_update || !$case_update) throw new Exception('enactment update prepare failed');
-            $law_update->bind_param('ii', $law['law_id'], $version_id);
+            if (!$version_update || !$case_update) throw new Exception('enactment version/case prepare failed');
             $version_update->bind_param('i', $version_id);
             $case_update->bind_param('i', $version_id);
-            if (!$law_update->execute() || $law_update->affected_rows !== 1) throw new Exception('enactment law update failed');
-            if (!$version_update->execute() || $version_update->affected_rows !== 1) throw new Exception('enactment version update failed');
-            if (!$case_update->execute() || $case_update->affected_rows !== 1) throw new Exception('enactment case update failed');
-            $law_update->close();
+            if (!$version_update->execute() || $version_update->affected_rows!==1) throw new Exception('enactment version update failed');
+            if (!$case_update->execute() || $case_update->affected_rows!==1) throw new Exception('enactment case update failed');
             $version_update->close();
             $case_update->close();
 
             if (!community_law_record_history(
                 $conn, (int)$law['law_id'], $version_id, $community_id, $user_id,
-                'law_enacted',
-                'پس از رأی مثبت، بررسی نهایی مستقل، پایان مهلت اعتراض و رسیدگی به همه اعتراض‌ها، قانون ابلاغ و لازم‌الاجرا شد.'
+                $is_amendment_enactment ? 'law_amendment_enacted' : 'law_enacted',
+                $is_amendment_enactment
+                    ? 'نسخه اصلاحی پس از رأی محلی، بررسی انطباق جامعه مادر، بررسی نهایی مستقل، پایان مهلت اعتراض و رسیدگی به اعتراض‌ها به‌صورت اتمی جایگزین نسخه قبلی شد.'
+                    : 'پس از رأی مثبت، بررسی نهایی مستقل، پایان مهلت اعتراض و رسیدگی به همه اعتراض‌ها، قانون ابلاغ و لازم‌الاجرا شد.'
             )) throw new Exception('enactment history failed');
             if (!$conn->commit()) throw new Exception('enactment commit failed');
             community_laws_redirect($community_id, 'law_enacted');
