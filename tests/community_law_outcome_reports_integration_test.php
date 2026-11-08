@@ -24,6 +24,7 @@ try {
     outcome_apply_sql($db,__DIR__.'/../migrations/20261107_community_law_framework.sql');
     outcome_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_outcome_reports.sql');
     outcome_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_outcome_reviews.sql');
+    outcome_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_outcome_followups.sql');
     $db->query("CREATE TEMPORARY TABLE community_members (community_id INT NOT NULL,user_id INT NOT NULL,PRIMARY KEY(community_id,user_id)) ENGINE=InnoDB");
     $db->query("INSERT INTO community_members VALUES (920,9700),(920,9701),(920,9702),(920,9703)");
     $db->query("INSERT INTO community_law_versions (id,law_id,version_number,title,law_text,proposed_by,status)
@@ -82,6 +83,53 @@ try {
     outcome_check($final_status && $final_status['review_status']==='verified','majority outcome is persisted');
     $review_history=(int)$db->query("SELECT COUNT(*) total FROM community_law_history WHERE law_id=990000 AND event_type='outcome_report_reviewed'")->fetch_assoc()['total'];
     outcome_check($review_history===3,'each independent review is recorded in law history');
+
+    // پروندهٔ دوم برای آزمون رسیدگی تکمیلی به گزارش مورد اختلاف.
+    $db->begin_transaction();
+    $disputed_report=community_law_submit_outcome_report(
+        $db,990000,990001,920,9700,'outcome','2026-02-01','2026-02-28',
+        'گزارش دوم برای آزمون رسیدگی تکمیلی','شواهد اولیه'
+    );
+    outcome_check(is_int($disputed_report) && $disputed_report>0,'second outcome report is created');
+    $db->commit();
+    foreach ([9701,9702,9703] as $reviewer_id) {
+        $challenge=community_law_review_outcome_report(
+            $db,$disputed_report,$reviewer_id,'challenge','شواهد برای تأیید گزارش کافی نیست'
+        );
+        outcome_check(is_array($challenge),'independent challenge review is accepted');
+    }
+    $disputed_status=$db->query("SELECT review_status FROM community_law_outcome_reports WHERE id=".(int)$disputed_report)->fetch_assoc();
+    outcome_check($disputed_status && $disputed_status['review_status']==='disputed','three reviews with majority challenge mark report disputed');
+
+    $db->begin_transaction();
+    $response_id=community_law_submit_outcome_followup(
+        $db,$disputed_report,9700,'executor_response',
+        'پاسخ گزارش‌دهنده به ایرادهای مطرح‌شده','اسناد تکمیلی پاسخ'
+    );
+    outcome_check(is_int($response_id) && $response_id>0,'report author can submit an immutable response');
+    $db->commit();
+
+    $db->begin_transaction();
+    $evidence_id=community_law_submit_outcome_followup(
+        $db,$disputed_report,9701,'additional_evidence',
+        'شاهد تکمیلی برای بررسی اختلاف','ارجاع به سند تازه'
+    );
+    outcome_check(is_int($evidence_id) && $evidence_id>0,'community member can add supplemental evidence');
+    $db->commit();
+
+    outcome_check(community_law_submit_outcome_followup(
+        $db,$disputed_report,9705,'additional_evidence','عضو نامعتبر'
+    )===false,'non-member cannot add follow-up evidence');
+    outcome_check(community_law_submit_outcome_followup(
+        $db,$disputed_report,9701,'executor_response','پاسخ غیرمجاز'
+    )===false,'ordinary member cannot impersonate executor or report author');
+    outcome_check(community_law_submit_outcome_followup(
+        $db,$report_id,9701,'additional_evidence','گزارش تأییدشده مورد اختلاف نیست'
+    )===false,'follow-up is rejected for a report that is not disputed');
+    $still_disputed=$db->query("SELECT review_status FROM community_law_outcome_reports WHERE id=".(int)$disputed_report)->fetch_assoc();
+    outcome_check($still_disputed && $still_disputed['review_status']==='disputed','follow-up does not alter report verdict');
+    $followup_history=(int)$db->query("SELECT COUNT(*) total FROM community_law_history WHERE law_id=990000 AND event_type='outcome_report_followup_added'")->fetch_assoc()['total'];
+    outcome_check($followup_history===2,'each follow-up entry is recorded in immutable law history');
     fwrite(STDOUT,"OK: community law outcome report integration checks passed.\n");
 } finally { $db->close(); }
 ?>
