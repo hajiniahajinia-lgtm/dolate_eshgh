@@ -39,6 +39,7 @@ try {
     change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_z1_amendment_20_voting.sql');
     change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_z1_amendment_30_parent_review.sql');
     change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_z2_scope_notices.sql');
+    change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_z3_version_notices.sql');
     require_once __DIR__.'/../community_law_helpers.php';
     require_once __DIR__.'/../community_law_amendment_helpers.php';
     require_once __DIR__.'/../community_law_change_helpers.php';
