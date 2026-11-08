@@ -10,6 +10,7 @@ on:
       - 'votes.php'
       - 'community_laws.php'
       - 'community.php'
+      - 'collective_knowledge_finalizer.php'
       - 'community_charter_amendment_action.php'
       - 'community_charter_amendments.php'
       - 'migrations/20261107_community_charter_foundation.sql'
@@ -82,6 +83,7 @@ jobs:
           php -l votes.php
           php -l community_laws.php
           php -l community.php
+          php -l collective_knowledge_finalizer.php
           php -l community_charter_amendment_action.php
           php -l community_charter_amendments.php
           php -l community_law_helpers.php
