@@ -2513,6 +2513,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($e->getMessage() === 'final_review_already_open') community_laws_redirect($community_id, 'final_review_already_open');
                 if ($e->getMessage() === 'insufficient_final_reviewers') community_laws_redirect($community_id, 'insufficient_final_reviewers');
                 if ($e->getMessage() === 'reference_law_changed') community_laws_redirect($community_id, 'reference_law_changed');
+                if ($e->getMessage() === 'law_implementation_snapshot_missing') community_laws_redirect($community_id, 'implementation_snapshot_missing');
             }
             error_log('[Dolate Eshgh final review open] ' . $e->getMessage());
             community_laws_redirect($community_id, 'save_error');
