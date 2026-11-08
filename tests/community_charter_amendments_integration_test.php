@@ -164,11 +164,12 @@ try {
     integration_check((int)$panelCounts['electorate'] === 10, 'ten public electorate snapshots were persisted by the production helper');
     integration_check((int)$panelCounts['overlap'] === 0, 'reviewers are never included in the public electorate snapshot');
 
-    $db->query(
-        "UPDATE community_charter_amendments
-         SET status='independent_review', review_opens_at=NOW(),
-             review_closes_at=DATE_ADD(NOW(), INTERVAL 1 DAY)
-         WHERE id=" . $amendmentId
+    $db->begin_transaction();
+    community_charter_start_independent_review($db, $amendmentId);
+    $db->commit();
+    integration_check(
+        (string)$db->query("SELECT status FROM community_charter_amendments WHERE id=" . $amendmentId)->fetch_assoc()['status'] === 'independent_review',
+        'the production transition helper starts the independent review stage'
     );
 
     $assessmentInsert = $db->prepare(
@@ -200,10 +201,12 @@ try {
         community_charter_amendment_reviewer_result($assessments) === 'approved',
         'five independent assessments with four supports pass the real review helper'
     );
-    $db->query(
-        "UPDATE community_charter_amendments SET status='public_voting',
-         voting_opens_at=NOW(), voting_closes_at=DATE_ADD(NOW(), INTERVAL 1 DAY)
-         WHERE id=" . $amendmentId
+    $db->begin_transaction();
+    community_charter_advance_to_public_voting($db, $amendmentId);
+    $db->commit();
+    integration_check(
+        (string)$db->query("SELECT status FROM community_charter_amendments WHERE id=" . $amendmentId)->fetch_assoc()['status'] === 'public_voting',
+        'the production transition helper advances an approved review to public voting'
     );
 
     $voteInsert = $db->prepare(
@@ -228,10 +231,12 @@ try {
         ) === 'approved',
         'stored ballot passes exact two-thirds turnout and three-quarters approval thresholds'
     );
-    $db->query(
-        "UPDATE community_charter_amendments SET status='appeal_period',
-         approved_at=NOW(), appeal_closes_at=DATE_ADD(NOW(), INTERVAL 1 DAY)
-         WHERE id=" . $amendmentId
+    $db->begin_transaction();
+    community_charter_advance_to_appeal_period($db, $amendmentId);
+    $db->commit();
+    integration_check(
+        (string)$db->query("SELECT status FROM community_charter_amendments WHERE id=" . $amendmentId)->fetch_assoc()['status'] === 'appeal_period',
+        'the production transition helper opens the appeal period after approval'
     );
 
     $newUsers = $db->prepare("INSERT INTO users (id,username) VALUES (?,?)");
