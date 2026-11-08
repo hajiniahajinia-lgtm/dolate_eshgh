@@ -54,7 +54,9 @@ $status_messages=[
 $schema_ready=community_law_tables_ready($conn) && community_law_change_tables_ready($conn);
 $notices=[]; $cases=[]; $changeable_laws=[];
 if ($schema_ready) {
-    $notice_stmt=$conn->prepare(
+    // اعلان‌های هر جامعه فقط برای اعضای همان جامعه قابل مشاهده است.
+    if ($is_member) {
+        $notice_stmt=$conn->prepare(
         "SELECT id,case_id,event_type,notice_text,created_at,read_at,notice_source
          FROM (
              SELECT id,case_id,event_type,notice_text,created_at,read_at,'change' AS notice_source
@@ -72,6 +74,7 @@ if ($schema_ready) {
             while ($row=$res->fetch_assoc()) $notices[]=$row;
         }
         $notice_stmt->close();
+        }
     }
 
     $case_stmt=$conn->prepare(
