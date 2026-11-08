@@ -26,6 +26,7 @@ try {
     outcome_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_outcome_reviews.sql');
     outcome_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_outcome_followups.sql');
     outcome_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_outcome_reassessments.sql');
+    outcome_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_outcome_corrective_actions.sql');
     $db->query("CREATE TEMPORARY TABLE community_members (community_id INT NOT NULL,user_id INT NOT NULL,PRIMARY KEY(community_id,user_id)) ENGINE=InnoDB");
     $db->query("INSERT INTO community_members VALUES (920,9700),(920,9701),(920,9702),(920,9703),(920,9704),(920,9706),(920,9707),(920,9708)");
     $db->query("INSERT INTO community_law_versions (id,law_id,version_number,title,law_text,proposed_by,status)
@@ -181,6 +182,59 @@ try {
         'second-stage outcome does not rewrite the original disputed report or suspend the law');
     $reassessment_history=(int)$db->query("SELECT COUNT(*) total FROM community_law_history WHERE law_id=990000 AND event_type='outcome_report_reassessed'")->fetch_assoc()['total'];
     outcome_check($reassessment_history===3,'each second-stage review is preserved in law history');
+
+
+    // اقدام اصلاحی فقط پس از نتیجهٔ نهایی «اصلاح برنامهٔ اجرا» و با مسئول فعلی مجاز است.
+    outcome_check(community_law_create_outcome_corrective_action(
+        $db,$report_id,9701,'اقدام نامعتبر','نباید برای گزارش تأییدشده ایجاد شود',
+        'معیار آزمون','2026-12-15'
+    )===false,'corrective action cannot be created without a finalized revise-plan reassessment');
+    $db->begin_transaction();
+    $corrective_action_id=community_law_create_outcome_corrective_action(
+        $db,$disputed_report,9701,'رفع مانع اجرایی',
+        'بازبینی گام‌های اجرایی و رفع مانع شناسایی‌شده',
+        'گزارش مستند رفع مانع و تکمیل گام‌های برنامه','2026-12-15'
+    );
+    outcome_check(is_int($corrective_action_id) && $corrective_action_id>0,
+        'community member can create a corrective action after revise-plan outcome');
+    $db->commit();
+    outcome_check(community_law_create_outcome_corrective_action(
+        $db,$disputed_report,9705,'اقدام عضو غیرمجاز','شرح اقدام','معیار موفقیت','2026-12-15'
+    )===false,'non-member cannot create a corrective action');
+    outcome_check(community_law_submit_outcome_corrective_update(
+        $db,$corrective_action_id,9701,'in_progress','گزارش از سوی عضو عادی'
+    )===false,'only assigned executor can report corrective action progress');
+
+    $db->begin_transaction();
+    $progress_id=community_law_submit_outcome_corrective_update(
+        $db,$corrective_action_id,9704,'in_progress','بررسی مانع آغاز شد'
+    );
+    outcome_check(is_int($progress_id) && $progress_id>0,'assigned executor can report progress');
+    $db->commit();
+    $db->begin_transaction();
+    $blocked_id=community_law_submit_outcome_corrective_update(
+        $db,$corrective_action_id,9704,'blocked','برای تکمیل کار به دادهٔ زیرشاخه نیاز است'
+    );
+    outcome_check(is_int($blocked_id) && $blocked_id>0,'assigned executor can record a blocker');
+    $db->commit();
+    $db->begin_transaction();
+    $completed_id=community_law_submit_outcome_corrective_update(
+        $db,$corrective_action_id,9704,'completed','اقدام تکمیل شد و معیار موفقیت مستند است','سند رفع مانع'
+    );
+    outcome_check(is_int($completed_id) && $completed_id>0,'assigned executor can report completion with evidence');
+    $db->commit();
+    outcome_check(community_law_submit_outcome_corrective_update(
+        $db,$corrective_action_id,9704,'in_progress','نباید پس از تکمیل دوباره باز شود'
+    )===false,'completed corrective action cannot be reopened through progress updates');
+    $corrective_updates=(int)$db->query(
+        "SELECT COUNT(*) total FROM community_law_outcome_corrective_updates WHERE action_id=".(int)$corrective_action_id
+    )->fetch_assoc()['total'];
+    outcome_check($corrective_updates===3,'all corrective progress entries remain as immutable history');
+    $corrective_history=(int)$db->query(
+        "SELECT COUNT(*) total FROM community_law_history
+         WHERE law_id=990000 AND event_type='outcome_corrective_action_updated'"
+    )->fetch_assoc()['total'];
+    outcome_check($corrective_history===3,'each corrective progress update is recorded in law history');
 
     fwrite(STDOUT,"OK: community law outcome report integration checks passed.\n");
 } finally { $db->close(); }
