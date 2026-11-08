@@ -11,7 +11,8 @@ if (!function_exists('community_law_change_tables_ready')) {
             'community_law_change_cases','community_law_change_reviewers',
             'community_law_change_assessments','community_law_change_electorate',
             'community_law_change_votes','community_law_community_notices',
-            'community_law_change_implementation_snapshots'
+            'community_law_change_implementation_snapshots','community_law_scope_notices',
+            'community_law_version_notices'
         ];
         $marks=implode(',',array_fill(0,count($required),'?'));
         $stmt=$conn->prepare("SELECT COUNT(*) AS total FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN ($marks)");
