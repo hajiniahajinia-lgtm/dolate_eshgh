@@ -13,7 +13,8 @@ $required=[
     '20261108_community_law_z1_amendment_10_submission.sql',
     '20261108_community_law_z1_amendment_20_voting.sql',
     '20261108_community_law_z1_amendment_30_parent_review.sql',
-    '20261108_community_law_z2_scope_notices.sql'
+    '20261108_community_law_z2_scope_notices.sql',
+    '20261108_community_law_z3_version_notices.sql'
 ];
 $positions=[];
 foreach($required as $name) {
