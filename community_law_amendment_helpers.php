@@ -507,7 +507,12 @@ if (!function_exists('community_law_submit_amendment_parent_review')) {
                         l.status AS local_law_status,l.current_version_id,
                         base.status AS base_status,proposed.status AS proposed_status,
                         pl.status AS parent_law_status,pl.current_version_id AS parent_current_version_id,
-                        pv.status AS parent_version_status,pl.effective_at,pl.expires_at,pl.repealed_at
+                        pv.status AS parent_version_status,pl.effective_at,pl.expires_at,pl.repealed_at,
+                        EXISTS (
+                            SELECT 1 FROM community_law_conformity_conflict_reviews prior
+                            JOIN community_law_conformity_conflicts conflict ON conflict.id=prior.conflict_id
+                            WHERE conflict.case_id=a.conformity_case_id AND prior.reviewer_user_id=?
+                        ) AS prior_conformity_reviewer
                  FROM community_law_amendment_cases a
                  JOIN community_law_conformity_cases c ON c.id=a.conformity_case_id
                  JOIN community_laws l ON l.id=a.law_id
@@ -518,13 +523,13 @@ if (!function_exists('community_law_submit_amendment_parent_review')) {
                  WHERE a.id=? FOR UPDATE"
             );
             if (!$lock) throw new RuntimeException('parent review lock prepare failed');
-            $lock->bind_param('i',$amendment_id);
+            $lock->bind_param('ii',$user_id,$amendment_id);
             if (!$lock->execute()) throw new RuntimeException('parent review lock failed');
             $row=$lock->get_result()->fetch_assoc();
             $lock->close();
             if (!$row || $row['status']!=='parent_review' ||
                 (int)$row['parent_community_id']!==$parent_community_id ||
-                (int)$row['proposed_by']===$user_id ||
+                (int)$row['proposed_by']===$user_id || (int)$row['prior_conformity_reviewer']===1 ||
                 $row['local_law_status']!=='approved' ||
                 (int)$row['current_version_id']!==(int)$row['base_version_id'] ||
                 $row['base_status']!=='approved' || $row['proposed_status']!=='voting' ||
