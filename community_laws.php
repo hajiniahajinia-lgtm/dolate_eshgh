@@ -2498,7 +2498,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (!$scope_stmt->execute()) throw new Exception('reference scope fingerprint lookup failed');
                 $scope_rows = [];
                 $scope_result = $scope_stmt->get_result();
-                while ($scope_row = $scope_result->fetch_assoc()) $scope_rows[] = $scope_row;
+                while ($scope_row = $scope_result->fetch_assoc()) $scope_rows[] = ['scope_community_id'=>(int)$scope_row['scope_community_id'],'include_descendants'=>(int)$scope_row['include_descendants']];
                 $scope_stmt->close();
                 if (!$scope_rows) throw new RuntimeException('reference_law_changed');
                 $fingerprint = hash('sha256', json_encode($scope_rows));
