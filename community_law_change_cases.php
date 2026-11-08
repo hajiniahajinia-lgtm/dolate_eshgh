@@ -201,7 +201,7 @@ button.secondary{background:#475569}details{border-top:1px solid #e2e8f0;padding
     <?php else: ?>
         <?php foreach ($notices as $notice): ?>
             <div class="notice <?= $notice['read_at']===null?'unread':'' ?>">
-                <strong><?= clcp_h($notice_labels[$notice['event_type']]??$notice['event_type']) ?><?= $notice['notice_source']==='scope'?' — تغییر دامنهٔ شمول':' — پرونده #'.(int)$notice['case_id'] ?></strong>
+                <strong><?= clcp_h($notice_labels[$notice['event_type']]??$notice['event_type']) ?><?= $notice['notice_source']==='scope'?' — تغییر دامنهٔ شمول':($notice['notice_source']==='version'?' — ابلاغ نسخهٔ جدید':' — پرونده #'.(int)$notice['case_id']) ?></strong>
                 <div><?= clcp_h($notice['notice_text']) ?></div>
                 <div class="meta"><?= clcp_h($notice['created_at']) ?><?= $notice['read_at']===null?' — خوانده‌نشده':'' ?></div>
                 <?php if ($is_member && $notice['read_at']===null): ?>
