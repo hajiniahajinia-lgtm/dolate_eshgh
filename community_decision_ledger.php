@@ -96,6 +96,7 @@ function community_decision_record_snapshot(mysqli $conn, array $decision): bool
 function community_decision_attach_knowledge_entry(mysqli $conn, int $topicId, int $entryId): bool
 {
     if ($topicId <= 0 || $entryId <= 0) return false;
+
     $stmt = $conn->prepare(
         "UPDATE community_decision_records
          SET knowledge_entry_id=?
@@ -104,9 +105,30 @@ function community_decision_attach_knowledge_entry(mysqli $conn, int $topicId, i
     );
     if (!$stmt) return false;
     $stmt->bind_param('iii', $entryId, $topicId, $entryId);
-    $ok = $stmt->execute();
+    $updated = $stmt->execute();
     $stmt->close();
-    return $ok;
+    if (!$updated) return false;
+
+    // موفقیت فقط وقتی اعلام می‌شود که تصمیم ثبت‌شده واقعاً به همین پرونده متصل باشد.
+    // این بررسی هم retry همان شناسه را می‌پذیرد و هم تلاش برای جایگزینی را رد می‌کند.
+    $verify = $conn->prepare(
+        "SELECT knowledge_entry_id
+         FROM community_decision_records
+         WHERE source_topic_id=? AND record_status='recorded'
+         LIMIT 1"
+    );
+    if (!$verify) return false;
+    $verify->bind_param('i', $topicId);
+    if (!$verify->execute()) {
+        $verify->close();
+        return false;
+    }
+    $row = $verify->get_result()->fetch_assoc();
+    $verify->close();
+
+    return $row !== null &&
+        $row['knowledge_entry_id'] !== null &&
+        (int)$row['knowledge_entry_id'] === $entryId;
 }
 
 /** بازیابی پیوندهای دانش و تصمیم بر اساس موضوع منشأ. */
