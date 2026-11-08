@@ -185,10 +185,50 @@ try {
     $still_current=(int)$db->query("SELECT current_version_id FROM community_laws WHERE id=9502")->fetch_assoc()['current_version_id'];
     change_case_check($still_current===99002,'a pending appeal leaves the previous approved version active');
     $db->query("UPDATE community_law_appeals SET status='dismissed',decided_at=NOW() WHERE law_version_id=".$second_version);
-    change_case_check(community_law_enact_amendment($db,9502,$second_version,90020,90201),'amendment is activated only after the complete final review, expired appeal period, and dismissal of all appeals');
+
+    // شکست عمدی اعلان جامعه زیرشاخه باید تمام فعال‌سازی اصلاحیه را rollback کند.
+    $db->query("CREATE TRIGGER test_fail_amendment_version_notice BEFORE INSERT ON community_law_version_notices
+        FOR EACH ROW BEGIN
+            IF NEW.law_version_id=".$second_version." AND NEW.community_id=90030 THEN
+                SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='forced amendment notice failure';
+            END IF;
+        END");
+    change_case_check(!community_law_enact_amendment($db,9502,$second_version,90020,90201),'a failed notice for one scoped descendant aborts amendment enactment');
+    $db->query("DROP TRIGGER test_fail_amendment_version_notice");
+    $rollback_state=$db->query("SELECT l.current_version_id,base.status AS base_status,v.status AS version_status,
+        a.status AS amendment_status,fc.status AS final_status,
+        (SELECT COUNT(*) FROM community_law_implementations i WHERE i.law_version_id=".$second_version.") AS copied_implementations,
+        (SELECT COUNT(*) FROM community_law_version_notices n WHERE n.law_version_id=".$second_version.") AS notices,
+        (SELECT COUNT(*) FROM community_law_amendment_events e WHERE e.case_id=".(int)$second_amendment_id." AND e.event_type='amendment_enacted') AS enactment_events,
+        (SELECT COUNT(*) FROM community_law_history h WHERE h.law_id=9502 AND h.event_type='law_amendment_enacted') AS enactment_history
+        FROM community_laws l JOIN community_law_versions base ON base.id=99002
+        JOIN community_law_versions v ON v.id=".$second_version."
+        JOIN community_law_amendment_cases a ON a.id=".(int)$second_amendment_id."
+        JOIN community_law_final_review_cases fc ON fc.law_version_id=".$second_version."
+        WHERE l.id=9502")->fetch_assoc();
+    change_case_check($rollback_state && (int)$rollback_state['current_version_id']===99002 &&
+        $rollback_state['base_status']==='approved' && $rollback_state['version_status']==='appeal_period' &&
+        $rollback_state['amendment_status']==='parent_review_approved' && $rollback_state['final_status']==='appeal_period' &&
+        (int)$rollback_state['copied_implementations']===0 && (int)$rollback_state['notices']===0 &&
+        (int)$rollback_state['enactment_events']===0 && (int)$rollback_state['enactment_history']===0,
+        'failed descendant notice rolls back the version pointer, statuses, copied implementation, event and history');
+
+    change_case_check(community_law_enact_amendment($db,9502,$second_version,90020,90201),'amendment is activated only after the complete final review, expired appeal period, dismissal of all appeals, and successful notices');
     $activated=$db->query("SELECT l.status AS law_status,l.current_version_id,base.status AS base_status,newv.status AS new_status,a.status AS amendment_status,c.status AS conformity_status,fc.status AS final_review_status,impl.status AS implementation_status,impl.progress_report FROM community_laws l JOIN community_law_versions base ON base.id=99002 JOIN community_law_versions newv ON newv.id=".(int)$second_version." JOIN community_law_amendment_cases a ON a.id=".(int)$second_amendment_id." JOIN community_law_conformity_cases c ON c.id=".(int)$conformity_case_id." JOIN community_law_final_review_cases fc ON fc.law_version_id=".(int)$second_version." JOIN community_law_implementations impl ON impl.law_version_id=".(int)$second_version." AND impl.community_id=90020 WHERE l.id=9502")->fetch_assoc();
     change_case_check($activated && $activated['law_status']==='approved' && (int)$activated['current_version_id']===$second_version && $activated['base_status']==='superseded' && $activated['new_status']==='approved' && $activated['amendment_status']==='approved' && $activated['conformity_status']==='resolved' && $activated['final_review_status']==='enacted','amendment activation atomically advances the law pointer and preserves the superseded version');
     change_case_check($activated && $activated['implementation_status']==='in_progress' && $activated['progress_report']==='پیشرفت ثبت‌شده پیش از اصلاحیه','implementation progress and accountability history are carried into the enacted amendment');
+    $notice_rows=$db->query("SELECT community_id,previous_version_id,event_type,details FROM community_law_version_notices WHERE law_version_id=".$second_version." ORDER BY community_id")->fetch_all(MYSQLI_ASSOC);
+    $notice_communities=array_map('intval',array_column($notice_rows,'community_id'));
+    $notice_details_ok=count($notice_rows)===2;
+    foreach($notice_rows as $notice_row) {
+        $details=json_decode((string)$notice_row['details'],true);
+        if ((int)$notice_row['previous_version_id']!==99002 || $notice_row['event_type']!=='version_activated' ||
+            !is_array($details) || (int)($details['previous_version_id']??0)!==99002 ||
+            (int)($details['current_version_id']??0)!==$second_version ||
+            ($details['implementation_state_copied']??false)!==true) $notice_details_ok=false;
+    }
+    change_case_check($notice_communities===[90020,90030] && $notice_details_ok,
+        'successful enactment sends exactly one version notice to the origin community and every descendant in scope with both version identifiers');
     change_case_check(!community_law_enact_amendment($db,9502,$second_version,90020,90201),'an already enacted amendment cannot be activated a second time');
 
 
