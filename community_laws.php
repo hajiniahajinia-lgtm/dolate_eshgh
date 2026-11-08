@@ -3890,7 +3890,7 @@ details>summary{cursor:pointer;font-weight:bold}
                     <p class="meta" style="margin-top:9px;padding:8px 10px;background:#f3f7fc;border-radius:7px">
                         📋 منشأ این قانون: تصمیم جمعی شمارهٔ <?= (int)$law['source_decision_id'] ?>
                         <?php if (!empty($law['source_topic_id'])): ?>
-                            — <a href="archived_topics.php?community_id=<?= (int)$law['originating_community_id'] ?>">مشاهدهٔ آرشیو تصمیم‌های جامعهٔ مبدأ</a>
+                            — <a href="archived_topics.php?community_id=<?= (int)$law['originating_community_id'] ?>#topic-card-<?= (int)$law['source_topic_id'] ?>">مشاهدهٔ موضوع منشأ در آرشیو جامعهٔ مبدأ</a>
                         <?php endif; ?>
                     </p>
                 <?php endif; ?>
