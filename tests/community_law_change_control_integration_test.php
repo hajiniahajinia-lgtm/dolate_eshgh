@@ -35,6 +35,7 @@ try {
     change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_z1_amendment_10_submission.sql');
     change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_z1_amendment_20_voting.sql');
     change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_z1_amendment_30_parent_review.sql');
+    change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_z2_scope_notices.sql');
     require_once __DIR__.'/../community_law_helpers.php';
     require_once __DIR__.'/../community_law_amendment_helpers.php';
     require_once __DIR__.'/../community_law_change_helpers.php';
@@ -272,6 +273,33 @@ try {
     change_case_check(community_law_open_change_case($db,9501,90200,90020,'repeal','درخواست اضطراری',null,true)===false,'emergency flag is restricted to suspension requests');
     $history=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_history WHERE law_id=9501 AND event_type IN ('change_case_submitted','change_case_independent_review_completed','change_case_parent_vote_opened','change_case_parent_vote_finalized')")->fetch_assoc()['n'];
     change_case_check($history>=4,'request, independent review, vote opening and parent vote are recorded in permanent law history (observed '.$history.')');
+    // تغییر دامنهٔ قانون باید برای جامعهٔ متأثر اعلان بسازد و سوابق اجرا را حفظ کند.
+    $db->query("INSERT INTO communities (id,parent_community_id) VALUES (91010,NULL),(91020,91010),(91030,91020)");
+    $db->query("INSERT INTO community_laws (id,law_code,originating_community_id,created_by,status,current_version_id,effective_at) VALUES (96001,'LAW-SCOPE-NOTICE-TEST',91020,90200,'approved',99601,NOW())");
+    $db->query("INSERT INTO community_law_versions (id,law_id,version_number,title,law_text,proposed_by,status,approved_at) VALUES (99601,96001,1,'قانون آزمایش اعلان دامنه','متن قانون',90200,'approved',NOW())");
+    $db->query("INSERT INTO community_law_scopes (law_version_id,scope_community_id,include_descendants) VALUES (99601,91020,1)");
+    $db->query("INSERT INTO community_law_implementations (law_version_id,community_id,responsible_user_id,local_plan,status,started_at,target_date,progress_report) VALUES (99601,91030,90200,'برنامهٔ جامعهٔ متأثر','in_progress',NOW(),DATE_ADD(CURDATE(),INTERVAL 20 DAY),'گزارش پیشرفت حفظ‌شونده')");
+    $old_scope_map=[91010=>0,91020=>91010,91030=>91020];
+    $new_scope_map=[91010=>0,91020=>91010,91030=>91010];
+    change_case_check(
+        community_law_record_hierarchy_scope_changes($db,$old_scope_map,$new_scope_map,91030,90200),
+        'hierarchy scope exit is recorded and notified'
+    );
+    $scope_left=$db->query("SELECT transition,notice_text FROM community_law_scope_notices WHERE law_id=96001 AND community_id=91030 ORDER BY id DESC LIMIT 1")->fetch_assoc();
+    $left_impl=$db->query("SELECT status,responsible_user_id,local_plan,progress_report FROM community_law_implementations WHERE law_version_id=99601 AND community_id=91030")->fetch_assoc();
+    change_case_check($scope_left && $scope_left['transition']==='scope_left' && $left_impl && $left_impl['status']==='not_applicable' && $left_impl['progress_report']==='گزارش پیشرفت حفظ‌شونده','leaving the law scope creates a notice and preserves implementation evidence');
+    change_case_check(
+        community_law_record_hierarchy_scope_changes($db,$new_scope_map,$old_scope_map,91030,90200),
+        'hierarchy scope re-entry is recorded and notified'
+    );
+    $scope_entered=$db->query("SELECT transition FROM community_law_scope_notices WHERE law_id=96001 AND community_id=91030 ORDER BY id DESC LIMIT 1")->fetch_assoc();
+    $reentered_impl=$db->query("SELECT status,responsible_user_id,local_plan,progress_report FROM community_law_implementations WHERE law_version_id=99601 AND community_id=91030")->fetch_assoc();
+    change_case_check($scope_entered && $scope_entered['transition']==='scope_entered' && $reentered_impl && $reentered_impl['status']==='pending' && $reentered_impl['responsible_user_id']==='90200' && $reentered_impl['local_plan']==='برنامهٔ جامعهٔ متأثر' && $reentered_impl['progress_report']==='گزارش پیشرفت حفظ‌شونده','re-entering scope restores a pending obligation without deleting prior owner, plan or progress');
+    $scope_history=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_history WHERE law_id=96001 AND event_type IN ('scope_left','scope_entered')")->fetch_assoc()['n'];
+    change_case_check($scope_history===2,'scope entry and exit both remain in permanent law history');
+    $scope_unread=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_scope_notices WHERE law_id=96001 AND community_id=91030 AND read_at IS NULL")->fetch_assoc()['n'];
+    change_case_check($scope_unread===2,'each scope transition creates a separate unread community notice');
+
     fwrite(STDOUT,"OK: community law change-control integration checks passed.\n");
 } finally { $db->close(); }
 ?>
