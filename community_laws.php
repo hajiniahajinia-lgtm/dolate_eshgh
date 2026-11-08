@@ -1987,7 +1987,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         v.status AS version_status, v.proposed_by,
                         rc.status AS review_status, rc.reviewer_quorum,
                         a.id AS amendment_case_id,a.status AS amendment_status,
-                        a.base_version_id AS amendment_base_version_id
+                        a.base_version_id AS amendment_base_version_id,a.conformity_case_id
                  FROM community_law_versions v
                  JOIN community_laws l ON l.id=v.law_id
                  JOIN community_law_review_cases rc ON rc.law_version_id=v.id
@@ -2084,6 +2084,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!$case_update->execute()) throw new Exception('legal review status update failed');
             $case_update->close();
 
+            if ($is_amendment_legal_assessment && in_array($review_status,['conflict_found','needs_revision'],true)) {
+                $amendment_id=(int)$case['amendment_case_id'];
+                $return_note='نتیجه غربالگری حقوقی مستقل: '.$review_status.'؛ اصلاح متن در اختیار جامعه محلی باقی می‌ماند.';
+                $amendment_return=$conn->prepare("UPDATE community_law_amendment_cases SET status='revision_required',decided_at=NOW(),decision_note=? WHERE id=? AND status='submitted'");
+                if (!$amendment_return) throw new Exception('amendment legal screening return prepare failed');
+                $amendment_return->bind_param('si',$return_note,$amendment_id);
+                if (!$amendment_return->execute() || $amendment_return->affected_rows!==1) throw new Exception('amendment legal screening return failed');
+                $amendment_return->close();
+                $version_return=$conn->prepare("UPDATE community_law_versions SET status='rejected' WHERE id=? AND status='proposed'");
+                if (!$version_return) throw new Exception('amendment legal screening version close prepare failed');
+                $version_return->bind_param('i',$version_id);
+                if (!$version_return->execute() || $version_return->affected_rows!==1) throw new Exception('amendment legal screening version close failed');
+                $version_return->close();
+                $conformity_return=$conn->prepare("UPDATE community_law_conformity_cases SET status='amendment_required' WHERE id=? AND status='amendment_in_progress'");
+                if (!$conformity_return) throw new Exception('amendment legal screening conformity return prepare failed');
+                $conformity_id=(int)$case['conformity_case_id'];
+                $conformity_return->bind_param('i',$conformity_id);
+                if (!$conformity_return->execute() || $conformity_return->affected_rows!==1) throw new Exception('amendment legal screening conformity return failed');
+                $conformity_return->close();
+            }
+
             // ایجاد پرونده اجرای اولیه برای تمام جوامع مشمول، بخشی از خود ابلاغ است.
             // در صورت شکست حتی یک رکورد، کل تراکنش ابلاغ rollback می‌شود.
             if (!$is_amendment_legal_assessment && !community_law_initialize_implementations(
@@ -2141,7 +2162,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         ac.status AS authority_status, ac.reviewer_quorum,
                         ac.derived_jurisdiction_level,
                         a.id AS amendment_case_id,a.status AS amendment_status,
-                        a.base_version_id AS amendment_base_version_id
+                        a.base_version_id AS amendment_base_version_id,a.conformity_case_id
                  FROM community_law_versions v
                  JOIN community_laws l ON l.id=v.law_id
                  JOIN community_law_review_cases rc ON rc.law_version_id=v.id
@@ -2295,6 +2316,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $case_update->bind_param('si', $authority_status, $version_id);
             if (!$case_update->execute()) throw new Exception('authority status update failed');
             $case_update->close();
+
+            if ($is_amendment_authority_assessment && in_array($authority_status,['conflict_found','needs_revision'],true)) {
+                $amendment_id=(int)$case['amendment_case_id'];
+                $return_note='نتیجه بررسی صلاحیت و قوانین مرجع: '.$authority_status.'؛ اصلاح متن در اختیار جامعه محلی باقی می‌ماند.';
+                $amendment_return=$conn->prepare("UPDATE community_law_amendment_cases SET status='revision_required',decided_at=NOW(),decision_note=? WHERE id=? AND status='submitted'");
+                if (!$amendment_return) throw new Exception('amendment authority review return prepare failed');
+                $amendment_return->bind_param('si',$return_note,$amendment_id);
+                if (!$amendment_return->execute() || $amendment_return->affected_rows!==1) throw new Exception('amendment authority review return failed');
+                $amendment_return->close();
+                $version_return=$conn->prepare("UPDATE community_law_versions SET status='rejected' WHERE id=? AND status='proposed'");
+                if (!$version_return) throw new Exception('amendment authority review version close prepare failed');
+                $version_return->bind_param('i',$version_id);
+                if (!$version_return->execute() || $version_return->affected_rows!==1) throw new Exception('amendment authority review version close failed');
+                $version_return->close();
+                $conformity_return=$conn->prepare("UPDATE community_law_conformity_cases SET status='amendment_required' WHERE id=? AND status='amendment_in_progress'");
+                if (!$conformity_return) throw new Exception('amendment authority review conformity return prepare failed');
+                $conformity_id=(int)$case['conformity_case_id'];
+                $conformity_return->bind_param('i',$conformity_id);
+                if (!$conformity_return->execute() || $conformity_return->affected_rows!==1) throw new Exception('amendment authority review conformity return failed');
+                $conformity_return->close();
+            }
 
             if (!community_law_record_history(
                 $conn, (int)$case['law_id'], $version_id, $community_id, $user_id,
