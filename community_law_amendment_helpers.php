@@ -385,6 +385,121 @@ if (!function_exists('community_law_submit_amendment_for_vote')) {
             }
             $rule_insert->close();
 
+            // اصلاحیه نیز پیش از رأی‌گیری باید غربالگری حقوقی و بررسی صلاحیت مستقل را طی کند.
+            $scope_ids=community_law_scope_community_ids($conn,$new_version_id);
+            $parent_map=community_law_load_parent_map($conn);
+            if (!$scope_ids || $parent_map===null || !community_law_parent_map_is_valid($parent_map) ||
+                !isset($parent_map[$community_id])) {
+                throw new RuntimeException('amendment legal review scope invalid');
+            }
+            $has_descendant_scope=false;
+            foreach ($scope_ids as $scope_id) {
+                if (!community_law_is_descendant_or_same($parent_map,$community_id,(int)$scope_id)) {
+                    throw new RuntimeException('amendment scope exceeds local authority');
+                }
+                if ((int)$scope_id!==$community_id) $has_descendant_scope=true;
+            }
+            $jurisdiction=$has_descendant_scope?'parent_shared':'local';
+
+            $screening_case=$conn->prepare(
+                "INSERT INTO community_law_review_cases
+                    (law_version_id,originating_community_id,status,reviewer_quorum,opened_by)
+                 VALUES (?,?,'pending',3,?)"
+            );
+            if (!$screening_case) throw new RuntimeException('amendment screening case prepare failed');
+            $screening_case->bind_param('iii',$new_version_id,$community_id,$user_id);
+            if (!$screening_case->execute()) throw new RuntimeException('amendment screening case insert failed');
+            $screening_case->close();
+
+            $authority_case=$conn->prepare(
+                "INSERT INTO community_law_authority_cases
+                    (law_version_id,derived_jurisdiction_level,status,reviewer_quorum,opened_by)
+                 VALUES (?,?,'pending',3,?)"
+            );
+            if (!$authority_case) throw new RuntimeException('amendment authority case prepare failed');
+            $authority_case->bind_param('isi',$new_version_id,$jurisdiction,$user_id);
+            if (!$authority_case->execute()) throw new RuntimeException('amendment authority case insert failed');
+            $authority_case->close();
+
+            $reference_insert=$conn->prepare(
+                "INSERT IGNORE INTO community_law_authority_references
+                    (law_version_id,reference_law_id,reference_law_version_id,reference_origin_community_id,relation_type)
+                 VALUES (?,?,?,?,?)"
+            );
+            if (!$reference_insert) throw new RuntimeException('amendment authority reference prepare failed');
+            $active_laws=$conn->query(
+                "SELECT l.id AS law_id,l.originating_community_id,l.current_version_id
+                 FROM community_laws l
+                 JOIN community_law_versions v ON v.id=l.current_version_id
+                 WHERE l.status='approved' AND v.status='approved'
+                   AND (l.effective_at IS NULL OR l.effective_at<=NOW())
+                   AND (l.expires_at IS NULL OR l.expires_at>NOW())
+                   AND l.repealed_at IS NULL"
+            );
+            if (!$active_laws) throw new RuntimeException('amendment active authority laws lookup failed');
+            while ($active_law=$active_laws->fetch_assoc()) {
+                $reference_law_id=(int)$active_law['law_id'];
+                if ($reference_law_id===(int)$row['law_id']) continue;
+                $reference_version=(int)$active_law['current_version_id'];
+                $reference_origin=(int)$active_law['originating_community_id'];
+                $applies=false;
+                foreach ($scope_ids as $scope_id) {
+                    $match=community_law_scope_match_checked($conn,$reference_version,(int)$scope_id);
+                    if ($match===null) { $active_laws->free(); throw new RuntimeException('amendment authority scope check failed'); }
+                    if ($match) { $applies=true; break; }
+                }
+                if (!$applies) continue;
+                $higher=false;
+                foreach ($scope_ids as $scope_id) {
+                    if ((int)$scope_id!==$reference_origin &&
+                        community_law_is_descendant_or_same($parent_map,(int)$scope_id,$reference_origin)) {
+                        $higher=true; break;
+                    }
+                }
+                if ($higher) $relation='higher';
+                elseif ($reference_origin===$community_id) $relation='same_level';
+                elseif (community_law_is_descendant_or_same($parent_map,$reference_origin,$community_id)) $relation='lower_level';
+                else $relation='peer';
+                $reference_insert->bind_param('iiiis',$new_version_id,$reference_law_id,$reference_version,$reference_origin,$relation);
+                if (!$reference_insert->execute()) { $active_laws->free(); throw new RuntimeException('amendment authority reference insert failed'); }
+            }
+            $active_laws->free();
+            $reference_insert->close();
+
+            $electorate_insert=$conn->prepare(
+                "INSERT IGNORE INTO community_law_review_electorate (law_version_id,user_id)
+                 SELECT ?,user_id FROM community_members WHERE community_id=? AND user_id<>?"
+            );
+            if (!$electorate_insert) throw new RuntimeException('amendment review electorate prepare failed');
+            foreach ($scope_ids as $scope_id) {
+                $scope_id=(int)$scope_id;
+                $electorate_insert->bind_param('iii',$new_version_id,$scope_id,$user_id);
+                if (!$electorate_insert->execute()) throw new RuntimeException('amendment review electorate snapshot failed');
+            }
+            $electorate_insert->close();
+
+            $capacity=$conn->prepare('SELECT COUNT(*) AS total FROM community_law_review_electorate WHERE law_version_id=?');
+            if (!$capacity) throw new RuntimeException('amendment reviewer capacity prepare failed');
+            $capacity->bind_param('i',$new_version_id);
+            if (!$capacity->execute()) throw new RuntimeException('amendment reviewer capacity lookup failed');
+            $reviewer_count=(int)$capacity->get_result()->fetch_assoc()['total'];
+            $capacity->close();
+            if ($reviewer_count<3) throw new RuntimeException('amendment requires at least three independent reviewers');
+
+            $reference_count=$conn->prepare('SELECT COUNT(*) AS total FROM community_law_authority_references WHERE law_version_id=?');
+            if (!$reference_count) throw new RuntimeException('amendment authority reference count prepare failed');
+            $reference_count->bind_param('i',$new_version_id);
+            if (!$reference_count->execute()) throw new RuntimeException('amendment authority reference count failed');
+            $authority_reference_count=(int)$reference_count->get_result()->fetch_assoc()['total'];
+            $reference_count->close();
+            if ($authority_reference_count<1) throw new RuntimeException('amendment has no active higher authority reference');
+
+            if (!community_law_record_history(
+                $conn,(int)$row['law_id'],$new_version_id,$community_id,$user_id,
+                'amendment_legal_reviews_opened',
+                'غربالگری حقوقی و بررسی صلاحیت مستقل برای نسخه اصلاحیه آغاز شد؛ تا تکمیل هر دو مرحله رأی‌گیری محلی آغاز نمی‌شود.'
+            )) throw new RuntimeException('amendment legal review history failed');
+
             $version_update=$conn->prepare(
                 "UPDATE community_law_versions SET status='proposed'
                  WHERE id=? AND status='draft'"
