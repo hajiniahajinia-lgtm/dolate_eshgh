@@ -2838,6 +2838,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                        WHERE a.law_version_id=? AND a.reviewer_user_id=cm.user_id
                    )
                    AND NOT EXISTS (
+                       SELECT 1 FROM community_law_amendment_parent_reviews pr
+                       JOIN community_law_amendment_cases am ON am.id=pr.case_id
+                       WHERE am.proposed_version_id=? AND pr.reviewer_user_id=cm.user_id
+                   )
+                   AND NOT EXISTS (
                        SELECT 1 FROM community_law_versions v
                        WHERE v.id=? AND v.proposed_by=cm.user_id
                    )"
@@ -2845,8 +2850,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!$electorate) throw new Exception('appeal electorate prepare failed');
             foreach ($appeal_scope_ids as $appeal_community_id) {
                 $electorate->bind_param(
-                    'iiiiiii', $appeal_id, $appeal_community_id, $user_id,
-                    $version_id, $version_id, $version_id, $version_id
+                    'iiiiiiii', $appeal_id, $appeal_community_id, $user_id,
+                    $version_id, $version_id, $version_id, $version_id, $version_id
                 );
                 if (!$electorate->execute()) throw new Exception('appeal electorate snapshot failed');
             }
