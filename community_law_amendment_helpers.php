@@ -5,11 +5,12 @@
  */
 if (!function_exists('community_law_amendment_tables_ready')) {
     function community_law_amendment_tables_ready(mysqli $conn): bool {
-        $tables=['community_law_amendment_cases','community_law_amendment_articles','community_law_amendment_events'];
-        $stmt=$conn->prepare("SELECT COUNT(*) AS n FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN (?,?,?)");
+        $tables=['community_law_amendment_cases','community_law_amendment_articles','community_law_amendment_events','community_law_amendment_parent_reviews'];
+        $stmt=$conn->prepare("SELECT COUNT(*) AS n FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN (?,?,?,?)");
         if (!$stmt) return false;
         $table1=$tables[0]; $table2=$tables[1]; $table3=$tables[2];
-        $stmt->bind_param('sss',$table1,$table2,$table3);
+        $table4=$tables[3];
+        $stmt->bind_param('ssss',$table1,$table2,$table3,$table4);
         if (!$stmt->execute()) { $stmt->close(); return false; }
         $n=(int)$stmt->get_result()->fetch_assoc()['n'];
         $stmt->close();
@@ -39,7 +40,16 @@ if (!function_exists('community_law_amendment_tables_ready')) {
         }
         $status_ready=(int)$status_check->get_result()->fetch_assoc()['n']===1;
         $status_check->close();
-        return $status_ready;
+        if (!$status_ready) return false;
+        $review_columns=$conn->prepare(
+            "SELECT COUNT(*) AS n FROM information_schema.columns
+             WHERE table_schema=DATABASE() AND table_name='community_law_amendment_cases'
+               AND column_name IN ('voting_rules_source_version_id','rules_adopted_by','rules_adopted_at')"
+        );
+        if (!$review_columns || !$review_columns->execute()) { if ($review_columns) $review_columns->close(); return false; }
+        $review_columns_count=(int)$review_columns->get_result()->fetch_assoc()['n'];
+        $review_columns->close();
+        return $review_columns_count===3;
     }
 }
 
@@ -433,6 +443,178 @@ if (!function_exists('community_law_submit_amendment_for_vote')) {
         } catch (Throwable $e) {
             if ($started) $conn->rollback();
             error_log('[Dolate Eshgh amendment submission] '.$e->getMessage());
+            return false;
+        }
+    }
+}
+
+
+if (!function_exists('community_law_submit_amendment_parent_review')) {
+    /**
+     * ارزیابی مستقل جامعهٔ مادر؛ فقط نتیجه و ارجاع مواد ثبت می‌شود و متن قانون محلی قابل ویرایش نیست.
+     * پس از دو ارزیابی مستقل، یا به بررسی نهایی می‌رود یا برای اصلاح دوباره به جامعهٔ محلی بازمی‌گردد.
+     *
+     * @param array<int,string> $conflicting_references
+     */
+    function community_law_submit_amendment_parent_review(
+        mysqli $conn,
+        int $amendment_id,
+        int $parent_community_id,
+        int $user_id,
+        string $finding,
+        array $conflicting_references,
+        string $reasoning,
+        ?string $evidence=null
+    ): bool {
+        $reasoning=trim($reasoning);
+        $evidence=$evidence!==null?trim($evidence):null;
+        if ($amendment_id<=0 || $parent_community_id<=0 || $user_id<=0 ||
+            !in_array($finding,['compatible','conflict_remains'],true) ||
+            $reasoning==='' || mb_strlen($reasoning)>30000 ||
+            ($evidence!==null && mb_strlen($evidence)>30000) ||
+            count($conflicting_references)>20 || !community_law_amendment_tables_ready($conn)) return false;
+
+        $refs=[];
+        foreach ($conflicting_references as $reference) {
+            $reference=trim((string)$reference);
+            if ($reference==='' || mb_strlen($reference)>120 || isset($refs[$reference])) return false;
+            $refs[$reference]=true;
+        }
+        if (($finding==='compatible' && count($refs)!==0) ||
+            ($finding==='conflict_remains' && count($refs)===0)) return false;
+
+        $started=false;
+        try {
+            if (!$conn->begin_transaction()) return false;
+            $started=true;
+            $member=$conn->prepare('SELECT 1 FROM community_members WHERE community_id=? AND user_id=? LIMIT 1');
+            if (!$member) throw new RuntimeException('parent review membership prepare failed');
+            $member->bind_param('ii',$parent_community_id,$user_id);
+            if (!$member->execute() || !$member->get_result()->fetch_row()) {
+                $member->close();
+                throw new RuntimeException('parent community membership required');
+            }
+            $member->close();
+
+            $lock=$conn->prepare(
+                "SELECT a.id,a.status,a.proposed_by,a.law_id,a.proposed_version_id,a.conformity_case_id,
+                        a.base_version_id,c.parent_community_id,c.community_id,
+                        l.status AS local_law_status,l.current_version_id,
+                        base.status AS base_status,proposed.status AS proposed_status,
+                        pl.status AS parent_law_status,pl.current_version_id AS parent_current_version_id,
+                        pv.status AS parent_version_status,pl.effective_at,pl.expires_at,pl.repealed_at
+                 FROM community_law_amendment_cases a
+                 JOIN community_law_conformity_cases c ON c.id=a.conformity_case_id
+                 JOIN community_laws l ON l.id=a.law_id
+                 JOIN community_law_versions base ON base.id=a.base_version_id AND base.law_id=a.law_id
+                 JOIN community_law_versions proposed ON proposed.id=a.proposed_version_id AND proposed.law_id=a.law_id
+                 JOIN community_laws pl ON pl.id=c.parent_law_id
+                 JOIN community_law_versions pv ON pv.id=c.parent_law_version_id AND pv.law_id=pl.id
+                 WHERE a.id=? FOR UPDATE"
+            );
+            if (!$lock) throw new RuntimeException('parent review lock prepare failed');
+            $lock->bind_param('i',$amendment_id);
+            if (!$lock->execute()) throw new RuntimeException('parent review lock failed');
+            $row=$lock->get_result()->fetch_assoc();
+            $lock->close();
+            if (!$row || $row['status']!=='parent_review' ||
+                (int)$row['parent_community_id']!==$parent_community_id ||
+                (int)$row['proposed_by']===$user_id ||
+                $row['local_law_status']!=='approved' ||
+                (int)$row['current_version_id']!==(int)$row['base_version_id'] ||
+                $row['base_status']!=='approved' || $row['proposed_status']!=='voting' ||
+                $row['parent_law_status']!=='approved' || $row['parent_version_status']!=='approved' ||
+                (int)$row['parent_current_version_id']!==(int)$row['parent_version_id'] ||
+                !empty($row['repealed_at']) ||
+                (!empty($row['effective_at']) && strtotime($row['effective_at'])>time()) ||
+                (!empty($row['expires_at']) && strtotime($row['expires_at'])<=time())) {
+                throw new RuntimeException('amendment parent review state is invalid');
+            }
+
+            $article_stmt=$conn->prepare('SELECT article_reference FROM community_law_amendment_articles WHERE case_id=?');
+            if (!$article_stmt) throw new RuntimeException('parent review article lookup prepare failed');
+            $article_stmt->bind_param('i',$amendment_id);
+            if (!$article_stmt->execute()) throw new RuntimeException('parent review article lookup failed');
+            $allowed=[];
+            $article_rows=$article_stmt->get_result();
+            while ($article=$article_rows->fetch_assoc()) $allowed[(string)$article['article_reference']]=true;
+            $article_stmt->close();
+            foreach ($refs as $reference=>$_) {
+                if (!isset($allowed[$reference])) throw new RuntimeException('parent review reference must identify an amended article');
+            }
+
+            $references_json=json_encode(array_keys($refs),JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
+            $review=$conn->prepare(
+                'INSERT INTO community_law_amendment_parent_reviews
+                    (case_id,reviewer_user_id,parent_community_id,finding,conflicting_article_references,reasoning,evidence)
+                 VALUES (?,?,?,?,?,?,?)'
+            );
+            if (!$review) throw new RuntimeException('parent review insert prepare failed');
+            $review->bind_param('iiissss',$amendment_id,$user_id,$parent_community_id,$finding,$references_json,$reasoning,$evidence);
+            if (!$review->execute()) throw new RuntimeException('parent review insert failed');
+            $review->close();
+
+            $count_stmt=$conn->prepare(
+                'SELECT COUNT(*) AS total,SUM(CASE WHEN finding=\'conflict_remains\' THEN 1 ELSE 0 END) AS conflicts
+                 FROM community_law_amendment_parent_reviews WHERE case_id=? AND parent_community_id=?'
+            );
+            if (!$count_stmt) throw new RuntimeException('parent review count prepare failed');
+            $count_stmt->bind_param('ii',$amendment_id,$parent_community_id);
+            if (!$count_stmt->execute()) throw new RuntimeException('parent review count failed');
+            $totals=$count_stmt->get_result()->fetch_assoc();
+            $count_stmt->close();
+
+            $next_status='parent_review';
+            $conformity_next='amendment_in_progress';
+            if ((int)$totals['total']>=2) {
+                if ((int)$totals['conflicts']>0) {
+                    $next_status='revision_required';
+                    $conformity_next='amendment_required';
+                } else {
+                    $next_status='parent_review_approved';
+                }
+                $case_update=$conn->prepare("UPDATE community_law_amendment_cases SET status=?,decided_at=NOW() WHERE id=? AND status='parent_review'");
+                if (!$case_update) throw new RuntimeException('parent review case update prepare failed');
+                $case_update->bind_param('si',$next_status,$amendment_id);
+                if (!$case_update->execute() || $case_update->affected_rows!==1) throw new RuntimeException('parent review case update failed');
+                $case_update->close();
+                if ($conformity_next==='amendment_required') {
+                    $conformity_id=(int)$row['conformity_case_id'];
+                    $conformity_update=$conn->prepare("UPDATE community_law_conformity_cases SET status='amendment_required' WHERE id=? AND status='amendment_in_progress'");
+                    if (!$conformity_update) throw new RuntimeException('parent review conformity update prepare failed');
+                    $conformity_update->bind_param('i',$conformity_id);
+                    if (!$conformity_update->execute() || $conformity_update->affected_rows!==1) throw new RuntimeException('parent review conformity update failed');
+                    $conformity_update->close();
+                }
+            }
+
+            $details=json_encode([
+                'finding'=>$finding,'conflicting_article_references'=>array_keys($refs),
+                'review_count'=>(int)$totals['total'],'conflict_reviews'=>(int)$totals['conflicts'],
+                'resulting_amendment_status'=>$next_status,
+                'parent_can_edit_local_text'=>false
+            ],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
+            $event=$conn->prepare(
+                "INSERT INTO community_law_amendment_events (case_id,actor_user_id,event_type,details)
+                 VALUES (?,?,'parent_compatibility_reviewed',?)"
+            );
+            if (!$event) throw new RuntimeException('parent review event prepare failed');
+            $event->bind_param('iis',$amendment_id,$user_id,$details);
+            if (!$event->execute()) throw new RuntimeException('parent review event failed');
+            $event->close();
+
+            if (!community_law_record_history(
+                $conn,(int)$row['law_id'],(int)$row['proposed_version_id'],$parent_community_id,$user_id,
+                'amendment_parent_compatibility_reviewed',
+                'بررسی مستقل جامعهٔ مادر ثبت شد؛ هیچ تغییری در متن پیشنهادی قانون محلی ایجاد نشد. نتیجه: '.$next_status
+            )) throw new RuntimeException('parent review history failed');
+
+            if (!$conn->commit()) throw new RuntimeException('parent review commit failed');
+            $started=false;
+            return true;
+        } catch (Throwable $e) {
+            if ($started) $conn->rollback();
+            error_log('[Dolate Eshgh amendment parent review] '.$e->getMessage());
             return false;
         }
     }
