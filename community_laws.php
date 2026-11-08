@@ -1274,6 +1274,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             )) throw new Exception('law vote history failed');
 
             if (!$conn->commit()) throw new Exception('law vote commit failed');
+            if ($is_amendment_vote) {
+                header('Location: community_law_amendments.php?community_id='.$community_id.'&status=amendment_voting_started');
+                exit;
+            }
             community_laws_redirect($community_id, 'voting_started');
         } catch (Throwable $e) {
             $conn->rollback();
@@ -1675,6 +1679,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             )) throw new Exception('tally history failed');
 
             if (!$conn->commit()) throw new Exception('tally commit failed');
+            if ($is_amendment_tally) {
+                header('Location: community_law_amendments.php?community_id='.$community_id.'&status=amendment_tally_saved');
+                exit;
+            }
             community_laws_redirect($community_id, 'tally_saved');
         } catch (Throwable $e) {
             $conn->rollback();
@@ -1706,7 +1714,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$conn->begin_transaction()) community_laws_redirect($community_id, 'save_error');
         try {
             $eligible = $conn->prepare(
-                "SELECT e.vote_weight
+                "SELECT e.vote_weight,
+                        EXISTS(SELECT 1 FROM community_law_amendment_cases a
+                               WHERE a.proposed_version_id=e.law_version_id AND a.status='local_voting') AS is_amendment_vote
                  FROM community_law_direct_electorate e
                  JOIN community_law_versions v ON v.id=e.law_version_id
                  JOIN community_laws l ON l.id=v.law_id
@@ -1745,6 +1755,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $vote_stmt->close();
 
             if (!$conn->commit()) throw new Exception('direct vote commit failed');
+            if (!empty($eligibility['is_amendment_vote'])) {
+                header('Location: community_law_amendments.php?community_id='.$community_id.'&status=amendment_vote_saved');
+                exit;
+            }
             community_laws_redirect($community_id, 'direct_law_vote_saved');
         } catch (Throwable $e) {
             $conn->rollback();
@@ -1765,7 +1779,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $eligible = $conn->prepare(
-            "SELECT e.vote_weight
+            "SELECT e.vote_weight,
+                    EXISTS(SELECT 1 FROM community_law_amendment_cases a
+                           WHERE a.proposed_version_id=e.law_version_id AND a.status='local_voting') AS is_amendment_vote
              FROM community_law_electorate e
              JOIN community_law_versions v ON v.id=e.law_version_id
              JOIN community_laws l ON l.id=v.law_id
@@ -1806,6 +1822,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $saved = $vote_stmt->execute();
         $vote_stmt->close();
         if (!$saved) community_laws_redirect($community_id, 'save_error');
+        if (!empty($eligibility['is_amendment_vote'])) {
+            header('Location: community_law_amendments.php?community_id='.$community_id.'&status=amendment_vote_saved');
+            exit;
+        }
         community_laws_redirect($community_id, 'law_vote_saved');
     }
 
