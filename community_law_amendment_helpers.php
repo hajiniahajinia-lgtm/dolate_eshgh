@@ -5,12 +5,12 @@
  */
 if (!function_exists('community_law_amendment_tables_ready')) {
     function community_law_amendment_tables_ready(mysqli $conn): bool {
-        $tables=['community_law_amendment_cases','community_law_amendment_articles','community_law_amendment_events','community_law_amendment_parent_reviews'];
-        $stmt=$conn->prepare("SELECT COUNT(*) AS n FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN (?,?,?,?)");
+        $tables=['community_law_amendment_cases','community_law_amendment_articles','community_law_amendment_events','community_law_amendment_parent_reviews','community_law_version_notices'];
+        $stmt=$conn->prepare("SELECT COUNT(*) AS n FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN (?,?,?,?,?)");
         if (!$stmt) return false;
         $table1=$tables[0]; $table2=$tables[1]; $table3=$tables[2];
-        $table4=$tables[3];
-        $stmt->bind_param('ssss',$table1,$table2,$table3,$table4);
+        $table4=$tables[3]; $table5=$tables[4];
+        $stmt->bind_param('sssss',$table1,$table2,$table3,$table4,$table5);
         if (!$stmt->execute()) { $stmt->close(); return false; }
         $n=(int)$stmt->get_result()->fetch_assoc()['n'];
         $stmt->close();
