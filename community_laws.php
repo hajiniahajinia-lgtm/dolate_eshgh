@@ -3861,6 +3861,7 @@ details>summary{cursor:pointer;font-weight:bold}
     <h2>⚖️ قوانین جامعه: <?= community_laws_escape($community['name']) ?></h2>
     <p class="muted">قوانین معتبر جامعه مادر، در صورت قرار داشتن این جامعه در دامنه شمول آن‌ها، در این صفحه نیز نمایش داده می‌شوند.</p>
     <p><a href="community.php?id=<?= $community_id ?>">↩ بازگشت به صفحه جامعه</a></p>
+    <p><a href="community_law_change_cases.php?community_id=<?= $community_id ?>">رسیدگی به درخواست‌های تعلیق، لغو و بازبینی اعتبار قوانین</a></p>
 </div>
 
 <?php if (isset($status_messages[$status])): ?>
