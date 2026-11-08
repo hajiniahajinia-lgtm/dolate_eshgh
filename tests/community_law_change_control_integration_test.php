@@ -22,6 +22,7 @@ try {
     change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_change_review.sql');
     change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_change_voting.sql');
     change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_change_effects.sql');
+    change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_conformity_workflow.sql');
     require_once __DIR__.'/../community_law_change_helpers.php';
 
     $db->query("CREATE TABLE IF NOT EXISTS communities (id INT PRIMARY KEY, parent_community_id INT NULL)");
