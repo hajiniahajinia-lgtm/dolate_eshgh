@@ -723,54 +723,9 @@ try {
         }
         $assigned->close();
 
-        $save = $conn->prepare(
-            "INSERT INTO community_charter_amendment_appeal_reviewers
-                (appeal_id,reviewer_user_id,verdict,reasoning)
-             VALUES (?,?,?,?)
-             ON DUPLICATE KEY UPDATE verdict=VALUES(verdict),reasoning=VALUES(reasoning),submitted_at=CURRENT_TIMESTAMP"
+        $appeal_status = community_charter_record_appeal_assessment(
+            $conn, $appeal_id, $user_id, $verdict, $reasoning
         );
-        if (!$save) throw new RuntimeException('ثبت ارزیابی اعتراض ممکن نیست.');
-        $save->bind_param('iiss', $appeal_id, $user_id, $verdict, $reasoning);
-        if (!$save->execute()) throw new RuntimeException('ثبت ارزیابی اعتراض انجام نشد.');
-        $save->close();
-
-        $tally = $conn->prepare(
-            "SELECT reviewer_user_id,verdict FROM community_charter_amendment_appeal_reviewers
-             WHERE appeal_id=? ORDER BY reviewer_user_id"
-        );
-        if (!$tally) throw new RuntimeException('جمع‌بندی ارزیابی اعتراض ممکن نیست.');
-        $tally->bind_param('i', $appeal_id);
-        if (!$tally->execute()) throw new RuntimeException('جمع‌بندی ارزیابی اعتراض انجام نشد.');
-        $appeal_assessments = [];
-        $tally_result = $tally->get_result();
-        while ($row = $tally_result->fetch_assoc()) $appeal_assessments[] = $row;
-        $tally->close();
-        $appeal_status = community_charter_amendment_appeal_result($appeal_assessments);
-        if ($appeal_status === 'invalid') throw new RuntimeException('ارزیابی‌های اعتراض ناسازگار است.');
-        if ($appeal_status === 'pending') $appeal_status = 'under_review';
-
-        if ($appeal_status !== 'under_review') {
-            $update_appeal = $conn->prepare(
-                "UPDATE community_charter_amendment_appeals SET status=?,resolved_at=NOW() WHERE id=?"
-            );
-            if (!$update_appeal) throw new RuntimeException('ثبت نتیجه اعتراض ممکن نیست.');
-            $update_appeal->bind_param('si', $appeal_status, $appeal_id);
-            if (!$update_appeal->execute()) throw new RuntimeException('ثبت نتیجه اعتراض انجام نشد.');
-            $update_appeal->close();
-            if ($appeal_status === 'upheld') {
-                $amendment_lock = $conn->prepare(
-                    "SELECT proposed_charter_version_id FROM community_charter_amendments WHERE id=? FOR UPDATE"
-                );
-                if (!$amendment_lock) throw new RuntimeException('قفل اصلاحیه ممکن نیست.');
-                $amendment_id = (int)$appeal['amendment_id'];
-                $amendment_lock->bind_param('i', $amendment_id);
-                if (!$amendment_lock->execute()) throw new RuntimeException('خواندن اصلاحیه انجام نشد.');
-                $amendment = $amendment_lock->get_result()->fetch_assoc();
-                $amendment_lock->close();
-                if (!$amendment) throw new RuntimeException('اصلاحیه پیدا نشد.');
-                cam_reject_amendment($conn, $amendment_id, (int)$amendment['proposed_charter_version_id']);
-            }
-        }
         if (!$conn->commit()) throw new RuntimeException('ثبت نتیجه رسیدگی نهایی نشد.');
         cam_redirect($appeal_status === 'under_review' ? 'appeal_assessment_saved' : 'appeal_' . $appeal_status);
     }
