@@ -53,3 +53,20 @@ CREATE TABLE IF NOT EXISTS community_law_conformity_events (
     PRIMARY KEY (id),
     KEY idx_law_conformity_event_case (case_id,id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- دو بررسی مستقل و جداگانه از منظر جامعهٔ محلی و جامعهٔ مادر
+CREATE TABLE IF NOT EXISTS community_law_conformity_conflict_reviews (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    conflict_id BIGINT UNSIGNED NOT NULL,
+    reviewer_user_id INT NOT NULL,
+    reviewer_community_id INT NOT NULL,
+    finding ENUM('conflict_confirmed','no_conflict') NOT NULL,
+    reasoning MEDIUMTEXT NOT NULL,
+    evidence MEDIUMTEXT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_conformity_conflict_reviewer (conflict_id,reviewer_user_id),
+    UNIQUE KEY uq_conformity_conflict_side (conflict_id,reviewer_community_id),
+    KEY idx_conformity_conflict_review_user (reviewer_user_id,created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
