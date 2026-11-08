@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS community_law_amendment_cases (
     law_id BIGINT UNSIGNED NOT NULL,
     base_version_id BIGINT UNSIGNED NOT NULL,
     proposed_version_id BIGINT UNSIGNED NOT NULL,
+    conformity_case_id BIGINT UNSIGNED NOT NULL,
     community_id INT NOT NULL,
     proposed_by INT NOT NULL,
     status ENUM('draft','submitted','local_voting','parent_review','approved','rejected','cancelled') NOT NULL DEFAULT 'draft',
@@ -19,7 +20,8 @@ CREATE TABLE IF NOT EXISTS community_law_amendment_cases (
     UNIQUE KEY uq_law_amendment_proposed_version (proposed_version_id),
     KEY idx_law_amendment_law_status (law_id,status,created_at),
     KEY idx_law_amendment_community_status (community_id,status,created_at),
-    KEY idx_law_amendment_base_version (base_version_id)
+    KEY idx_law_amendment_base_version (base_version_id),
+    KEY idx_law_amendment_conformity_case (conformity_case_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS community_law_amendment_articles (
