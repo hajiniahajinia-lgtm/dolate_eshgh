@@ -72,11 +72,11 @@ if (!function_exists('community_law_open_change_case')) {
         $effective=$law_row['effective_at'];
         if ($request_type==='suspend' &&
             ($law_status!=='approved' || ($effective!==null && strtotime($effective)>time()) ||
-             ($expiry!==null && strtotime($expiry)<=time()+8*86400))) return false;
+             ($expiry!==null && strtotime($expiry)<=time()))) return false;
         if ($request_type==='repeal' && !in_array($law_status,['approved','suspended'],true)) return false;
         if ($request_type==='review_expiry' && $law_status!=='approved') return false;
         if ($request_type==='reinstate' &&
-            ($law_status!=='suspended' || ($expiry!==null && strtotime($expiry)<=time()))) return false;
+            ($law_status!=='suspended' || ($expiry!==null && strtotime($expiry)<=time()+8*86400))) return false;
         if ($requester_community_id!==$origin_id &&
             !community_law_scope_matches($conn,$version_id,$requester_community_id)) return false;
 
