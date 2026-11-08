@@ -54,7 +54,7 @@ try {
     while ($row = $rows->fetch_assoc()) $actual[] = $row;
     $rows->free();
     implementation_check(
-        array_column($actual, 'community_id') === [10, 20, 30],
+        array_map('intval', array_column($actual, 'community_id')) === [10, 20, 30],
         'duplicate community ids do not create duplicate implementation records'
     );
     implementation_check(
