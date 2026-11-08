@@ -3966,6 +3966,15 @@ details>summary{cursor:pointer;font-weight:bold}
                     $reports_stmt->close();
                 }
             }
+            $can_submit_outcome_report=false;
+            if ($is_member && $outcome_reports_ready) {
+                foreach ($implementation_rows as $implementation_row) {
+                    if ((int)$implementation_row['community_id']===$community_id) {
+                        $can_submit_outcome_report=true;
+                        break;
+                    }
+                }
+            }
             ?>
             <div class="card" style="background:#fbfdff;box-shadow:none">
                 <strong><?= community_laws_escape($law['title']) ?></strong>
@@ -4073,7 +4082,7 @@ details>summary{cursor:pointer;font-weight:bold}
                             </div>
                         <?php endforeach; ?>
                     <?php endif; ?>
-                    <?php if ($is_member && $outcome_reports_ready): ?>
+                    <?php if ($can_submit_outcome_report): ?>
                         <p class="muted">گزارش فقط برای جامعه‌ای ثبت می‌شود که عضو آن هستید. ثبت گزارش به معنی تأیید صحت یا موفقیت آن نیست.</p>
                         <form method="post" action="community_law_outcome_action.php">
                             <input type="hidden" name="csrf_token" value="<?= community_laws_escape($csrf_token) ?>">
