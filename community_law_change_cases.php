@@ -55,12 +55,18 @@ $schema_ready=community_law_tables_ready($conn) && community_law_change_tables_r
 $notices=[]; $cases=[]; $changeable_laws=[];
 if ($schema_ready) {
     $notice_stmt=$conn->prepare(
-        'SELECT id,case_id,event_type,notice_text,created_at,read_at
-         FROM community_law_community_notices WHERE community_id=?
-         ORDER BY id DESC LIMIT 30'
+        "SELECT id,case_id,event_type,notice_text,created_at,read_at,notice_source
+         FROM (
+             SELECT id,case_id,event_type,notice_text,created_at,read_at,'change' AS notice_source
+             FROM community_law_community_notices WHERE community_id=?
+             UNION ALL
+             SELECT id,NULL AS case_id,transition AS event_type,notice_text,created_at,read_at,'scope' AS notice_source
+             FROM community_law_scope_notices WHERE community_id=?
+         ) notices
+         ORDER BY created_at DESC,id DESC LIMIT 30"
     );
     if ($notice_stmt) {
-        $notice_stmt->bind_param('i',$community_id);
+        $notice_stmt->bind_param('ii',$community_id,$community_id);
         if ($notice_stmt->execute()) {
             $res=$notice_stmt->get_result();
             while ($row=$res->fetch_assoc()) $notices[]=$row;
@@ -139,7 +145,8 @@ $notice_labels=[
     'change_requested'=>'درخواست تازه','change_vote_result'=>'نتیجه رأی جامعه مادر',
     'suspension_requested'=>'درخواست تعلیق','suspended'=>'تعلیق قانون',
     'repealed'=>'لغو قانون','expiry_review_requested'=>'درخواست بازبینی اعتبار',
-    'expiry_updated'=>'به‌روزرسانی اعتبار','reinstated'=>'بازگردانی قانون'
+    'expiry_updated'=>'به‌روزرسانی اعتبار','reinstated'=>'بازگردانی قانون',
+    'scope_entered'=>'ورود به دامنهٔ قانون','scope_left'=>'خروج از دامنهٔ قانون'
 ];
 ?>
 <!DOCTYPE html>
@@ -187,7 +194,7 @@ button.secondary{background:#475569}details{border-top:1px solid #e2e8f0;padding
     <?php else: ?>
         <?php foreach ($notices as $notice): ?>
             <div class="notice <?= $notice['read_at']===null?'unread':'' ?>">
-                <strong><?= clcp_h($notice_labels[$notice['event_type']]??$notice['event_type']) ?> — پرونده #<?= (int)$notice['case_id'] ?></strong>
+                <strong><?= clcp_h($notice_labels[$notice['event_type']]??$notice['event_type']) ?><?= $notice['notice_source']==='scope'?' — تغییر دامنهٔ شمول':' — پرونده #'.(int)$notice['case_id'] ?></strong>
                 <div><?= clcp_h($notice['notice_text']) ?></div>
                 <div class="meta"><?= clcp_h($notice['created_at']) ?><?= $notice['read_at']===null?' — خوانده‌نشده':'' ?></div>
                 <?php if ($is_member && $notice['read_at']===null): ?>
@@ -195,6 +202,7 @@ button.secondary{background:#475569}details{border-top:1px solid #e2e8f0;padding
                         <input type="hidden" name="csrf_token" value="<?= clcp_h($csrf) ?>">
                         <input type="hidden" name="community_id" value="<?= $community_id ?>">
                         <input type="hidden" name="notice_id" value="<?= (int)$notice['id'] ?>">
+                        <input type="hidden" name="notice_source" value="<?= clcp_h($notice['notice_source']) ?>">
                         <button class="secondary" name="action" value="mark_notice_read">علامت‌گذاری به‌عنوان خوانده‌شده</button>
                     </form>
                 <?php endif; ?>
