@@ -106,7 +106,7 @@ if (!function_exists('community_law_create_amendment_draft')) {
             $member->close();
 
             $case_stmt=$conn->prepare(
-                "SELECT c.id,c.community_id,c.local_law_id,c.local_law_version_id,c.parent_community_id,c.parent_law_version_id,c.status,
+                "SELECT c.id,c.community_id,c.local_law_id,c.local_law_version_id,c.parent_community_id,c.parent_law_version_id,c.status,child.parent_community_id AS current_parent_community_id,
                         l.originating_community_id,l.status AS law_status,l.current_version_id,
                         v.version_number,v.title,v.law_text,v.implementation_plan,v.source_topic_id,v.source_idea_id,
                         v.source_decision_id,v.status AS version_status,
@@ -118,6 +118,7 @@ if (!function_exists('community_law_create_amendment_draft')) {
                  JOIN community_law_versions v ON v.id=c.local_law_version_id
                  JOIN community_laws pl ON pl.id=c.parent_law_id
                  JOIN community_law_versions pv ON pv.id=c.parent_law_version_id AND pv.law_id=pl.id
+                 JOIN communities child ON child.id=c.community_id
                  WHERE c.id=? FOR UPDATE"
             );
             if (!$case_stmt) throw new RuntimeException('conformity case prepare failed');
@@ -126,6 +127,7 @@ if (!function_exists('community_law_create_amendment_draft')) {
             $record=$case_stmt->get_result()->fetch_assoc();
             $case_stmt->close();
             if (!$record || (int)$record['community_id']!==$community_id ||
+                (int)$record['current_parent_community_id']!==(int)$record['parent_community_id'] ||
                 (int)$record['originating_community_id']!==$community_id ||
                 $record['status']!=='amendment_required' ||
                 $record['law_status']!=='approved' || $record['version_status']!=='approved' ||
