@@ -394,6 +394,18 @@ if (!function_exists('community_law_submit_amendment_for_vote')) {
             }
             $case_update->close();
 
+            $conformity_update=$conn->prepare(
+                "UPDATE community_law_conformity_cases SET status='amendment_in_progress'
+                 WHERE id=? AND status='amendment_required'"
+            );
+            if (!$conformity_update) throw new RuntimeException('conformity amendment state prepare failed');
+            $conformity_case_id=(int)$row['conformity_case_id'];
+            $conformity_update->bind_param('i',$conformity_case_id);
+            if (!$conformity_update->execute() || $conformity_update->affected_rows!==1) {
+                throw new RuntimeException('conformity amendment state update failed');
+            }
+            $conformity_update->close();
+
             $details=json_encode([
                 'base_version_id'=>$base_version_id,'proposed_version_id'=>$new_version_id,
                 'voting_rules_source_version_id'=>$base_version_id,
