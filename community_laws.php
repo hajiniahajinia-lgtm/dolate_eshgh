@@ -51,10 +51,10 @@ $outcome_reports_ready=false;
 if ($schema_ready) {
     $outcome_table_check=$conn->query(
         "SELECT COUNT(*) AS total FROM information_schema.tables
-         WHERE table_schema=DATABASE() AND table_name IN ('community_law_outcome_reports','community_law_outcome_reviews','community_law_outcome_followups','community_law_outcome_reassessments','community_law_outcome_reassessment_reviews')"
+         WHERE table_schema=DATABASE() AND table_name IN ('community_law_outcome_reports','community_law_outcome_reviews','community_law_outcome_followups','community_law_outcome_reassessments','community_law_outcome_reassessment_reviews','community_law_outcome_corrective_actions','community_law_outcome_corrective_updates')"
     );
     $outcome_reports_ready=$outcome_table_check &&
-        (int)$outcome_table_check->fetch_assoc()['total']===5;
+        (int)$outcome_table_check->fetch_assoc()['total']===7;
     if ($outcome_table_check) $outcome_table_check->free();
 }
 
@@ -3753,6 +3753,10 @@ $status_messages = [
     'outcome_reassessment_saved' => 'ارزیابی مستقل مرحلهٔ دوم ثبت شد؛ نتیجه پس از سه ارزیاب تازه مشخص می‌شود.',
     'outcome_reassessment_finalized' => 'رسیدگی مستقل مرحلهٔ دوم با رأی سه ارزیاب تازه نهایی شد؛ گزارش اولیه و وضعیت قانون تغییر خودکار نکرده‌اند.',
     'outcome_reassessment_failed' => 'رسیدگی تکمیلی ثبت نشد؛ وجود پاسخ مجری و شواهد تازه و نداشتن تعارض منافع را بررسی کنید.',
+    'outcome_corrective_action_saved' => 'اقدام اصلاحی ثبت شد و مسئول اجرای تعیین‌شده می‌تواند پیشرفت آن را گزارش کند.',
+    'outcome_corrective_action_failed' => 'اقدام اصلاحی ثبت نشد؛ نتیجهٔ نهایی باید اصلاح برنامهٔ اجرا باشد و مسئول اجرا باید تعیین شده باشد.',
+    'outcome_corrective_update_saved' => 'گزارش پیشرفت اقدام اصلاحی ثبت شد.',
+    'outcome_corrective_update_failed' => 'گزارش پیشرفت ثبت نشد؛ فقط مسئول تعیین‌شده می‌تواند وضعیت اقدام را به‌روزرسانی کند.',
     'submitted_for_review' => 'پیشنهاد برای غربالگری حقوقی مستقل ارسال شد؛ رأی‌گیری تا تکمیل این مرحله متوقف است.',
     'legal_assessment_saved' => 'ارزیابی مستقل ثبت شد.',
     'legal_assessment_not_allowed' => 'شما برای ارزیابی این پیشنهاد واجد شرایط نیستید یا مرحله بررسی بسته شده است.',
@@ -4062,6 +4066,45 @@ details>summary{cursor:pointer;font-weight:bold}
                     }
                 }
             }
+            $outcome_corrective_actions_by_report=[];
+            $outcome_corrective_updates_by_action=[];
+            if ($outcome_reports && $outcome_reports_ready) {
+                $report_id_list=implode(',',array_values(array_filter(array_map(
+                    static fn($row)=>(int)$row['id'],$outcome_reports
+                ),static fn($id)=>$id>0)));
+                if ($report_id_list!=='') {
+                    $actions_result=$conn->query(
+                        "SELECT id,report_id,community_id,created_by,responsible_user_id,title,
+                                action_details,success_criteria,target_date,created_at
+                         FROM community_law_outcome_corrective_actions
+                         WHERE report_id IN ($report_id_list) ORDER BY id"
+                    );
+                    if ($actions_result) {
+                        while ($action_row=$actions_result->fetch_assoc()) {
+                            $outcome_corrective_actions_by_report[(int)$action_row['report_id']][]=$action_row;
+                        }
+                        $actions_result->free();
+                    }
+                    $action_ids=[];
+                    foreach ($outcome_corrective_actions_by_report as $rows) {
+                        foreach ($rows as $action_row) $action_ids[]=(int)$action_row['id'];
+                    }
+                    if ($action_ids) {
+                        $action_id_list=implode(',',array_filter($action_ids,static fn($id)=>$id>0));
+                        $updates_result=$conn->query(
+                            "SELECT action_id,status,update_text,evidence,submitted_by,created_at
+                             FROM community_law_outcome_corrective_updates
+                             WHERE action_id IN ($action_id_list) ORDER BY id"
+                        );
+                        if ($updates_result) {
+                            while ($update_row=$updates_result->fetch_assoc()) {
+                                $outcome_corrective_updates_by_action[(int)$update_row['action_id']][]=$update_row;
+                            }
+                            $updates_result->free();
+                        }
+                    }
+                }
+            }
             $can_submit_outcome_report=false;
             if ($is_member && $outcome_reports_ready) {
                 foreach ($implementation_rows as $implementation_row) {
@@ -4322,6 +4365,83 @@ details>summary{cursor:pointer;font-weight:bold}
                                             <p class="muted">برای آغاز رسیدگی دوم، ابتدا باید هم پاسخ گزارش‌دهنده یا مسئول اجرا و هم شواهد تکمیلی عضو جامعه ثبت شوند.</p>
                                         <?php endif; ?>
                                         <p class="muted">این نتیجه گزارش اولیه را بازنویسی نمی‌کند و قانون را خودکار تعلیق یا لغو نمی‌کند. پیشنهاد بازنگری قانون باید از فرایند رسمی تغییر قانون عبور کند.</p>
+                                    </div>
+                                <?php endif; ?>
+                                <?php
+                                $corrective_actions=$outcome_corrective_actions_by_report[(int)$outcome_report['id']] ?? [];
+                                $can_create_corrective_action=(bool)$is_member &&
+                                    (int)$outcome_report['community_id']===$community_id &&
+                                    $reassessment_case && $reassessment_case['status']==='finalized' &&
+                                    $reassessment_case['final_outcome']==='revise_execution_plan' &&
+                                    (int)($outcome_report['responsible_user_id']??0)>0;
+                                ?>
+                                <?php if ($reassessment_case && $reassessment_case['status']==='finalized' &&
+                                    $reassessment_case['final_outcome']==='revise_execution_plan'): ?>
+                                    <div class="notice" style="margin-top:10px;background:#f8fafc;border-color:#cbd5e1">
+                                        <strong>اقدام‌های اصلاحی و پیگیری اجرا</strong>
+                                        <p class="muted">اقدام‌ها به مسئول اجرای تعیین‌شده برای همین قانون سپرده می‌شوند؛ این بخش اختیار تغییر مسئول یا تغییر متن قانون را ایجاد نمی‌کند.</p>
+                                        <?php foreach ($corrective_actions as $corrective_action): ?>
+                                            <?php
+                                            $action_updates=$outcome_corrective_updates_by_action[(int)$corrective_action['id']] ?? [];
+                                            $latest_action_update=$action_updates ? $action_updates[count($action_updates)-1] : null;
+                                            $action_status=$latest_action_update['status'] ?? 'open';
+                                            $action_status_labels=['open'=>'در انتظار آغاز','in_progress'=>'در حال اجرا','blocked'=>'با مانع روبه‌رو','completed'=>'تکمیل‌شده'];
+                                            ?>
+                                            <div style="border-top:1px solid #e2e8f0;padding-top:8px;margin-top:8px">
+                                                <strong><?= community_laws_escape($corrective_action['title']) ?></strong>
+                                                <p><?= nl2br(community_laws_escape($corrective_action['action_details'])) ?></p>
+                                                <p><strong>معیار موفقیت:</strong> <?= nl2br(community_laws_escape($corrective_action['success_criteria'])) ?></p>
+                                                <p class="meta">مهلت: <?= community_laws_escape($corrective_action['target_date']) ?> — وضعیت: <?= $action_status_labels[$action_status] ?? $action_status ?></p>
+                                                <?php foreach ($action_updates as $action_update): ?>
+                                                    <div class="meta" style="margin-top:6px">
+                                                        <?= community_laws_escape($action_update['created_at']) ?> — <?= $action_status_labels[$action_update['status']] ?? $action_update['status'] ?>
+                                                        <p><?= nl2br(community_laws_escape($action_update['update_text'])) ?></p>
+                                                        <?php if (!empty($action_update['evidence'])): ?><p>شواهد: <?= nl2br(community_laws_escape($action_update['evidence'])) ?></p><?php endif; ?>
+                                                    </div>
+                                                <?php endforeach; ?>
+                                                <?php if ((int)$corrective_action['responsible_user_id']===$user_id && $action_status!=='completed'): ?>
+                                                    <form method="post" action="community_law_outcome_action.php">
+                                                        <input type="hidden" name="action" value="update_corrective_action">
+                                                        <input type="hidden" name="csrf_token" value="<?= community_laws_escape($csrf_token) ?>">
+                                                        <input type="hidden" name="community_id" value="<?= $community_id ?>">
+                                                        <input type="hidden" name="corrective_action_id" value="<?= (int)$corrective_action['id'] ?>">
+                                                        <label>وضعیت جدید</label>
+                                                        <select name="corrective_status" required>
+                                                            <option value="in_progress">در حال اجرا</option>
+                                                            <option value="blocked">با مانع روبه‌رو</option>
+                                                            <option value="completed">تکمیل‌شده</option>
+                                                        </select>
+                                                        <label>گزارش پیشرفت یا مانع</label>
+                                                        <textarea name="corrective_update_text" maxlength="20000" required></textarea>
+                                                        <label>شواهد (اختیاری)</label>
+                                                        <textarea name="corrective_evidence" maxlength="20000"></textarea>
+                                                        <button type="submit">ثبت گزارش پیشرفت</button>
+                                                    </form>
+                                                <?php endif; ?>
+                                            </div>
+                                        <?php endforeach; ?>
+                                        <?php if ($can_create_corrective_action): ?>
+                                            <details style="margin-top:8px">
+                                                <summary>تعریف اقدام اصلاحی جدید</summary>
+                                                <form method="post" action="community_law_outcome_action.php">
+                                                    <input type="hidden" name="action" value="create_corrective_action">
+                                                    <input type="hidden" name="csrf_token" value="<?= community_laws_escape($csrf_token) ?>">
+                                                    <input type="hidden" name="community_id" value="<?= $community_id ?>">
+                                                    <input type="hidden" name="report_id" value="<?= (int)$outcome_report['id'] ?>">
+                                                    <label>عنوان اقدام</label>
+                                                    <input type="text" name="action_title" maxlength="200" required>
+                                                    <label>شرح اقدام و گام‌های انجام</label>
+                                                    <textarea name="action_details" maxlength="20000" required></textarea>
+                                                    <label>معیار قابل سنجش موفقیت</label>
+                                                    <textarea name="success_criteria" maxlength="12000" required></textarea>
+                                                    <label>مهلت اجرا</label>
+                                                    <input type="date" name="target_date" required>
+                                                    <button type="submit">ثبت اقدام اصلاحی</button>
+                                                </form>
+                                            </details>
+                                        <?php elseif (!$corrective_actions && (int)($outcome_report['responsible_user_id']??0)<=0): ?>
+                                            <p class="muted">برای ثبت اقدام اصلاحی، ابتدا باید در بخش اجرای قانون مسئول اجرا تعیین شود.</p>
+                                        <?php endif; ?>
                                     </div>
                                 <?php endif; ?>
                                 <?php
