@@ -20,15 +20,71 @@ function create_collective_knowledge_decision($conn, $topic_id, $fallback_user_i
         $meta_stmt->close();
         if (!$meta_row) throw new Exception("topic voting metadata not found");
 
-        $existing_stmt = $conn->prepare("SELECT entry_id FROM collective_knowledge_decisions WHERE topic_id=? LIMIT 1");
-        if (!$existing_stmt) throw new Exception("decision check prepare: " . $conn->error);
-        $existing_stmt->bind_param("i", $topic_id);
-        if (!$existing_stmt->execute()) throw new Exception("decision check execute: " . $existing_stmt->error);
-        $existing = $existing_stmt->get_result()->fetch_assoc();
-        $existing_stmt->close();
-        if ($existing) {
-            $conn->commit();
-            return true;
+        // جدول snapshot قدیمی اختياری است؛ دفتر مستقل تصمیم مرجع جدید خواهد بود.
+        $legacy_table_check = $conn->query(
+            "SELECT 1 FROM information_schema.tables
+             WHERE table_schema=DATABASE() AND table_name='collective_knowledge_decisions'
+             LIMIT 1"
+        );
+        if (!$legacy_table_check) throw new Exception("legacy decision table check failed: " . $conn->error);
+        $legacy_decisions_available = (bool)$legacy_table_check->fetch_row();
+        $legacy_table_check->free();
+
+        if ($legacy_decisions_available) {
+            $existing_stmt = $conn->prepare(
+                "SELECT entry_id FROM collective_knowledge_decisions WHERE topic_id=? LIMIT 1"
+            );
+            if (!$existing_stmt) throw new Exception("decision check prepare: " . $conn->error);
+            $existing_stmt->bind_param("i", $topic_id);
+            if (!$existing_stmt->execute()) throw new Exception("decision check execute: " . $existing_stmt->error);
+            $existing = $existing_stmt->get_result()->fetch_assoc();
+            $existing_stmt->close();
+            if ($existing) {
+                // مهاجرت تدریجی: snapshotهای قدیمی هنگام مراجعه به دفتر مستقل منتقل می‌شوند.
+                $legacy_snapshot_stmt = $conn->prepare(
+                    "SELECT t.community_id, d.selected_idea_id, d.selected_idea_content,
+                            d.topic_purpose_snapshot, d.acceptance_status, d.enforceability_status,
+                            d.yes_count, d.no_count, d.yes_weight, d.no_weight,
+                            d.yes_percent, d.weighted_yes_percent,
+                            d.enforce_yes_count, d.enforce_no_count, d.finalized_at
+                     FROM collective_knowledge_decisions d
+                     JOIN topics t ON t.id=d.topic_id
+                     WHERE d.topic_id=? LIMIT 1"
+                );
+                if (!$legacy_snapshot_stmt) throw new Exception("legacy snapshot lookup prepare: " . $conn->error);
+                $legacy_snapshot_stmt->bind_param("i", $topic_id);
+                if (!$legacy_snapshot_stmt->execute()) throw new Exception("legacy snapshot lookup execute: " . $legacy_snapshot_stmt->error);
+                $legacy_row = $legacy_snapshot_stmt->get_result()->fetch_assoc();
+                $legacy_snapshot_stmt->close();
+                if (!$legacy_row) throw new Exception("legacy decision exists but its source topic is missing");
+
+                $legacy_idea_id = (int)$legacy_row['selected_idea_id'] > 0
+                    ? (int)$legacy_row['selected_idea_id']
+                    : null;
+                $legacy_snapshot = [
+                    'community_id' => (int)$legacy_row['community_id'],
+                    'source_topic_id' => (int)$topic_id,
+                    'source_idea_id' => $legacy_idea_id,
+                    'topic_purpose_snapshot' => (string)$legacy_row['topic_purpose_snapshot'],
+                    'selected_idea_content' => $legacy_row['selected_idea_content'],
+                    'acceptance_status' => (string)$legacy_row['acceptance_status'],
+                    'enforceability_status' => (string)$legacy_row['enforceability_status'],
+                    'yes_count' => (int)$legacy_row['yes_count'],
+                    'no_count' => (int)$legacy_row['no_count'],
+                    'yes_weight' => (float)$legacy_row['yes_weight'],
+                    'no_weight' => (float)$legacy_row['no_weight'],
+                    'yes_percent' => (float)$legacy_row['yes_percent'],
+                    'weighted_yes_percent' => (float)$legacy_row['weighted_yes_percent'],
+                    'enforce_yes_count' => (int)$legacy_row['enforce_yes_count'],
+                    'enforce_no_count' => (int)$legacy_row['enforce_no_count'],
+                    'decided_at' => (string)$legacy_row['finalized_at'],
+                ];
+                if (!community_decision_record_snapshot($conn, $legacy_snapshot)) {
+                    throw new Exception("legacy decision could not be copied to the independent ledger");
+                }
+                if (!$conn->commit()) throw new Exception("legacy decision migration commit failed");
+                return true;
+            }
         }
 
         $topic_stmt = $conn->prepare("
@@ -156,17 +212,19 @@ function create_collective_knowledge_decision($conn, $topic_id, $fallback_user_i
         if (!$relocked_meta) throw new Exception("topic voting metadata disappeared before knowledge creation");
 
         // درخواست هم‌زمان دیگری ممکن است در فاصلهٔ دو تراکنش پروندهٔ سازگاری قدیمی را ساخته باشد.
-        $legacy_existing_stmt = $conn->prepare(
-            "SELECT entry_id FROM collective_knowledge_decisions WHERE topic_id=? LIMIT 1"
-        );
-        if (!$legacy_existing_stmt) throw new Exception("legacy decision recheck prepare: " . $conn->error);
-        $legacy_existing_stmt->bind_param("i", $topic_id);
-        if (!$legacy_existing_stmt->execute()) throw new Exception("legacy decision recheck execute: " . $legacy_existing_stmt->error);
-        $legacy_existing = $legacy_existing_stmt->get_result()->fetch_assoc();
-        $legacy_existing_stmt->close();
-        if ($legacy_existing) {
-            if (!$conn->commit()) throw new Exception("knowledge retry commit failed");
-            return true;
+        if ($legacy_decisions_available) {
+            $legacy_existing_stmt = $conn->prepare(
+                "SELECT entry_id FROM collective_knowledge_decisions WHERE topic_id=? LIMIT 1"
+            );
+            if (!$legacy_existing_stmt) throw new Exception("legacy decision recheck prepare: " . $conn->error);
+            $legacy_existing_stmt->bind_param("i", $topic_id);
+            if (!$legacy_existing_stmt->execute()) throw new Exception("legacy decision recheck execute: " . $legacy_existing_stmt->error);
+            $legacy_existing = $legacy_existing_stmt->get_result()->fetch_assoc();
+            $legacy_existing_stmt->close();
+            if ($legacy_existing) {
+                if (!$conn->commit()) throw new Exception("knowledge retry commit failed");
+                return true;
+            }
         }
 
         $creator_id = (int)$topic['user_id'] > 0 ? (int)$topic['user_id'] : (int)$fallback_user_id;
@@ -211,22 +269,26 @@ function create_collective_knowledge_decision($conn, $topic_id, $fallback_user_i
             $entry_stmt->close();
         }
 
-        $decision_stmt = $conn->prepare("
-            INSERT INTO collective_knowledge_decisions
-                (topic_id, entry_id, selected_idea_id, selected_idea_content, topic_purpose_snapshot,
-                 yes_count, no_count, yes_weight, no_weight, yes_percent, weighted_yes_percent,
-                 enforce_yes_count, enforce_no_count, acceptance_status, enforceability_status, finalized_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
-        ");
-        if (!$decision_stmt) throw new Exception("decision insert prepare: " . $conn->error);
-        $decision_stmt->bind_param(
-            "iiissiiddddiiss",
-            $topic_id, $entry_id, $source_idea_id, $idea_content, $purpose,
-            $yes_count, $no_count, $yes_weight, $no_weight, $yes_percent, $weighted_yes_percent,
-            $enforce_yes, $enforce_no, $acceptance_status, $enforceability_status
-        );
-        if (!$decision_stmt->execute()) throw new Exception("decision insert execute: " . $decision_stmt->error);
-        $decision_stmt->close();
+        // تا زمانی که مصرف‌کنندگان قدیمی به دفتر مستقل منتقل نشده‌اند،
+        // snapshot سازگاری فقط در صورت وجود جدول قدیمی نیز نوشته می‌شود.
+        if ($legacy_decisions_available) {
+            $decision_stmt = $conn->prepare("
+                INSERT INTO collective_knowledge_decisions
+                    (topic_id, entry_id, selected_idea_id, selected_idea_content, topic_purpose_snapshot,
+                     yes_count, no_count, yes_weight, no_weight, yes_percent, weighted_yes_percent,
+                     enforce_yes_count, enforce_no_count, acceptance_status, enforceability_status, finalized_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+            ");
+            if (!$decision_stmt) throw new Exception("decision insert prepare: " . $conn->error);
+            $decision_stmt->bind_param(
+                "iiissiiddddiiss",
+                $topic_id, $entry_id, $source_idea_id, $idea_content, $purpose,
+                $yes_count, $no_count, $yes_weight, $no_weight, $yes_percent, $weighted_yes_percent,
+                $enforce_yes, $enforce_no, $acceptance_status, $enforceability_status
+            );
+            if (!$decision_stmt->execute()) throw new Exception("decision insert execute: " . $decision_stmt->error);
+            $decision_stmt->close();
+        }
 
         if (!$conn->commit()) throw new Exception("transaction commit failed");
         return true;
