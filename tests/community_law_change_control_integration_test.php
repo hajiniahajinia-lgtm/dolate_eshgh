@@ -219,7 +219,7 @@ try {
     change_case_check(count($reviewers)===5,'five independent reviewers are assigned');
     foreach ($reviewers as $reviewer) change_case_check(!in_array((int)$reviewer['reviewer_user_id'],[90100,90200],true),'proposer and requester are excluded from review');
     $notice_count=(int)$db->query('SELECT COUNT(*) AS n FROM community_law_community_notices WHERE case_id='.(int)$case_id)->fetch_assoc()['n'];
-    change_case_check($notice_count===2,'all communities in the law scope receive a pending-request notice');
+    change_case_check($notice_count===3,'all communities across the parent, direct child, and deep descendant law scope receive a pending-request notice');
     foreach ($reviewers as $index=>$reviewer) {
         $verdict=$index<4?'uphold':'dismiss';
         $review_status=community_law_submit_change_assessment($db,$case_id,(int)$reviewer['reviewer_user_id'],$verdict,'بررسی مستند و مستقل انجام شد و دلایل کافی ثبت گردید.');
