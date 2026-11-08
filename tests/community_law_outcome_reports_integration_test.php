@@ -20,8 +20,12 @@ $port=(int)(getenv('DB_PORT')?:3306);
 $db=new mysqli($host,$user,$password,$name,$port);
 $db->set_charset('utf8mb4');
 try {
+    outcome_apply_sql($db,__DIR__.'/../migrations/20261106_collective_knowledge_library.sql');
+    outcome_apply_sql($db,__DIR__.'/../migrations/20261108_community_decision_ledger.sql');
+    outcome_apply_sql($db,__DIR__.'/../migrations/20261108_community_decision_knowledge_link.sql');
     outcome_apply_sql($db,__DIR__.'/../migrations/20261106_community_law_objections_schema_repair.sql');
     outcome_apply_sql($db,__DIR__.'/../migrations/20261107_community_law_framework.sql');
+    outcome_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_decision_origin.sql');
     outcome_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_outcome_reports.sql');
     outcome_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_outcome_reviews.sql');
     outcome_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_outcome_followups.sql');
@@ -29,8 +33,20 @@ try {
     outcome_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_outcome_corrective_actions.sql');
     $db->query("CREATE TEMPORARY TABLE community_members (community_id INT NOT NULL,user_id INT NOT NULL,PRIMARY KEY(community_id,user_id)) ENGINE=InnoDB");
     $db->query("INSERT INTO community_members VALUES (920,9700),(920,9701),(920,9702),(920,9703),(920,9704),(920,9706),(920,9707),(920,9708)");
-    $db->query("INSERT INTO community_law_versions (id,law_id,version_number,title,law_text,proposed_by,status)
-                VALUES (990001,990000,1,'قانون آزمایشی','متن قانون',9700,'approved')");
+    $db->query("INSERT INTO collective_knowledge_entries
+                (title,entry_type,summary,content,visibility,community_id,source_topic_id,created_by)
+                VALUES ('دانش منشأ آزمایشی','lesson','خلاصهٔ دانش منشأ','متن دانش منشأ','community',920,990099,9700)");
+    $source_knowledge_entry_id=(int)$db->insert_id;
+    $db->query("INSERT INTO community_decision_records
+                (community_id,source_topic_id,acceptance_status,enforceability_status,decided_at)
+                VALUES (920,990099,'accepted','enforceable',NOW())");
+    $source_decision_id=(int)$db->insert_id;
+    require_once __DIR__.'/../community_decision_ledger.php';
+    outcome_check(community_decision_attach_knowledge_entry($db,990099,$source_knowledge_entry_id),
+        'source decision can retain its separate knowledge reference');
+    $db->query("INSERT INTO community_law_versions
+                (id,law_id,version_number,title,law_text,source_decision_id,proposed_by,status)
+                VALUES (990001,990000,1,'قانون آزمایشی','متن قانون',".(int)$source_decision_id.",9700,'approved')");
     $db->query("INSERT INTO community_law_implementations (law_version_id,community_id,status)
                 VALUES (990001,920,'in_progress')");
     require_once __DIR__.'/../community_law_helpers.php';
@@ -235,6 +251,26 @@ try {
          WHERE law_id=990000 AND event_type='outcome_corrective_action_updated'"
     )->fetch_assoc()['total'];
     outcome_check($corrective_history===3,'each corrective progress update is recorded in law history');
+
+    $provenance=$db->query(
+        "SELECT v.source_decision_id,d.knowledge_entry_id,d.acceptance_status,d.record_status,
+                ke.status AS knowledge_status,ke.version_no,ke.title
+         FROM community_law_versions v
+         JOIN community_decision_records d ON d.id=v.source_decision_id
+         JOIN collective_knowledge_entries ke ON ke.id=d.knowledge_entry_id
+         WHERE v.id=990001"
+    )->fetch_assoc();
+    outcome_check($provenance &&
+        (int)$provenance['source_decision_id']===$source_decision_id &&
+        (int)$provenance['knowledge_entry_id']===$source_knowledge_entry_id,
+        'law remains traceably linked to its source decision and related knowledge entry');
+    outcome_check($provenance && $provenance['acceptance_status']==='accepted' &&
+        $provenance['record_status']==='recorded',
+        'outcome and corrective workflows do not rewrite the source collective decision');
+    outcome_check($provenance && $provenance['knowledge_status']==='unreviewed' &&
+        (int)$provenance['version_no']===1 && $provenance['title']==='دانش منشأ آزمایشی',
+        'execution evidence does not automatically promote or rewrite a knowledge entry');
+
 
     fwrite(STDOUT,"OK: community law outcome report integration checks passed.\n");
 } finally { $db->close(); }
