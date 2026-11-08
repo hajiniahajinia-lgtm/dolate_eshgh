@@ -61,6 +61,7 @@ on:
       - 'migrations/20261108_community_law_outcome_reviews.sql'
       - 'migrations/20261108_community_law_outcome_followups.sql'
       - 'migrations/20261108_community_law_outcome_reassessments.sql'
+      - 'migrations/20261108_community_law_outcome_corrective_actions.sql'
       - 'tests/community_law_outcome_reports_integration_test.php'
       - 'community_law_outcome_action.php'
       - 'migrations/20261108_community_law_outcome_reports.sql'
