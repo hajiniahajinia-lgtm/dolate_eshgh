@@ -2339,10 +2339,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $lock = $conn->prepare(
                 "SELECT l.status, l.current_version_id, l.originating_community_id,
-                        v.status AS version_status, v.proposed_by, fr.final_status
+                        v.status AS version_status, v.proposed_by, fr.final_status,
+                        a.id AS amendment_case_id,a.status AS amendment_status,
+                        a.base_version_id AS amendment_base_version_id
                  FROM community_laws l
                  JOIN community_law_versions v ON v.law_id=l.id
                  JOIN community_law_final_results fr ON fr.law_version_id=v.id
+                 LEFT JOIN community_law_amendment_cases a ON a.proposed_version_id=v.id
                  WHERE l.id=? AND v.id=? AND l.originating_community_id=?
                  FOR UPDATE"
             );
@@ -2351,9 +2354,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!$lock->execute()) throw new Exception('final review open lock failed');
             $law = $lock->get_result()->fetch_assoc();
             $lock->close();
+            $is_amendment_final_review=$law && !empty($law['amendment_case_id']);
+            $standard_final_review_state=$law &&
+                $law['status']==='voting' && $law['version_status']==='voting' &&
+                (int)$law['current_version_id']===$version_id;
+            $amendment_final_review_state=$is_amendment_final_review &&
+                $law['status']==='approved' && $law['version_status']==='voting' &&
+                $law['amendment_status']==='parent_review_approved' &&
+                (int)$law['current_version_id']===(int)$law['amendment_base_version_id';
             if (
-                !$law || $law['status'] !== 'voting' || $law['version_status'] !== 'voting' ||
-                (int)$law['current_version_id'] !== $version_id || $law['final_status'] !== 'vote_passed'
+                (!$standard_final_review_state && !$amendment_final_review_state) ||
+                $law['final_status']!=='vote_passed'
             ) throw new RuntimeException('final_review_not_ready');
 
             $exists = $conn->prepare("SELECT 1 FROM community_law_final_review_cases WHERE law_version_id=? LIMIT 1");
@@ -2471,18 +2482,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!$case_insert->execute()) throw new Exception('final review case insert failed');
             $case_insert->close();
 
-            $law_update = $conn->prepare(
-                "UPDATE community_laws SET status='pending_final_review' WHERE id=? AND status='voting'"
-            );
+            if (!$is_amendment_final_review) {
+                $law_update = $conn->prepare(
+                    "UPDATE community_laws SET status='pending_final_review' WHERE id=? AND status='voting'"
+                );
+                if (!$law_update) throw new Exception('final review law status prepare failed');
+                $law_update->bind_param('i', $law_id);
+                if (!$law_update->execute() || $law_update->affected_rows !== 1) throw new Exception('final review law status update failed');
+                $law_update->close();
+            }
             $version_update = $conn->prepare(
                 "UPDATE community_law_versions SET status='pending_final_review' WHERE id=? AND status='voting'"
             );
-            if (!$law_update || !$version_update) throw new Exception('final review status prepare failed');
-            $law_update->bind_param('i', $law_id);
+            if (!$version_update) throw new Exception('final review version prepare failed');
             $version_update->bind_param('i', $version_id);
-            if (!$law_update->execute() || $law_update->affected_rows !== 1) throw new Exception('final review law status update failed');
             if (!$version_update->execute() || $version_update->affected_rows !== 1) throw new Exception('final review version status update failed');
-            $law_update->close();
             $version_update->close();
 
             if (!community_law_record_history(
