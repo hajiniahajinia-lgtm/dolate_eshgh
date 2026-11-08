@@ -25,8 +25,9 @@ try {
     outcome_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_outcome_reports.sql');
     outcome_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_outcome_reviews.sql');
     outcome_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_outcome_followups.sql');
+    outcome_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_outcome_reassessments.sql');
     $db->query("CREATE TEMPORARY TABLE community_members (community_id INT NOT NULL,user_id INT NOT NULL,PRIMARY KEY(community_id,user_id)) ENGINE=InnoDB");
-    $db->query("INSERT INTO community_members VALUES (920,9700),(920,9701),(920,9702),(920,9703)");
+    $db->query("INSERT INTO community_members VALUES (920,9700),(920,9701),(920,9702),(920,9703),(920,9704),(920,9706),(920,9707),(920,9708)");
     $db->query("INSERT INTO community_law_versions (id,law_id,version_number,title,law_text,proposed_by,status)
                 VALUES (990001,990000,1,'قانون آزمایشی','متن قانون',9700,'approved')");
     $db->query("INSERT INTO community_law_implementations (law_version_id,community_id,status)
@@ -130,6 +131,52 @@ try {
     outcome_check($still_disputed && $still_disputed['review_status']==='disputed','follow-up does not alter report verdict');
     $followup_history=(int)$db->query("SELECT COUNT(*) total FROM community_law_history WHERE law_id=990000 AND event_type='outcome_report_followup_added'")->fetch_assoc()['total'];
     outcome_check($followup_history===2,'each follow-up entry is recorded in immutable law history');
+
+    // رسیدگی دوم فقط با پاسخ مجری و شواهد تازه و ارزیابان کاملاً جدید آغاز می‌شود.
+    outcome_check(community_law_review_disputed_outcome_followups(
+        $db,$disputed_report,9706,'confirm_report','نباید پیش از ثبت هر دو نوع پیگیری آغاز شود'
+    )===false,'second-stage review requires executor response and supplemental evidence');
+    outcome_check(community_law_review_disputed_outcome_followups(
+        $db,$disputed_report,9701,'confirm_report','ارزیاب مرحله اول نباید دوباره ارزیابی کند'
+    )===false,'original reviewer is excluded from second-stage review');
+    outcome_check(community_law_review_disputed_outcome_followups(
+        $db,$disputed_report,9700,'confirm_report','گزارش‌دهنده تعارض منافع دارد'
+    )===false,'report author is excluded from second-stage review');
+    outcome_check(community_law_review_disputed_outcome_followups(
+        $db,$disputed_report,9704,'confirm_report','مسئول اجرا تعارض منافع دارد'
+    )===false,'implementation owner is excluded from second-stage review');
+
+    $reassess_one=community_law_review_disputed_outcome_followups(
+        $db,$disputed_report,9706,'revise_execution_plan','برنامه اجرا باید اصلاح و زمان‌بندی شود'
+    );
+    outcome_check(is_array($reassess_one) && $reassess_one['review_count']===1 && $reassess_one['status']==='open',
+        'first new independent reviewer records a pending reassessment');
+    outcome_check(community_law_review_disputed_outcome_followups(
+        $db,$disputed_report,9706,'confirm_report','تغییر رأی'
+    )===false,'second-stage reviewer cannot vote twice');
+    $reassess_two=community_law_review_disputed_outcome_followups(
+        $db,$disputed_report,9707,'revise_execution_plan','شواهد تازه اصلاح برنامه اجرا را توجیه می‌کند'
+    );
+    outcome_check(is_array($reassess_two) && $reassess_two['review_count']===2 && $reassess_two['status']==='open',
+        'two second-stage reviews do not finalize the case');
+    $reassess_three=community_law_review_disputed_outcome_followups(
+        $db,$disputed_report,9708,'recommend_law_review','احتمال نیاز به بازنگری قانون نیز باید بررسی شود'
+    );
+    outcome_check(is_array($reassess_three) && $reassess_three['review_count']===3 &&
+        $reassess_three['status']==='finalized' && $reassess_three['final_outcome']==='revise_execution_plan',
+        'two of three fresh reviewers determine the final reassessment outcome');
+    outcome_check(community_law_review_disputed_outcome_followups(
+        $db,$disputed_report,9706,'needs_more_review','پس از نهایی شدن'
+    )===false,'finalized reassessment cannot accept further reviews');
+    $case=$db->query("SELECT status,final_outcome FROM community_law_outcome_reassessments WHERE report_id=".(int)$disputed_report)->fetch_assoc();
+    outcome_check($case && $case['status']==='finalized' && $case['final_outcome']==='revise_execution_plan',
+        'final reassessment result is persisted separately from the original report');
+    $unchanged_report=$db->query("SELECT review_status FROM community_law_outcome_reports WHERE id=".(int)$disputed_report)->fetch_assoc();
+    outcome_check($unchanged_report && $unchanged_report['review_status']==='disputed',
+        'second-stage outcome does not rewrite the original disputed report or suspend the law');
+    $reassessment_history=(int)$db->query("SELECT COUNT(*) total FROM community_law_history WHERE law_id=990000 AND event_type='outcome_report_reassessed'")->fetch_assoc()['total'];
+    outcome_check($reassessment_history===3,'each second-stage review is preserved in law history');
+
     fwrite(STDOUT,"OK: community law outcome report integration checks passed.\n");
 } finally { $db->close(); }
 ?>
