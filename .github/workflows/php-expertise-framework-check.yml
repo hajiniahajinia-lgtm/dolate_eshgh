@@ -35,6 +35,8 @@ on:
       - 'community_decision_ledger.php'
       - 'migrations/20261108_community_decision_ledger.sql'
       - 'migrations/20261108_community_decision_ledger_backfill.sql'
+      - 'migrations/20261108_community_law_decision_origin.sql'
+      - 'migrations/20261108_community_law_decision_origin.sql'
       - 'tests/community_decision_ledger_integration_test.php'
       - 'tests/community_decision_ledger_backfill_integration_test.php'
       - 'tests/community_decision_knowledge_separation_integration_test.php'
