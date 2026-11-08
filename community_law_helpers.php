@@ -1095,6 +1095,75 @@ if (!function_exists('community_charter_amendment_appeal_result')) {
 }
 
 
+if (!function_exists('community_charter_start_independent_review')) {
+    /**
+     * پرونده draft را پس از تخصیص موفق ارزیابان وارد بررسی مستقل می‌کند.
+     * فراخواننده باید تراکنش و قفل پرونده را مدیریت کند.
+     */
+    function community_charter_start_independent_review(mysqli $conn, int $amendment_id): void {
+        if ($amendment_id <= 0) throw new RuntimeException('شناسه اصلاح منشور معتبر نیست.');
+        $stmt = $conn->prepare(
+            "UPDATE community_charter_amendments
+             SET status='independent_review',review_opens_at=NOW(),
+                 review_closes_at=DATE_ADD(NOW(),INTERVAL 14 DAY)
+             WHERE id=? AND status='draft'"
+        );
+        if (!$stmt) throw new RuntimeException('آغاز بررسی مستقل ممکن نیست.');
+        $stmt->bind_param('i', $amendment_id);
+        if (!$stmt->execute() || $stmt->affected_rows !== 1) {
+            $stmt->close();
+            throw new RuntimeException('پرونده برای آغاز بررسی مستقل در وضعیت draft نیست.');
+        }
+        $stmt->close();
+    }
+}
+
+if (!function_exists('community_charter_advance_to_public_voting')) {
+    /**
+     * نتیجه تأیید بررسی مستقل را به رأی‌گیری عمومی منتقل می‌کند.
+     * فراخواننده باید تراکنش و قفل پرونده را مدیریت کند.
+     */
+    function community_charter_advance_to_public_voting(mysqli $conn, int $amendment_id): void {
+        if ($amendment_id <= 0) throw new RuntimeException('شناسه اصلاح منشور معتبر نیست.');
+        $stmt = $conn->prepare(
+            "UPDATE community_charter_amendments
+             SET status='public_voting',voting_opens_at=NOW(),
+                 voting_closes_at=DATE_ADD(NOW(),INTERVAL 14 DAY)
+             WHERE id=? AND status='independent_review'"
+        );
+        if (!$stmt) throw new RuntimeException('آغاز رأی‌گیری عمومی ممکن نیست.');
+        $stmt->bind_param('i', $amendment_id);
+        if (!$stmt->execute() || $stmt->affected_rows !== 1) {
+            $stmt->close();
+            throw new RuntimeException('پرونده در مرحله بررسی مستقل نیست.');
+        }
+        $stmt->close();
+    }
+}
+
+if (!function_exists('community_charter_advance_to_appeal_period')) {
+    /**
+     * نتیجه تأیید رأی‌گیری را وارد مهلت اعتراض می‌کند.
+     * فراخواننده باید تراکنش و قفل پرونده را مدیریت کند.
+     */
+    function community_charter_advance_to_appeal_period(mysqli $conn, int $amendment_id): void {
+        if ($amendment_id <= 0) throw new RuntimeException('شناسه اصلاح منشور معتبر نیست.');
+        $stmt = $conn->prepare(
+            "UPDATE community_charter_amendments
+             SET status='appeal_period',approved_at=NOW(),
+                 appeal_closes_at=DATE_ADD(NOW(),INTERVAL 7 DAY)
+             WHERE id=? AND status='public_voting'"
+        );
+        if (!$stmt) throw new RuntimeException('ثبت نتیجه رأی‌گیری ممکن نیست.');
+        $stmt->bind_param('i', $amendment_id);
+        if (!$stmt->execute() || $stmt->affected_rows !== 1) {
+            $stmt->close();
+            throw new RuntimeException('پرونده در مرحله رأی‌گیری عمومی نیست.');
+        }
+        $stmt->close();
+    }
+}
+
 if (!function_exists('community_charter_amendment_activate')) {
     /**
      * اجرای تراکنشی فعال‌سازی منشور؛ این تابع هم در endpoint و هم در آزمون یکپارچه استفاده می‌شود.
