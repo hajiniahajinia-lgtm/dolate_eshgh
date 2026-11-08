@@ -297,6 +297,56 @@ try {
             'scope_ids'=>community_law_scope_ids_for_parent_map($db,(int)$debug_law['current_version_id'],$old_scope_map)
         ];
     }
+    $required_debug = [
+            'community_laws',
+            'community_law_versions',
+            'community_decision_records',
+            'community_law_scopes',
+            'community_law_electorate',
+            'community_law_votes',
+            'community_law_positions',
+            'community_law_objections',
+            'community_law_implementations',
+            'community_law_history',
+            'community_law_voting_rules',
+            'community_law_voting_rule_proposals',
+            'community_law_voting_rule_electorate',
+            'community_law_voting_rule_votes',
+            'community_law_direct_electorate',
+            'community_law_direct_votes',
+            'community_law_direct_results',
+            'community_law_position_discussions',
+            'community_law_final_results',
+            'community_law_review_cases',
+            'community_law_review_electorate',
+            'community_law_review_assessments',
+            'community_law_authority_cases',
+            'community_law_authority_references',
+            'community_law_authority_assessments',
+            'community_law_precedent_assessments',
+            'community_law_final_review_cases',
+            'community_law_final_review_assessments',
+            'community_law_final_review_electorate',
+            'community_law_final_review_references',
+            'community_law_appeals',
+            'community_law_appeal_electorate',
+            'community_law_appeal_assessments',
+            'community_charter_versions',
+            'community_charter_articles',
+            'community_law_charter_references',
+            'community_law_charter_assessments'
+        ];
+    $required_marks=implode(',',array_fill(0,count($required_debug),'?'));
+    $required_check=$db->prepare("SELECT table_name FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN ($required_marks)");
+    $required_types=str_repeat('s',count($required_debug));
+    $required_params=array_merge([$required_types],$required_debug);
+    $required_refs=[];
+    foreach($required_params as $required_index=>&$required_value) $required_refs[$required_index]=&$required_value;
+    call_user_func_array([$required_check,'bind_param'],$required_refs);
+    $required_check->execute();
+    $present_tables=array_column($required_check->get_result()->fetch_all(MYSQLI_ASSOC),'table_name');
+    $required_check->close();
+    $missing_tables=array_values(array_diff($required_debug,$present_tables));
     $ready_debug=community_law_tables_ready($db);
     $conformity_debug=community_law_register_hierarchy_conformity_reviews($db,$new_scope_map,91030,90200);
     $scope_diff_debug=[];
@@ -307,7 +357,7 @@ try {
             'new'=>community_law_scope_ids_for_parent_map($db,$version,$new_scope_map)
         ];
     }
-    fwrite(STDERR,"SCOPE DEBUG ".json_encode(['tables_ready'=>$ready_debug,'conformity_result'=>$conformity_debug,'pending_dependency'=>$pending_debug,'laws'=>$scope_debug_ids,'scope_diff'=>$scope_diff_debug],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)."\\n");
+    fwrite(STDERR,"SCOPE DEBUG ".json_encode(['missing_tables'=>$missing_tables,'tables_ready'=>$ready_debug,'conformity_result'=>$conformity_debug,'pending_dependency'=>$pending_debug,'laws'=>$scope_debug_ids,'scope_diff'=>$scope_diff_debug],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)."\\n");
     change_case_check(
         community_law_record_hierarchy_scope_changes($db,$old_scope_map,$new_scope_map,91030,90200),
         'hierarchy scope exit is recorded and notified'
