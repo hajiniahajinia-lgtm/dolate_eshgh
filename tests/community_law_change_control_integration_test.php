@@ -21,6 +21,7 @@ try {
     change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_change_control.sql');
     change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_change_review.sql');
     change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_change_voting.sql');
+    change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_change_effects.sql');
     require_once __DIR__.'/../community_law_change_helpers.php';
 
     $db->query("CREATE TABLE IF NOT EXISTS communities (id INT PRIMARY KEY, parent_community_id INT NULL)");
@@ -30,6 +31,7 @@ try {
     $db->query("INSERT INTO community_laws (id,law_code,originating_community_id,created_by,status,current_version_id,effective_at) VALUES (501,'LAW-CHANGE-TEST',10,100,'approved',9001,NOW())");
     $db->query("INSERT INTO community_law_versions (id,law_id,version_number,title,law_text,proposed_by,status,approved_at) VALUES (9001,501,1,'قانون آزمایشی','متن قانون',100,'approved',NOW())");
     $db->query("INSERT INTO community_law_scopes (law_version_id,scope_community_id,include_descendants) VALUES (9001,10,1)");
+    $db->query("INSERT INTO community_law_implementations (law_version_id,community_id,responsible_user_id,local_plan,status,started_at,target_date,progress_report) VALUES (9001,10,101,'برنامهٔ جامعهٔ مادر','in_progress',NOW(),DATE_ADD(CURDATE(),INTERVAL 5 DAY),'گزارش پیشرفت مادر'),(9001,20,102,'برنامهٔ زیرجامعه','completed',NOW(),DATE_ADD(CURDATE(),INTERVAL 1 DAY),'گزارش تکمیل زیرجامعه')");
 
     $case_id=community_law_open_change_case($db,501,200,20,'suspend','خطر جدی برای حقوق اعضا','گزارش مستند',true);
     change_case_check(is_int($case_id) && $case_id>0,'a member of a scoped child community can submit an emergency suspension request');
@@ -58,8 +60,14 @@ try {
     change_case_check(!community_law_change_cast_vote($db,$case_id,(int)$reviewers[0]['reviewer_user_id'],'no'),'votes are closed after the deadline');
     $vote_case=$db->query('SELECT status,vote_result FROM community_law_change_cases WHERE id='.(int)$case_id)->fetch_assoc();
     change_case_check($vote_case && $vote_case['status']==='approved' && $vote_case['vote_result']==='approved','vote outcome is permanently recorded');
-    $law=$db->query("SELECT status,repealed_at FROM community_laws WHERE id=501")->fetch_assoc();
-    change_case_check($law && $law['status']==='approved' && $law['repealed_at']===null,'submitting an emergency request never suspends or repeals the law automatically');
+    $law=$db->query("SELECT status,repealed_at,suspended_at FROM community_laws WHERE id=501")->fetch_assoc();
+    change_case_check($law && $law['status']==='suspended' && $law['repealed_at']===null && $law['suspended_at']!==null,'an approved parent-community vote applies suspension and preserves repeal history');
+    $implementation_states=$db->query("SELECT status FROM community_law_implementations WHERE law_version_id=9001 ORDER BY community_id")->fetch_all(MYSQLI_ASSOC);
+    change_case_check(count($implementation_states)===2 && $implementation_states[0]['status']==='suspended' && $implementation_states[1]['status']==='suspended','all affected community implementation records enter suspended state');
+    $snapshot_count=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_change_implementation_snapshots WHERE case_id=".(int)$case_id)->fetch_assoc()['n'];
+    change_case_check($snapshot_count===2,'previous implementation plans, owners, progress and statuses are snapshotted before suspension');
+    $applied=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_change_cases WHERE id=".(int)$case_id." AND effect_applied_at IS NOT NULL")->fetch_assoc()['n'];
+    change_case_check($applied===1,'the applied legal effect is marked idempotently');
 
     change_case_check(community_law_open_change_case($db,501,999,20,'repeal','درخواست نامعتبر')===false,'non-member cannot submit a change request');
     change_case_check(community_law_open_change_case($db,501,200,20,'repeal','')===false,'empty reasons are rejected');
