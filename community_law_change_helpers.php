@@ -27,7 +27,7 @@ if (!function_exists('community_law_open_change_case')) {
     ): int|false {
         $reason=trim($reason);
         if ($law_id<=0 || $actor_user_id<=0 || $requester_community_id<=0 ||
-            !in_array($request_type,['suspend','repeal','review_expiry'],true) ||
+            !in_array($request_type,['suspend','repeal','review_expiry','reinstate'],true) ||
             $reason==='' || mb_strlen($reason)>30000 ||
             ($evidence!==null && mb_strlen($evidence)>30000) ||
             ($emergency_requested && $request_type!=='suspend')) return false;
@@ -36,6 +36,8 @@ if (!function_exists('community_law_open_change_case')) {
             $date=DateTime::createFromFormat('Y-m-d H:i:s',$requested_effective_at);
             if (!$date || $date->format('Y-m-d H:i:s')!==$requested_effective_at) return false;
         }
+        if ($request_type==='review_expiry' && $requested_effective_at===null) return false;
+        if ($request_type!=='review_expiry' && $requested_effective_at!==null) return false;
 
         $member=$conn->prepare('SELECT 1 FROM community_members WHERE community_id=? AND user_id=? LIMIT 1');
         if (!$member) return false;
@@ -46,12 +48,11 @@ if (!function_exists('community_law_open_change_case')) {
         if (!$is_member) return false;
 
         $law=$conn->prepare(
-            "SELECT l.originating_community_id,l.current_version_id,l.created_by,v.proposed_by
+            "SELECT l.originating_community_id,l.current_version_id,l.created_by,l.status AS law_status,
+                    l.expires_at,l.effective_at,v.proposed_by
              FROM community_laws l
              JOIN community_law_versions v ON v.id=l.current_version_id AND v.law_id=l.id
-             WHERE l.id=? AND l.status='approved' AND v.status='approved'
-               AND (l.effective_at IS NULL OR l.effective_at<=NOW())
-               AND (l.expires_at IS NULL OR l.expires_at>NOW())
+             WHERE l.id=? AND l.status IN ('approved','suspended') AND v.status='approved'
                AND l.repealed_at IS NULL LIMIT 1"
         );
         if (!$law) return false;
@@ -65,6 +66,16 @@ if (!function_exists('community_law_open_change_case')) {
         $origin_id=(int)$law_row['originating_community_id'];
         $creator_id=(int)$law_row['created_by'];
         $proposer_id=(int)$law_row['proposed_by'];
+        $law_status=(string)$law_row['law_status'];
+        $expiry=$law_row['expires_at'];
+        $effective=$law_row['effective_at'];
+        if ($request_type==='suspend' &&
+            ($law_status!=='approved' || ($effective!==null && strtotime($effective)>time()) ||
+             ($expiry!==null && strtotime($expiry)<=time()))) return false;
+        if ($request_type==='repeal' && !in_array($law_status,['approved','suspended'],true)) return false;
+        if ($request_type==='review_expiry' && $law_status!=='approved') return false;
+        if ($request_type==='reinstate' &&
+            ($law_status!=='suspended' || ($expiry!==null && strtotime($expiry)<=time()))) return false;
         if ($requester_community_id!==$origin_id &&
             !community_law_scope_matches($conn,$version_id,$requester_community_id)) return false;
 
@@ -137,6 +148,8 @@ if (!function_exists('community_law_open_change_case')) {
             $notice_text='درخواست بازبینی قانون ثبت شده است؛ تا پایان فرایند معتبر، قانون همچنان لازم‌الاجراست.';
             if ($request_type==='suspend') $notice_text='درخواست تعلیق قانون ثبت شده است؛ ثبت درخواست، حتی در حالت اضطراری، به‌معنای تعلیق قانون نیست.';
             elseif ($request_type==='repeal') $notice_text='درخواست لغو قانون ثبت شده است؛ قانون تا تصویب تصمیم معتبر همچنان لازم‌الاجراست.';
+            elseif ($request_type==='reinstate') $notice_text='درخواست بازگرداندن قانون تعلیق‌شده ثبت شده است؛ تا تصویب درخواست، وضعیت تعلیق پابرجاست.';
+            elseif ($request_type==='review_expiry') $notice_text='درخواست بازبینی تاریخ پایان اعتبار قانون ثبت شده است؛ تاریخ فعلی تا تصویب درخواست تغییر نمی‌کند.';
             $notice=$conn->prepare(
                 "INSERT IGNORE INTO community_law_community_notices
                  (case_id,law_id,law_version_id,community_id,event_type,notice_text)
