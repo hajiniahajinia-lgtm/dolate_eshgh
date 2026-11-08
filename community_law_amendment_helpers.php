@@ -633,7 +633,11 @@ if (!function_exists('community_law_submit_amendment_parent_review')) {
                             SELECT 1 FROM community_law_conformity_conflict_reviews prior
                             JOIN community_law_conformity_conflicts conflict ON conflict.id=prior.conflict_id
                             WHERE conflict.case_id=a.conformity_case_id AND prior.reviewer_user_id=?
-                        ) AS prior_conformity_reviewer
+                        ) AS prior_conformity_reviewer,
+                        EXISTS (SELECT 1 FROM community_law_review_assessments r WHERE r.law_version_id=a.proposed_version_id AND r.reviewer_user_id=?) AS prior_legal_reviewer,
+                        EXISTS (SELECT 1 FROM community_law_authority_assessments ar WHERE ar.law_version_id=a.proposed_version_id AND ar.reviewer_user_id=?) AS prior_authority_reviewer,
+                        EXISTS (SELECT 1 FROM community_law_votes cv WHERE cv.law_version_id=a.proposed_version_id AND cv.voter_user_id=?) AS prior_community_voter,
+                        EXISTS (SELECT 1 FROM community_law_direct_votes dv WHERE dv.law_version_id=a.proposed_version_id AND dv.voter_user_id=?) AS prior_direct_voter
                  FROM community_law_amendment_cases a
                  JOIN community_law_conformity_cases c ON c.id=a.conformity_case_id
                  JOIN communities child ON child.id=c.community_id
@@ -645,7 +649,7 @@ if (!function_exists('community_law_submit_amendment_parent_review')) {
                  WHERE a.id=? FOR UPDATE"
             );
             if (!$lock) throw new RuntimeException('parent review lock prepare failed');
-            $lock->bind_param('ii',$user_id,$amendment_id);
+            $lock->bind_param('iiiiii',$user_id,$user_id,$user_id,$user_id,$user_id,$amendment_id);
             if (!$lock->execute()) throw new RuntimeException('parent review lock failed');
             $row=$lock->get_result()->fetch_assoc();
             $lock->close();
@@ -653,6 +657,8 @@ if (!function_exists('community_law_submit_amendment_parent_review')) {
                 (int)$row['parent_community_id']!==$parent_community_id ||
                 (int)$row['current_parent_community_id']!==(int)$row['parent_community_id'] ||
                 (int)$row['proposed_by']===$user_id || (int)$row['prior_conformity_reviewer']===1 ||
+                (int)$row['prior_legal_reviewer']===1 || (int)$row['prior_authority_reviewer']===1 ||
+                (int)$row['prior_community_voter']===1 || (int)$row['prior_direct_voter']===1 ||
                 $row['local_law_status']!=='approved' ||
                 (int)$row['current_version_id']!==(int)$row['base_version_id'] ||
                 $row['base_status']!=='approved' || $row['proposed_status']!=='voting' ||
