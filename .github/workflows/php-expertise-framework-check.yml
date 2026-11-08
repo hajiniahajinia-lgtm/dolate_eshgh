@@ -40,6 +40,7 @@ on:
       - 'tests/community_decision_ledger_integration_test.php'
       - 'tests/community_decision_ledger_backfill_integration_test.php'
       - 'tests/community_decision_knowledge_separation_integration_test.php'
+      - 'tests/community_decision_knowledge_link_integration_test.php'
       - 'tests/community_law_implementation_integration_test.php'
       - '.github/workflows/php-expertise-framework-check.yml'
   pull_request:
