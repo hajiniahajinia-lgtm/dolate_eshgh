@@ -29,7 +29,13 @@ on:
       - 'tests/community_law_hierarchy_helpers_test.php'
       - 'tests/community_charter_amendments_test.php'
       - 'tests/community_charter_amendments_integration_test.php'
+      - 'community_decision_ledger.php'
+      - 'migrations/20261108_community_decision_ledger.sql'
+      - 'tests/community_decision_ledger_integration_test.php'
       - 'tests/community_law_implementation_integration_test.php'
+      - 'community_decision_ledger.php'
+      - 'migrations/20261108_community_decision_ledger.sql'
+      - 'tests/community_decision_ledger_integration_test.php'
       - '.github/workflows/php-expertise-framework-check.yml'
   pull_request:
     paths:
@@ -93,6 +99,8 @@ jobs:
           php -l tests/community_charter_amendments_test.php
           php -l tests/community_charter_amendments_integration_test.php
           php -l tests/community_law_implementation_integration_test.php
+          php -l community_decision_ledger.php
+          php -l tests/community_decision_ledger_integration_test.php
       - name: Run community law hierarchy and charter amendment tests
         run: |
           php tests/community_law_hierarchy_helpers_test.php
@@ -128,5 +136,7 @@ jobs:
           DB_NAME: dolate_charter_ci
           DB_USER: root
           DB_PASSWORD: root
-        run: php tests/community_charter_amendments_integration_test.php
+        run: |
+          php tests/community_charter_amendments_integration_test.php
           php tests/community_law_implementation_integration_test.php
+          php tests/community_decision_ledger_integration_test.php
