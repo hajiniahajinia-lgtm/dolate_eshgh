@@ -29,6 +29,7 @@ on:
       - 'tests/community_law_hierarchy_helpers_test.php'
       - 'tests/community_charter_amendments_test.php'
       - 'tests/community_charter_amendments_integration_test.php'
+      - 'tests/community_law_implementation_integration_test.php'
       - '.github/workflows/php-expertise-framework-check.yml'
   pull_request:
     paths:
@@ -91,6 +92,7 @@ jobs:
           php -l tests/community_law_hierarchy_helpers_test.php
           php -l tests/community_charter_amendments_test.php
           php -l tests/community_charter_amendments_integration_test.php
+          php -l tests/community_law_implementation_integration_test.php
       - name: Run community law hierarchy and charter amendment tests
         run: |
           php tests/community_law_hierarchy_helpers_test.php
