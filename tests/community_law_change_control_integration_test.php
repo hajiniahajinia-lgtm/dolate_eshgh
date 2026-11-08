@@ -26,7 +26,7 @@ try {
     $db->query("CREATE TABLE IF NOT EXISTS communities (id INT PRIMARY KEY, parent_community_id INT NULL)");
     $db->query("CREATE TABLE IF NOT EXISTS community_members (community_id INT NOT NULL, user_id INT NOT NULL, PRIMARY KEY(community_id,user_id))");
     $db->query("INSERT INTO communities (id,parent_community_id) VALUES (10,NULL),(20,10) ON DUPLICATE KEY UPDATE parent_community_id=VALUES(parent_community_id)");
-    $db->query("INSERT INTO community_members (community_id,user_id) VALUES (10,100),(20,200),(10,101),(10,102),(10,103),(10,104),(10,105) ON DUPLICATE KEY UPDATE user_id=VALUES(user_id)");
+    $db->query("INSERT INTO community_members (community_id,user_id) VALUES (10,100),(20,200),(10,101),(10,102),(10,103),(10,104),(10,105),(10,106),(10,107),(10,108) ON DUPLICATE KEY UPDATE user_id=VALUES(user_id)");
     $db->query("INSERT INTO community_laws (id,law_code,originating_community_id,created_by,status,current_version_id,effective_at) VALUES (501,'LAW-CHANGE-TEST',10,100,'approved',9001,NOW())");
     $db->query("INSERT INTO community_law_versions (id,law_id,version_number,title,law_text,proposed_by,status,approved_at) VALUES (9001,501,1,'قانون آزمایشی','متن قانون',100,'approved',NOW())");
     $db->query("INSERT INTO community_law_scopes (law_version_id,scope_community_id,include_descendants) VALUES (9001,10,1)");
@@ -46,11 +46,12 @@ try {
         change_case_check($review_status!==false,'assigned reviewer assessment is accepted');
     }
     $reviewed=$db->query('SELECT status,review_result,electorate_count FROM community_law_change_cases WHERE id='.(int)$case_id)->fetch_assoc();
-    change_case_check($reviewed && $reviewed['status']==='awaiting_vote' && $reviewed['review_result']==='supported' && (int)$reviewed['electorate_count']===6,'four of five independent assessments snapshot the parent-community electorate and open voting');
-    foreach (array_slice($reviewers,0,4) as $reviewer) {
-        change_case_check(community_law_change_cast_vote($db,$case_id,(int)$reviewer['reviewer_user_id'],'yes'),'eligible parent-community voter can vote yes');
-    }
-    change_case_check(community_law_change_cast_vote($db,$case_id,(int)$reviewers[4]['reviewer_user_id'],'no'),'eligible parent-community voter can vote no');
+    change_case_check($reviewed && $reviewed['status']==='awaiting_vote' && $reviewed['review_result']==='supported' && (int)$reviewed['electorate_count']===4,'four of five independent assessments snapshot the parent-community electorate and open voting');
+    $electorate=$db->query('SELECT user_id FROM community_law_change_electorate WHERE case_id='.(int)$case_id.' ORDER BY user_id')->fetch_all(MYSQLI_ASSOC);
+    change_case_check(count($electorate)===4,'independent reviewers are excluded from the parent voting electorate');
+    change_case_check(community_law_change_cast_vote($db,$case_id,(int)$electorate[0]['user_id'],'yes'),'eligible parent voter can vote yes');
+    change_case_check(community_law_change_cast_vote($db,$case_id,(int)$electorate[1]['user_id'],'yes'),'second eligible parent voter can vote yes');
+    change_case_check(community_law_change_cast_vote($db,$case_id,(int)$electorate[2]['user_id'],'no'),'eligible parent voter can vote no');
     change_case_check(!community_law_change_cast_vote($db,$case_id,200,'yes'),'a child-community member outside the captured parent electorate cannot vote');
     $db->query('UPDATE community_law_change_cases SET vote_closes_at=DATE_SUB(NOW(),INTERVAL 1 SECOND) WHERE id='.(int)$case_id);
     change_case_check(community_law_change_finalize_vote($db,$case_id)==='approved','two-thirds turnout and approval thresholds approve the request');
