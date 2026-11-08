@@ -51,10 +51,10 @@ $outcome_reports_ready=false;
 if ($schema_ready) {
     $outcome_table_check=$conn->query(
         "SELECT COUNT(*) AS total FROM information_schema.tables
-         WHERE table_schema=DATABASE() AND table_name='community_law_outcome_reports'"
+         WHERE table_schema=DATABASE() AND table_name IN ('community_law_outcome_reports','community_law_outcome_reviews')"
     );
     $outcome_reports_ready=$outcome_table_check &&
-        (int)$outcome_table_check->fetch_assoc()['total']===1;
+        (int)$outcome_table_check->fetch_assoc()['total']===2;
     if ($outcome_table_check) $outcome_table_check->free();
 }
 
