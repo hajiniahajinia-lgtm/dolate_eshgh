@@ -246,7 +246,7 @@ if($is_member && $draft['status']==='local_voting') {
 <button type="submit" name="cast_law_direct_vote" value="1">ثبت یا اصلاح رأی مستقیم</button>
 </form>
 <?php endif;?>
-<?php if($is_member && !empty($draft['vote_deadline']) && strtotime($draft['vote_deadline'])<=time()):?>
+<?php if($is_member && (int)$draft['originating_community_id']===$community_id && !empty($draft['vote_deadline']) && strtotime($draft['vote_deadline'])<=time()):?>
 <form method="post" action="community_laws.php?community_id=<?=$community_id?>">
 <input type="hidden" name="csrf_token" value="<?=clamp_h($law_csrf)?>">
 <input type="hidden" name="law_id" value="<?=(int)$draft['law_id']?>">
