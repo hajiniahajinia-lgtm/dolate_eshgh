@@ -2726,10 +2726,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $lock = $conn->prepare(
                 "SELECT l.id AS law_id, l.status, l.current_version_id,
                         v.status AS version_status, fc.status AS final_status,
-                        fc.appeal_deadline
+                        fc.appeal_deadline,a.id AS amendment_case_id,
+                        a.status AS amendment_status,a.base_version_id AS amendment_base_version_id
                  FROM community_laws l
                  JOIN community_law_versions v ON v.law_id=l.id
                  JOIN community_law_final_review_cases fc ON fc.law_version_id=v.id
+                 LEFT JOIN community_law_amendment_cases a ON a.proposed_version_id=v.id
                  WHERE v.id=? FOR UPDATE"
             );
             if (!$lock) throw new Exception('appeal lock prepare failed');
@@ -2737,11 +2739,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!$lock->execute()) throw new Exception('appeal lock failed');
             $law = $lock->get_result()->fetch_assoc();
             $lock->close();
+            $is_amendment_appeal=$law && !empty($law['amendment_case_id']);
+            $standard_appeal_state=$law &&
+                $law['status']==='appeal_period' &&
+                (int)$law['current_version_id']===$version_id;
+            $amendment_appeal_state=$is_amendment_appeal &&
+                $law['status']==='approved' &&
+                $law['amendment_status']==='parent_review_approved' &&
+                (int)$law['current_version_id']===(int)$law['amendment_base_version_id'];
             if (
-                !$law || $law['status'] !== 'appeal_period' ||
-                $law['version_status'] !== 'appeal_period' ||
-                $law['final_status'] !== 'appeal_period' ||
-                (int)$law['current_version_id'] !== $version_id ||
+                (!$standard_appeal_state && !$amendment_appeal_state) ||
+                $law['version_status']!=='appeal_period' ||
+                $law['final_status']!=='appeal_period' ||
                 empty($law['appeal_deadline']) || strtotime($law['appeal_deadline']) < time()
             ) throw new RuntimeException('appeal_period_closed');
 
@@ -2845,11 +2854,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 "SELECT a.law_version_id, a.status AS appeal_status, a.submitted_by,
                         a.reviewer_quorum, v.law_id, l.status AS law_status,
                         l.current_version_id, v.status AS version_status,
-                        fc.status AS final_status
+                        fc.status AS final_status,am.id AS amendment_case_id,
+                        am.status AS amendment_status,am.base_version_id AS amendment_base_version_id
                  FROM community_law_appeals a
                  JOIN community_law_versions v ON v.id=a.law_version_id
                  JOIN community_laws l ON l.id=v.law_id
                  JOIN community_law_final_review_cases fc ON fc.law_version_id=v.id
+                 LEFT JOIN community_law_amendment_cases am ON am.proposed_version_id=v.id
                  WHERE a.id=? FOR UPDATE"
             );
             if (!$lock) throw new Exception('appeal assessment lock prepare failed');
@@ -2857,12 +2868,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!$lock->execute()) throw new Exception('appeal assessment lock failed');
             $appeal = $lock->get_result()->fetch_assoc();
             $lock->close();
+            $is_amendment_appeal_assessment=$appeal && !empty($appeal['amendment_case_id']);
+            $standard_appeal_assessment_state=$appeal &&
+                $appeal['law_status']==='appeal_period' &&
+                (int)$appeal['current_version_id']===(int)$appeal['law_version_id'];
+            $amendment_appeal_assessment_state=$is_amendment_appeal_assessment &&
+                $appeal['law_status']==='approved' &&
+                $appeal['amendment_status']==='parent_review_approved' &&
+                (int)$appeal['current_version_id']===(int)$appeal['amendment_base_version_id'];
             if (
-                !$appeal || !in_array($appeal['appeal_status'], ['submitted','under_review'], true) ||
-                !in_array($appeal['final_status'], ['appeal_hold','appeal_period'], true) ||
-                (int)$appeal['submitted_by'] === $user_id ||
-                (int)$appeal['current_version_id'] !== (int)$appeal['law_version_id'] ||
-                $appeal['law_status'] !== 'appeal_period' || $appeal['version_status'] !== 'appeal_period'
+                !$appeal || !in_array($appeal['appeal_status'],['submitted','under_review'],true) ||
+                !in_array($appeal['final_status'],['appeal_hold','appeal_period'],true) ||
+                (int)$appeal['submitted_by']===$user_id ||
+                (!$standard_appeal_assessment_state && !$amendment_appeal_assessment_state) ||
+                $appeal['version_status']!=='appeal_period'
             ) throw new RuntimeException('appeal_assessment_not_allowed');
 
             $eligible = $conn->prepare(
@@ -2920,14 +2939,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $case_update->bind_param('i', $appeal['law_version_id']);
                 if (!$case_update->execute()) throw new Exception('upheld appeal case update failed');
                 $case_update->close();
-                $law_update = $conn->prepare("UPDATE community_laws SET status='pending_final_review' WHERE id=? AND status='appeal_period'");
-                $version_update = $conn->prepare("UPDATE community_law_versions SET status='pending_final_review' WHERE id=? AND status='appeal_period'");
-                if (!$law_update || !$version_update) throw new Exception('upheld appeal law status prepare failed');
-                $law_update->bind_param('i', $appeal['law_id']);
-                $version_update->bind_param('i', $appeal['law_version_id']);
-                if (!$law_update->execute() || !$version_update->execute()) throw new Exception('upheld appeal law status update failed');
-                $law_update->close();
-                $version_update->close();
+                if ($is_amendment_appeal_assessment) {
+                    $amendment_id=(int)$appeal['amendment_case_id'];
+                    $amendment_update=$conn->prepare("UPDATE community_law_amendment_cases SET status='revision_required',decided_at=NOW(),decision_note='اعتراض در بررسی نهایی تأیید شد؛ اصلاح دوباره در اختیار جامعه محلی است.' WHERE id=? AND status='parent_review_approved'");
+                    if (!$amendment_update) throw new Exception('upheld amendment appeal case prepare failed');
+                    $amendment_update->bind_param('i',$amendment_id);
+                    if (!$amendment_update->execute() || $amendment_update->affected_rows!==1) throw new Exception('upheld amendment appeal case update failed');
+                    $amendment_update->close();
+                    $version_update=$conn->prepare("UPDATE community_law_versions SET status='rejected' WHERE id=? AND status='appeal_period'");
+                    if (!$version_update) throw new Exception('upheld amendment appeal version prepare failed');
+                    $version_update->bind_param('i',$appeal['law_version_id']);
+                    if (!$version_update->execute() || $version_update->affected_rows!==1) throw new Exception('upheld amendment appeal version update failed');
+                    $version_update->close();
+                    $conformity_update=$conn->prepare("UPDATE community_law_conformity_cases SET status='amendment_required' WHERE id=(SELECT conformity_case_id FROM community_law_amendment_cases WHERE id=?) AND status='amendment_in_progress'");
+                    if (!$conformity_update) throw new Exception('upheld amendment appeal conformity prepare failed');
+                    $conformity_update->bind_param('i',$amendment_id);
+                    if (!$conformity_update->execute() || $conformity_update->affected_rows!==1) throw new Exception('upheld amendment appeal conformity update failed');
+                    $conformity_update->close();
+                } else {
+                    $law_update = $conn->prepare("UPDATE community_laws SET status='pending_final_review' WHERE id=? AND status='appeal_period'");
+                    $version_update = $conn->prepare("UPDATE community_law_versions SET status='pending_final_review' WHERE id=? AND status='appeal_period'");
+                    if (!$law_update || !$version_update) throw new Exception('upheld appeal law status prepare failed');
+                    $law_update->bind_param('i', $appeal['law_id']);
+                    $version_update->bind_param('i', $appeal['law_version_id']);
+                    if (!$law_update->execute() || !$version_update->execute()) throw new Exception('upheld appeal law status update failed');
+                    $law_update->close();
+                    $version_update->close();
+                }
             } elseif ($appeal_status === 'dismissed') {
                 $open_appeals = $conn->prepare(
                     "SELECT COUNT(*) AS total FROM community_law_appeals
