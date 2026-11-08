@@ -1817,6 +1817,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!$case_update->execute()) throw new Exception('legal review status update failed');
             $case_update->close();
 
+            // ایجاد پرونده اجرای اولیه برای تمام جوامع مشمول، بخشی از خود ابلاغ است.
+            // در صورت شکست حتی یک رکورد، کل تراکنش ابلاغ rollback می‌شود.
+            if (!community_law_initialize_implementations(
+                $conn,
+                (int)$law['law_id'],
+                $version_id,
+                $user_id,
+                $implementation_community_ids
+            )) throw new Exception('implementation initialization failed');
+
             if (!community_law_record_history(
                 $conn, (int)$case['law_id'], $version_id, $community_id, $user_id,
                 'legal_screening_assessment',
@@ -2795,6 +2805,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
             $active_reference_scan->free();
+
+            // دامنه نهایی باید در همان snapshot قفل‌شده حل شود؛
+            // بدون فهرست معتبر جوامع، قانون ابلاغ نمی‌شود.
+            $implementation_community_ids = community_law_scope_community_ids($conn, $version_id);
+            if (
+                $implementation_community_ids === null ||
+                !$implementation_community_ids ||
+                !in_array((int)$law['originating_community_id'], $implementation_community_ids, true)
+            ) throw new RuntimeException('law_scope_unresolved');
 
             $law_update = $conn->prepare(
                 "UPDATE community_laws
