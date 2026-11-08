@@ -821,12 +821,26 @@ if (!function_exists('community_law_enact_amendment')) {
 
             $assessment_check=$conn->prepare(
                 "SELECT COUNT(*) AS total,
-                        SUM(verdict<>'confirm') AS non_confirmed,
-                        SUM(charter_and_rights<>'pass' OR non_discrimination<>'pass' OR
-                            power_concentration<>'pass' OR human_and_social_impact<>'pass' OR
-                            environmental_impact<>'pass' OR economic_and_resource_impact<>'pass' OR
-                            future_generations_and_other_life<>'pass' OR implementation_and_accountability<>'pass') AS unresolved_dimensions
-                 FROM community_law_final_review_assessments WHERE law_version_id=?"
+                        SUM(a.verdict<>'confirm') AS non_confirmed,
+                        SUM(a.charter_and_rights<>'pass' OR a.non_discrimination<>'pass' OR
+                            a.power_concentration<>'pass' OR a.human_and_social_impact<>'pass' OR
+                            a.environmental_impact<>'pass' OR a.economic_and_resource_impact<>'pass' OR
+                            a.future_generations_and_other_life<>'pass' OR a.implementation_and_accountability<>'pass') AS unresolved_dimensions,
+                        SUM(NOT EXISTS (
+                            SELECT 1 FROM community_law_final_review_electorate e
+                            WHERE e.law_version_id=a.law_version_id AND e.user_id=a.reviewer_user_id
+                        )) AS ineligible_reviewers,
+                        SUM(EXISTS (
+                            SELECT 1 FROM community_law_review_assessments r
+                            WHERE r.law_version_id=a.law_version_id AND r.reviewer_user_id=a.reviewer_user_id
+                        ) OR EXISTS (
+                            SELECT 1 FROM community_law_authority_assessments ar
+                            WHERE ar.law_version_id=a.law_version_id AND ar.reviewer_user_id=a.reviewer_user_id
+                        )) AS prior_stage_reviewers,
+                        SUM(a.reviewer_user_id=v.proposed_by) AS proposer_assessments
+                 FROM community_law_final_review_assessments a
+                 JOIN community_law_versions v ON v.id=a.law_version_id
+                 WHERE a.law_version_id=?"
             );
             if (!$assessment_check) throw new RuntimeException('amendment final assessment check prepare failed');
             $assessment_check->bind_param('i',$version_id);
@@ -835,7 +849,10 @@ if (!function_exists('community_law_enact_amendment')) {
             $assessment_check->close();
             if ((int)$assessment_totals['total']<(int)$row['reviewer_quorum'] ||
                 (int)$assessment_totals['non_confirmed']>0 ||
-                (int)$assessment_totals['unresolved_dimensions']>0) {
+                (int)$assessment_totals['unresolved_dimensions']>0 ||
+                (int)$assessment_totals['ineligible_reviewers']>0 ||
+                (int)$assessment_totals['prior_stage_reviewers']>0 ||
+                (int)$assessment_totals['proposer_assessments']>0) {
                 throw new RuntimeException('amendment final review quorum or findings are incomplete');
             }
 
