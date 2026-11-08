@@ -33,7 +33,6 @@ $db = new mysqli($host, $user, $password, $name, $port);
 $db->set_charset('utf8mb4');
 
 $tables = [
-    'collective_knowledge_decisions',
     'topic_enforce_votes',
     'topic_voting_ballots',
     'topic_winners',
@@ -48,7 +47,7 @@ try {
         __DIR__ . '/../migrations/20261108_community_decision_ledger.sql'
     );
 
-    // حداقل شِمای لازم برای اجرای مسیر واقعی نهایی‌سازی؛ جدول کتابخانهٔ دانش عمداً ساخته نمی‌شود.
+    // حداقل شِمای لازم برای اجرای مسیر واقعی نهایی‌سازی؛ جدول‌های قدیمی تصمیم و کتابخانهٔ دانش عمداً ساخته نمی‌شوند.
     $db->query("CREATE TABLE topics (
         id INT NOT NULL PRIMARY KEY,
         title VARCHAR(255) NOT NULL,
@@ -83,25 +82,6 @@ try {
         idea_id INT NOT NULL,
         enforceable TINYINT(1) NOT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-    $db->query("CREATE TABLE collective_knowledge_decisions (
-        topic_id INT NOT NULL PRIMARY KEY,
-        entry_id BIGINT NOT NULL,
-        selected_idea_id INT NULL,
-        selected_idea_content MEDIUMTEXT NULL,
-        topic_purpose_snapshot VARCHAR(20) NOT NULL,
-        yes_count INT NOT NULL,
-        no_count INT NOT NULL,
-        yes_weight DECIMAL(14,4) NOT NULL,
-        no_weight DECIMAL(14,4) NOT NULL,
-        yes_percent DECIMAL(7,2) NOT NULL,
-        weighted_yes_percent DECIMAL(7,2) NOT NULL,
-        enforce_yes_count INT NOT NULL,
-        enforce_no_count INT NOT NULL,
-        acceptance_status VARCHAR(30) NOT NULL,
-        enforceability_status VARCHAR(30) NOT NULL,
-        finalized_at DATETIME NOT NULL
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
     $db->query("INSERT INTO topics (id,title,description,user_id,community_id,topic_purpose)
                 VALUES (990010,'موضوع آزمایشی تصمیم مستقل','شرح آزمایشی',5,77,'knowledge')");
     $db->query("INSERT INTO ideas (id,topic_id,content) VALUES (880010,990010,'ایدهٔ منتخب آزمایشی')");
