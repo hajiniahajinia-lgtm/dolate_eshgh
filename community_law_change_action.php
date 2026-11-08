@@ -80,7 +80,12 @@ try {
         }
         $member->close();
         $notice_id=(int)($_POST['notice_id']??0);
-        $mark=$conn->prepare('UPDATE community_law_community_notices SET read_at=NOW() WHERE id=? AND community_id=? AND read_at IS NULL');
+        $notice_source=(string)($_POST['notice_source']??'change');
+        if ($notice_source==='scope') {
+            $mark=$conn->prepare('UPDATE community_law_scope_notices SET read_at=NOW() WHERE id=? AND community_id=? AND read_at IS NULL');
+        } else {
+            $mark=$conn->prepare('UPDATE community_law_community_notices SET read_at=NOW() WHERE id=? AND community_id=? AND read_at IS NULL');
+        }
         if (!$mark) throw new RuntimeException('notice update unavailable');
         $mark->bind_param('ii',$notice_id,$community_id);
         $ok=$mark->execute(); $mark->close();
