@@ -1342,7 +1342,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $lock = $conn->prepare(
                 "SELECT l.status, l.current_version_id, v.status AS version_status, v.vote_deadline,
                         a.id AS amendment_case_id,a.status AS amendment_status,
-                        a.base_version_id AS amendment_base_version_id
+                        a.base_version_id AS amendment_base_version_id,a.conformity_case_id
                  FROM community_laws l
                  JOIN community_law_versions v ON v.law_id=l.id
                  LEFT JOIN community_law_amendment_cases a ON a.proposed_version_id=v.id
