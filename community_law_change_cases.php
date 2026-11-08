@@ -262,6 +262,41 @@ button.secondary{background:#475569}details{border-top:1px solid #e2e8f0;padding
                 $vote_closed=$case['vote_closes_at']!==null && strtotime($case['vote_closes_at'])<=time();
                 $case_type=$type_labels[$case['request_type']]??$case['request_type'];
                 $case_status=$case_status_labels[$case['status']]??$case['status'];
+
+                // دلایل ارزیابی‌ها و رویدادهای مرتبط با همین پرونده، فقط برای مشاهده خوانده می‌شوند.
+                $case_assessments=[];
+                $assessment_stmt=$conn->prepare(
+                    'SELECT reviewer_user_id,verdict,reasoning,evidence,submitted_at
+                     FROM community_law_change_assessments WHERE case_id=?
+                     ORDER BY submitted_at ASC,id ASC'
+                );
+                if ($assessment_stmt) {
+                    $case_id_for_read=(int)$case['id'];
+                    $assessment_stmt->bind_param('i',$case_id_for_read);
+                    if ($assessment_stmt->execute()) {
+                        $assessment_result=$assessment_stmt->get_result();
+                        while ($assessment_row=$assessment_result->fetch_assoc()) $case_assessments[]=$assessment_row;
+                    }
+                    $assessment_stmt->close();
+                }
+
+                $case_history=[];
+                $history_stmt=$conn->prepare(
+                    'SELECT event_type,actor_user_id,details,created_at
+                     FROM community_law_history
+                     WHERE law_id=? AND details LIKE ?
+                     ORDER BY id ASC LIMIT 50'
+                );
+                if ($history_stmt) {
+                    $law_id_for_read=(int)$case['law_id'];
+                    $case_marker='%"case_id":'.(int)$case['id'].'%';
+                    $history_stmt->bind_param('is',$law_id_for_read,$case_marker);
+                    if ($history_stmt->execute()) {
+                        $history_result=$history_stmt->get_result();
+                        while ($history_row=$history_result->fetch_assoc()) $case_history[]=$history_row;
+                    }
+                    $history_stmt->close();
+                }
             ?>
             <div class="card">
                 <div class="case-title">
@@ -289,6 +324,48 @@ button.secondary{background:#475569}details{border-top:1px solid #e2e8f0;padding
                 <?php elseif ($case['status']==='review_complete'): ?>
                     <div class="notice warning">نظر ارزیابان به حدنصاب لازم برای ارجاع به رأی نرسید؛ می‌توان با مستندات تکمیلی درخواست تازه‌ای ثبت کرد.</div>
                 <?php endif; ?>
+
+                <details>
+                    <summary>مشاهده ارزیابی‌های مستقل و استدلال‌ها (<?= count($case_assessments) ?>)</summary>
+                    <?php if (!$case_assessments): ?>
+                        <p class="muted">هنوز ارزیابی‌ای ثبت نشده است.</p>
+                    <?php else: ?>
+                        <?php foreach ($case_assessments as $assessment): ?>
+                            <div class="notice">
+                                <div class="meta">ارزیاب #<?= (int)$assessment['reviewer_user_id'] ?> —
+                                    <?= clcp_h($assessment['submitted_at']) ?> —
+                                    نتیجه:
+                                    <?= $assessment['verdict']==='uphold'?'موجه':($assessment['verdict']==='dismiss'?'ناموجه':'نامعین') ?>
+                                </div>
+                                <p><?= nl2br(clcp_h($assessment['reasoning'])) ?></p>
+                                <?php if (!empty($assessment['evidence'])): ?>
+                                    <p class="muted">شواهد: <?= nl2br(clcp_h($assessment['evidence'])) ?></p>
+                                <?php endif; ?>
+                            </div>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </details>
+
+                <details>
+                    <summary>تاریخچه رویدادهای همین پرونده (<?= count($case_history) ?>)</summary>
+                    <?php if (!$case_history): ?>
+                        <p class="muted">رویداد جزئی‌تری برای این پرونده در تاریخچه ثبت نشده است.</p>
+                    <?php else: ?>
+                        <?php foreach ($case_history as $history): ?>
+                            <div class="notice">
+                                <div class="meta"><?= clcp_h($history['event_type']) ?> —
+                                    <?= clcp_h($history['created_at']) ?>
+                                    <?php if ($history['actor_user_id']!==null): ?>
+                                        — عامل ثبت #<?= (int)$history['actor_user_id'] ?>
+                                    <?php endif; ?>
+                                </div>
+                                <?php if (!empty($history['details'])): ?>
+                                    <pre style="white-space:pre-wrap;overflow-wrap:anywhere"><?= clcp_h($history['details']) ?></pre>
+                                <?php endif; ?>
+                            </div>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </details>
 
                 <?php if ($case['status']==='under_review' && (int)$case['is_reviewer']===1 && (int)$case['has_assessed']===0): ?>
                     <details>
