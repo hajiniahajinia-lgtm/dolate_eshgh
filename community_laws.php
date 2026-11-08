@@ -1969,10 +1969,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $case_lock = $conn->prepare(
                 "SELECT l.id AS law_id, l.status AS law_status, l.current_version_id,
                         v.status AS version_status, v.proposed_by,
-                        rc.status AS review_status, rc.reviewer_quorum
+                        rc.status AS review_status, rc.reviewer_quorum,
+                        a.id AS amendment_case_id,a.status AS amendment_status,
+                        a.base_version_id AS amendment_base_version_id
                  FROM community_law_versions v
                  JOIN community_laws l ON l.id=v.law_id
                  JOIN community_law_review_cases rc ON rc.law_version_id=v.id
+                 LEFT JOIN community_law_amendment_cases a ON a.proposed_version_id=v.id
                  WHERE v.id=? FOR UPDATE"
             );
             if (!$case_lock) throw new Exception('legal assessment lock prepare failed');
@@ -1980,12 +1983,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!$case_lock->execute()) throw new Exception('legal assessment lock failed');
             $case = $case_lock->get_result()->fetch_assoc();
             $case_lock->close();
+            $is_amendment_legal_assessment=$case && !empty($case['amendment_case_id']);
+            $standard_legal_assessment_state=$case &&
+                $case['law_status']==='proposed' &&
+                (int)$case['current_version_id']===$version_id;
+            $amendment_legal_assessment_state=$is_amendment_legal_assessment &&
+                $case['law_status']==='approved' &&
+                $case['amendment_status']==='submitted' &&
+                (int)$case['current_version_id']===(int)$case['amendment_base_version_id'];
             if (
-                !$case || $case['law_status'] !== 'proposed' ||
-                $case['version_status'] !== 'proposed' ||
-                (int)$case['current_version_id'] !== $version_id ||
-                (int)$case['proposed_by'] === $user_id ||
-                $case['review_status'] !== 'pending'
+                (!$standard_legal_assessment_state && !$amendment_legal_assessment_state) ||
+                $case['version_status']!=='proposed' ||
+                (int)$case['proposed_by']===$user_id ||
+                $case['review_status']!=='pending'
             ) throw new RuntimeException('legal_assessment_not_allowed');
 
             $eligible_stmt = $conn->prepare(
@@ -2060,9 +2070,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             // ایجاد پرونده اجرای اولیه برای تمام جوامع مشمول، بخشی از خود ابلاغ است.
             // در صورت شکست حتی یک رکورد، کل تراکنش ابلاغ rollback می‌شود.
-            if (!community_law_initialize_implementations(
+            if (!$is_amendment_legal_assessment && !community_law_initialize_implementations(
                 $conn,
-                (int)$law['law_id'],
+                (int)$case['law_id'],
                 $version_id,
                 $user_id,
                 $implementation_community_ids
@@ -2113,11 +2123,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         v.status AS version_status, v.proposed_by,
                         rc.status AS screening_status,
                         ac.status AS authority_status, ac.reviewer_quorum,
-                        ac.derived_jurisdiction_level
+                        ac.derived_jurisdiction_level,
+                        a.id AS amendment_case_id,a.status AS amendment_status,
+                        a.base_version_id AS amendment_base_version_id
                  FROM community_law_versions v
                  JOIN community_laws l ON l.id=v.law_id
                  JOIN community_law_review_cases rc ON rc.law_version_id=v.id
                  JOIN community_law_authority_cases ac ON ac.law_version_id=v.id
+                 LEFT JOIN community_law_amendment_cases a ON a.proposed_version_id=v.id
                  WHERE v.id=? FOR UPDATE"
             );
             if (!$case_lock) throw new Exception('authority assessment lock prepare failed');
@@ -2126,13 +2139,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $case = $case_lock->get_result()->fetch_assoc();
             $case_lock->close();
 
+            $is_amendment_authority_assessment=$case && !empty($case['amendment_case_id']);
+            $standard_authority_assessment_state=$case &&
+                $case['law_status']==='proposed' &&
+                (int)$case['current_version_id']===$version_id;
+            $amendment_authority_assessment_state=$is_amendment_authority_assessment &&
+                $case['law_status']==='approved' &&
+                $case['amendment_status']==='submitted' &&
+                (int)$case['current_version_id']===(int)$case['amendment_base_version_id'];
             if (
-                !$case || $case['law_status'] !== 'proposed' ||
-                $case['version_status'] !== 'proposed' ||
-                (int)$case['current_version_id'] !== $version_id ||
-                (int)$case['proposed_by'] === $user_id ||
-                $case['screening_status'] !== 'screening_clear' ||
-                $case['authority_status'] !== 'pending'
+                (!$standard_authority_assessment_state && !$amendment_authority_assessment_state) ||
+                $case['version_status']!=='proposed' ||
+                (int)$case['proposed_by']===$user_id ||
+                $case['screening_status']!=='screening_clear' ||
+                $case['authority_status']!=='pending'
             ) throw new RuntimeException('authority_assessment_not_allowed');
 
             $eligible_stmt = $conn->prepare(
