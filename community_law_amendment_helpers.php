@@ -666,7 +666,7 @@ if (!function_exists('community_law_submit_amendment_parent_review')) {
                 (int)$row['current_version_id']!==(int)$row['base_version_id'] ||
                 $row['base_status']!=='approved' || $row['proposed_status']!=='voting' ||
                 $row['parent_law_status']!=='approved' || $row['parent_version_status']!=='approved' ||
-                community_law_scope_match_checked($conn,(int)$row['parent_version_id'],$community_id)!==true ||
+                community_law_scope_match_checked($conn,(int)$row['parent_version_id'],(int)$row['community_id'])!==true ||
                 (int)$row['parent_current_version_id']!==(int)$row['parent_version_id'] ||
                 !empty($row['repealed_at']) ||
                 (!empty($row['effective_at']) && strtotime($row['effective_at'])>time()) ||
