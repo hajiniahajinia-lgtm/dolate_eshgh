@@ -94,7 +94,7 @@ if ($schema_ready) {
                 a.base_version_id,a.proposed_version_id,a.proposed_by,
                 v.version_number,v.law_text,v.status AS version_status,v.vote_deadline,v.vote_started_at,
                 l.id AS law_id,l.current_version_id,l.law_code,a.voting_rules_source_version_id,
-                c.parent_community_id
+                c.parent_community_id,a.decision_note
          FROM community_law_amendment_cases a
          JOIN community_law_versions v ON v.id=a.proposed_version_id
          JOIN community_laws l ON l.id=a.law_id
@@ -428,7 +428,8 @@ $parent_review_count=(int)$parent_review_stmt->get_result()->fetch_assoc()['tota
 <?php elseif($draft['status']==='parent_review_approved'):?>
 <p class="notice">دو بررسی مستقل جامعهٔ مادر سازگاری مواد اصلاح‌شده را تأیید کرده‌اند. اصلاحیه هنوز قانون جاری نیست و برای بررسی نهایی مستقل آماده است.</p>
 <?php elseif($draft['status']==='revision_required'):?>
-<p class="notice warning">جامعهٔ مادر اعلام کرده در مواد مشخص‌شده هنوز تعارض وجود دارد. این پرونده برای اصلاح دوباره به جامعهٔ محلی بازگشته است؛ جامعهٔ مادر متن جایگزین تعیین نمی‌کند.</p>
+<p class="notice warning">این نسخه در یکی از مراحل بررسی مستقل نیازمند بازنگری تشخیص داده شده و برای تهیه نسخه تازه به جامعهٔ محلی بازگشته است. ارزیابان متن جایگزین را تحمیل نمی‌کنند.</p>
+<?php if(!empty($draft['decision_note'])):?><p><?=nl2br(clamp_h($draft['decision_note']))?></p><?php endif;?>
 <?php elseif($draft['status']==='vote_insufficient'):?>
 <p class="notice warning">حدنصاب مشارکت رأی‌گیری تأمین نشد؛ این نتیجه به‌معنای رد ماهوی اصلاحیه نیست.</p>
 <?php elseif($draft['status']==='rejected'):?>
