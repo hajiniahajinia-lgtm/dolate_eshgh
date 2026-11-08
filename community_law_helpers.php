@@ -1095,6 +1095,144 @@ if (!function_exists('community_charter_amendment_appeal_result')) {
 }
 
 
+if (!function_exists('community_charter_record_appeal_assessment')) {
+    /**
+     * ارزیابی یک رسیدگی‌کننده مستقل را ذخیره و نتیجه اعتراض را در همان تراکنش جمع‌بندی می‌کند.
+     * فراخواننده باید تراکنش و قفل ردیف اعتراض را مدیریت کند.
+     */
+    function community_charter_record_appeal_assessment(
+        mysqli $conn,
+        int $appeal_id,
+        int $reviewer_id,
+        string $verdict,
+        string $reasoning
+    ): string {
+        $reasoning = trim($reasoning);
+        if ($appeal_id <= 0 || $reviewer_id <= 0 ||
+            !in_array($verdict, ['uphold','dismiss','unclear'], true) ||
+            mb_strlen($reasoning) < 20 || mb_strlen($reasoning) > 20000) {
+            throw new RuntimeException('ارزیابی اعتراض معتبر نیست.');
+        }
+
+        $appeal = $conn->prepare(
+            "SELECT amendment_id,status FROM community_charter_amendment_appeals WHERE id=?"
+        );
+        if (!$appeal) throw new RuntimeException('خواندن وضعیت اعتراض ممکن نیست.');
+        $appeal->bind_param('i', $appeal_id);
+        if (!$appeal->execute()) throw new RuntimeException('خواندن وضعیت اعتراض انجام نشد.');
+        $appeal_row = $appeal->get_result()->fetch_assoc();
+        $appeal->close();
+        if (!$appeal_row || !in_array($appeal_row['status'], ['submitted','under_review'], true)) {
+            throw new RuntimeException('این اعتراض در وضعیت قابل رسیدگی نیست.');
+        }
+
+        $assigned = $conn->prepare(
+            "SELECT 1 FROM community_charter_amendment_appeal_reviewer_assignments
+             WHERE appeal_id=? AND reviewer_user_id=? LIMIT 1"
+        );
+        if (!$assigned) throw new RuntimeException('بررسی صلاحیت ارزیاب اعتراض ممکن نیست.');
+        $assigned->bind_param('ii', $appeal_id, $reviewer_id);
+        if (!$assigned->execute() || !$assigned->get_result()->fetch_row()) {
+            $assigned->close();
+            throw new RuntimeException('این کاربر ارزیاب مستقل این اعتراض نیست.');
+        }
+        $assigned->close();
+
+        $save = $conn->prepare(
+            "INSERT INTO community_charter_amendment_appeal_reviewers
+                (appeal_id,reviewer_user_id,verdict,reasoning)
+             VALUES (?,?,?,?)
+             ON DUPLICATE KEY UPDATE verdict=VALUES(verdict),reasoning=VALUES(reasoning),
+                                     submitted_at=CURRENT_TIMESTAMP"
+        );
+        if (!$save) throw new RuntimeException('ثبت ارزیابی اعتراض ممکن نیست.');
+        $save->bind_param('iiss', $appeal_id, $reviewer_id, $verdict, $reasoning);
+        if (!$save->execute()) {
+            $save->close();
+            throw new RuntimeException('ثبت ارزیابی اعتراض انجام نشد.');
+        }
+        $save->close();
+
+        $tally = $conn->prepare(
+            "SELECT reviewer_user_id,verdict
+             FROM community_charter_amendment_appeal_reviewers
+             WHERE appeal_id=? ORDER BY reviewer_user_id"
+        );
+        if (!$tally) throw new RuntimeException('جمع‌بندی ارزیابی اعتراض ممکن نیست.');
+        $tally->bind_param('i', $appeal_id);
+        if (!$tally->execute()) {
+            $tally->close();
+            throw new RuntimeException('جمع‌بندی ارزیابی اعتراض انجام نشد.');
+        }
+        $assessments = [];
+        $rows = $tally->get_result();
+        while ($row = $rows->fetch_assoc()) $assessments[] = $row;
+        $tally->close();
+
+        $status = community_charter_amendment_appeal_result($assessments);
+        if ($status === 'invalid') throw new RuntimeException('ارزیابی‌های اعتراض ناسازگار است.');
+        if ($status === 'pending') return 'under_review';
+
+        $resolve = $conn->prepare(
+            "UPDATE community_charter_amendment_appeals
+             SET status=?,resolved_at=NOW() WHERE id=? AND status IN ('submitted','under_review')"
+        );
+        if (!$resolve) throw new RuntimeException('ثبت نتیجه اعتراض ممکن نیست.');
+        $resolve->bind_param('si', $status, $appeal_id);
+        if (!$resolve->execute() || $resolve->affected_rows !== 1) {
+            $resolve->close();
+            throw new RuntimeException('ثبت نتیجه نهایی اعتراض انجام نشد.');
+        }
+        $resolve->close();
+
+        if ($status === 'upheld') {
+            $amendment_id = (int)$appeal_row['amendment_id'];
+            $amendment = $conn->prepare(
+                "SELECT proposed_charter_version_id,status
+                 FROM community_charter_amendments WHERE id=? FOR UPDATE"
+            );
+            if (!$amendment) throw new RuntimeException('قفل اصلاحیه ممکن نیست.');
+            $amendment->bind_param('i', $amendment_id);
+            if (!$amendment->execute()) {
+                $amendment->close();
+                throw new RuntimeException('خواندن اصلاحیه انجام نشد.');
+            }
+            $amendment_row = $amendment->get_result()->fetch_assoc();
+            $amendment->close();
+            if (!$amendment_row || $amendment_row['status'] !== 'appeal_period') {
+                throw new RuntimeException('اصلاحیه دیگر در وضعیت قابل ابطال نیست.');
+            }
+
+            $reject_amendment = $conn->prepare(
+                "UPDATE community_charter_amendments SET status='rejected'
+                 WHERE id=? AND status='appeal_period'"
+            );
+            if (!$reject_amendment) throw new RuntimeException('رد اصلاحیه ممکن نیست.');
+            $reject_amendment->bind_param('i', $amendment_id);
+            if (!$reject_amendment->execute() || $reject_amendment->affected_rows !== 1) {
+                $reject_amendment->close();
+                throw new RuntimeException('رد اصلاحیه انجام نشد.');
+            }
+            $reject_amendment->close();
+
+            $version_id = (int)$amendment_row['proposed_charter_version_id'];
+            $reject_version = $conn->prepare(
+                "UPDATE community_charter_versions SET status='rejected'
+                 WHERE id=? AND status='draft'"
+            );
+            if (!$reject_version) throw new RuntimeException('بستن نسخه پیشنهادی ممکن نیست.');
+            $reject_version->bind_param('i', $version_id);
+            if (!$reject_version->execute() || $reject_version->affected_rows !== 1) {
+                $reject_version->close();
+                throw new RuntimeException('بستن نسخه پیشنهادی انجام نشد.');
+            }
+            $reject_version->close();
+        }
+
+        return $status;
+    }
+}
+
 if (!function_exists('community_charter_start_independent_review')) {
     /**
      * پرونده draft را پس از تخصیص موفق ارزیابان وارد بررسی مستقل می‌کند.
