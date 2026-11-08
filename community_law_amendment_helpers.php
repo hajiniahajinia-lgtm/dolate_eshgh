@@ -753,3 +753,275 @@ if (!function_exists('community_law_submit_amendment_parent_review')) {
         }
     }
 }
+
+
+if (!function_exists('community_law_enact_amendment')) {
+    /**
+     * ابلاغ اتمی نسخه اصلاحی پس از رأی محلی، بررسی انطباق، بررسی نهایی و پایان اعتراض‌ها.
+     * قانون جاری تا لحظهٔ commit به نسخهٔ پایه اشاره می‌کند.
+     */
+    function community_law_enact_amendment(
+        mysqli $conn,
+        int $law_id,
+        int $version_id,
+        int $community_id,
+        int $user_id
+    ): bool {
+        if ($law_id<=0 || $version_id<=0 || $community_id<=0 || $user_id<=0 ||
+            !community_law_amendment_tables_ready($conn)) return false;
+        $started=false;
+        try {
+            if (!$conn->begin_transaction()) return false;
+            $started=true;
+            $hierarchy=$conn->query('SELECT id,parent_community_id FROM communities ORDER BY id FOR UPDATE');
+            if (!$hierarchy) throw new RuntimeException('amendment enactment hierarchy lock failed');
+            $hierarchy->free();
+
+            $member=$conn->prepare('SELECT 1 FROM community_members WHERE community_id=? AND user_id=? LIMIT 1');
+            if (!$member) throw new RuntimeException('amendment enactment membership prepare failed');
+            $member->bind_param('ii',$community_id,$user_id);
+            if (!$member->execute() || !$member->get_result()->fetch_row()) {
+                $member->close();
+                throw new RuntimeException('amendment enactment membership required');
+            }
+            $member->close();
+
+            $lock=$conn->prepare(
+                "SELECT l.id AS law_id,l.status AS law_status,l.current_version_id,l.originating_community_id,
+                        v.status AS version_status,fc.status AS final_status,fc.appeal_deadline,fc.reviewer_quorum,
+                        rc.status AS screening_status,ac.status AS authority_status,fr.final_status AS vote_result,
+                        a.id AS amendment_case_id,a.status AS amendment_status,a.base_version_id,a.conformity_case_id,
+                        base.status AS base_version_status
+                 FROM community_law_versions v
+                 JOIN community_laws l ON l.id=v.law_id
+                 JOIN community_law_final_review_cases fc ON fc.law_version_id=v.id
+                 JOIN community_law_review_cases rc ON rc.law_version_id=v.id
+                 JOIN community_law_authority_cases ac ON ac.law_version_id=v.id
+                 JOIN community_law_final_results fr ON fr.law_version_id=v.id
+                 JOIN community_law_amendment_cases a ON a.proposed_version_id=v.id
+                 JOIN community_law_versions base ON base.id=a.base_version_id AND base.law_id=l.id
+                 WHERE l.id=? AND v.id=? FOR UPDATE"
+            );
+            if (!$lock) throw new RuntimeException('amendment enactment lock prepare failed');
+            $lock->bind_param('ii',$law_id,$version_id);
+            if (!$lock->execute()) throw new RuntimeException('amendment enactment lock failed');
+            $row=$lock->get_result()->fetch_assoc();
+            $lock->close();
+            if (!$row || (int)$row['originating_community_id']!==$community_id ||
+                $row['law_status']!=='approved' || $row['version_status']!=='appeal_period' ||
+                $row['amendment_status']!=='parent_review_approved' ||
+                (int)$row['current_version_id']!==(int)$row['base_version_id'] ||
+                $row['base_version_status']!=='approved' ||
+                $row['screening_status']!=='screening_clear' ||
+                $row['authority_status']!=='confirmed' || $row['vote_result']!=='vote_passed' ||
+                !in_array($row['final_status'],['appeal_period','appeal_hold'],true) ||
+                empty($row['appeal_deadline']) || strtotime($row['appeal_deadline'])>time()) {
+                throw new RuntimeException('amendment enactment state is invalid');
+            }
+
+            $assessment_check=$conn->prepare(
+                "SELECT COUNT(*) AS total,
+                        SUM(verdict<>'confirm') AS non_confirmed,
+                        SUM(charter_and_rights<>'pass' OR non_discrimination<>'pass' OR
+                            power_concentration<>'pass' OR human_and_social_impact<>'pass' OR
+                            environmental_impact<>'pass' OR economic_and_resource_impact<>'pass' OR
+                            future_generations_and_other_life<>'pass' OR implementation_and_accountability<>'pass') AS unresolved_dimensions
+                 FROM community_law_final_review_assessments WHERE law_version_id=?"
+            );
+            if (!$assessment_check) throw new RuntimeException('amendment final assessment check prepare failed');
+            $assessment_check->bind_param('i',$version_id);
+            if (!$assessment_check->execute()) throw new RuntimeException('amendment final assessment check failed');
+            $assessment_totals=$assessment_check->get_result()->fetch_assoc();
+            $assessment_check->close();
+            if ((int)$assessment_totals['total']<(int)$row['reviewer_quorum'] ||
+                (int)$assessment_totals['non_confirmed']>0 ||
+                (int)$assessment_totals['unresolved_dimensions']>0) {
+                throw new RuntimeException('amendment final review quorum or findings are incomplete');
+            }
+
+            $appeals=$conn->prepare(
+                "SELECT SUM(status IN ('submitted','under_review')) AS unresolved,
+                        SUM(status='upheld') AS upheld
+                 FROM community_law_appeals WHERE law_version_id=?"
+            );
+            if (!$appeals) throw new RuntimeException('amendment appeal check prepare failed');
+            $appeals->bind_param('i',$version_id);
+            if (!$appeals->execute()) throw new RuntimeException('amendment appeal check failed');
+            $appeal_totals=$appeals->get_result()->fetch_assoc();
+            $appeals->close();
+            if ((int)$appeal_totals['unresolved']>0 || (int)$appeal_totals['upheld']>0) {
+                throw new RuntimeException('amendment appeals are unresolved');
+            }
+
+            if (community_law_charter_snapshot_is_current($conn,$version_id)!==true) {
+                throw new RuntimeException('amendment charter snapshot changed');
+            }
+
+            $scope_ids=community_law_scope_community_ids($conn,$version_id);
+            if (!$scope_ids || !in_array($community_id,$scope_ids,true)) {
+                throw new RuntimeException('amendment scope is unresolved');
+            }
+            $reference_stmt=$conn->prepare(
+                "SELECT r.reference_law_id,r.reference_law_version_id,r.scope_fingerprint,
+                        l.current_version_id,l.status AS law_status,l.effective_at,l.expires_at,l.repealed_at,
+                        v.status AS version_status
+                 FROM community_law_final_review_references r
+                 JOIN community_laws l ON l.id=r.reference_law_id
+                 JOIN community_law_versions v ON v.id=r.reference_law_version_id
+                 WHERE r.law_version_id=?"
+            );
+            if (!$reference_stmt) throw new RuntimeException('amendment reference check prepare failed');
+            $reference_stmt->bind_param('i',$version_id);
+            if (!$reference_stmt->execute()) throw new RuntimeException('amendment reference check failed');
+            $reference_rows=$reference_stmt->get_result();
+            $captured=[];
+            while ($reference=$reference_rows->fetch_assoc()) {
+                if ((int)$reference['current_version_id']!==(int)$reference['reference_law_version_id'] ||
+                    $reference['law_status']!=='approved' || $reference['version_status']!=='approved' ||
+                    !empty($reference['repealed_at']) ||
+                    (!empty($reference['effective_at']) && strtotime($reference['effective_at'])>time()) ||
+                    (!empty($reference['expires_at']) && strtotime($reference['expires_at'])<=time())) {
+                    $reference_stmt->close();
+                    throw new RuntimeException('amendment reference law changed');
+                }
+                $scope_stmt=$conn->prepare('SELECT scope_community_id,include_descendants FROM community_law_scopes WHERE law_version_id=? ORDER BY scope_community_id');
+                if (!$scope_stmt) { $reference_stmt->close(); throw new RuntimeException('amendment reference scope prepare failed'); }
+                $reference_version=(int)$reference['reference_law_version_id'];
+                $scope_stmt->bind_param('i',$reference_version);
+                if (!$scope_stmt->execute()) { $scope_stmt->close(); $reference_stmt->close(); throw new RuntimeException('amendment reference scope failed'); }
+                $reference_scopes=[];
+                $scope_result=$scope_stmt->get_result();
+                while ($scope_row=$scope_result->fetch_assoc()) $reference_scopes[]=$scope_row;
+                $scope_stmt->close();
+                if (!$reference_scopes || !hash_equals((string)$reference['scope_fingerprint'],hash('sha256',json_encode($reference_scopes)))) {
+                    $reference_stmt->close();
+                    throw new RuntimeException('amendment reference scope changed');
+                }
+                $captured[(int)$reference['reference_law_id'].':'.(int)$reference['reference_law_version_id']]=true;
+            }
+            $reference_stmt->close();
+
+            $parent_map=community_law_load_parent_map($conn);
+            if ($parent_map===null || !community_law_parent_map_is_valid($parent_map)) {
+                throw new RuntimeException('amendment enactment hierarchy invalid');
+            }
+            $active_laws=$conn->query(
+                "SELECT l.id AS law_id,l.current_version_id
+                 FROM community_laws l
+                 JOIN community_law_versions v ON v.id=l.current_version_id
+                 WHERE l.status='approved' AND v.status='approved'
+                   AND (l.effective_at IS NULL OR l.effective_at<=NOW())
+                   AND (l.expires_at IS NULL OR l.expires_at>NOW())
+                   AND l.repealed_at IS NULL"
+            );
+            if (!$active_laws) throw new RuntimeException('amendment active law rescan failed');
+            while ($active=$active_laws->fetch_assoc()) {
+                $active_law_id=(int)$active['law_id'];
+                if ($active_law_id===$law_id) continue;
+                $active_version=(int)$active['current_version_id'];
+                $applies=false;
+                foreach ($scope_ids as $scope_id) {
+                    $matches=community_law_scope_match_checked($conn,$active_version,(int)$scope_id);
+                    if ($matches===null) { $active_laws->free(); throw new RuntimeException('amendment active law scope check failed'); }
+                    if ($matches) { $applies=true; break; }
+                }
+                if ($applies && !isset($captured[$active_law_id.':'.$active_version])) {
+                    $active_laws->free();
+                    throw new RuntimeException('amendment active law reference missing');
+                }
+            }
+            $active_laws->free();
+
+            $base_version_id=(int)$row['base_version_id'];
+            $implementation_count=$conn->prepare('SELECT COUNT(*) AS total FROM community_law_implementations WHERE law_version_id=?');
+            if (!$implementation_count) throw new RuntimeException('amendment implementation count prepare failed');
+            $implementation_count->bind_param('i',$base_version_id);
+            if (!$implementation_count->execute()) throw new RuntimeException('amendment implementation count failed');
+            $base_implementation_count=(int)$implementation_count->get_result()->fetch_assoc()['total'];
+            $implementation_count->close();
+            if ($base_implementation_count!==count($scope_ids)) {
+                throw new RuntimeException('amendment implementation snapshot missing');
+            }
+
+            $copy=$conn->prepare(
+                "INSERT INTO community_law_implementations
+                    (law_version_id,community_id,responsible_user_id,local_plan,status,
+                     started_at,target_date,completed_at,progress_report)
+                 SELECT ?,community_id,responsible_user_id,local_plan,status,
+                        started_at,target_date,completed_at,progress_report
+                 FROM community_law_implementations WHERE law_version_id=?"
+            );
+            if (!$copy) throw new RuntimeException('amendment implementation copy prepare failed');
+            $copy->bind_param('ii',$version_id,$base_version_id);
+            if (!$copy->execute() || $copy->affected_rows!==$base_implementation_count) {
+                throw new RuntimeException('amendment implementation state copy failed');
+            }
+            $copy->close();
+
+            $law_update=$conn->prepare(
+                "UPDATE community_laws SET current_version_id=?
+                 WHERE id=? AND status='approved' AND current_version_id=?"
+            );
+            if (!$law_update) throw new RuntimeException('amendment law activation prepare failed');
+            $law_update->bind_param('iii',$version_id,$law_id,$base_version_id);
+            if (!$law_update->execute() || $law_update->affected_rows!==1) throw new RuntimeException('amendment law activation failed');
+            $law_update->close();
+
+            $base_update=$conn->prepare("UPDATE community_law_versions SET status='superseded' WHERE id=? AND law_id=? AND status='approved'");
+            if (!$base_update) throw new RuntimeException('amendment base supersede prepare failed');
+            $base_update->bind_param('ii',$base_version_id,$law_id);
+            if (!$base_update->execute() || $base_update->affected_rows!==1) throw new RuntimeException('amendment base supersede failed');
+            $base_update->close();
+
+            $version_update=$conn->prepare("UPDATE community_law_versions SET status='approved',approved_at=NOW() WHERE id=? AND status='appeal_period'");
+            if (!$version_update) throw new RuntimeException('amendment version activation prepare failed');
+            $version_update->bind_param('i',$version_id);
+            if (!$version_update->execute() || $version_update->affected_rows!==1) throw new RuntimeException('amendment version activation failed');
+            $version_update->close();
+
+            $amendment_update=$conn->prepare("UPDATE community_law_amendment_cases SET status='approved',decided_at=NOW(),decision_note='نسخه اصلاحی پس از طی همه مراحل معتبر، ابلاغ و فعال شد.' WHERE id=? AND status='parent_review_approved'");
+            if (!$amendment_update) throw new RuntimeException('amendment case activation prepare failed');
+            $amendment_id=(int)$row['amendment_case_id'];
+            $amendment_update->bind_param('i',$amendment_id);
+            if (!$amendment_update->execute() || $amendment_update->affected_rows!==1) throw new RuntimeException('amendment case activation failed');
+            $amendment_update->close();
+
+            $conformity_update=$conn->prepare("UPDATE community_law_conformity_cases SET status='resolved',resolved_at=NOW() WHERE id=? AND status='amendment_in_progress'");
+            if (!$conformity_update) throw new RuntimeException('amendment conformity resolution prepare failed');
+            $conformity_id=(int)$row['conformity_case_id'];
+            $conformity_update->bind_param('i',$conformity_id);
+            if (!$conformity_update->execute() || $conformity_update->affected_rows!==1) throw new RuntimeException('amendment conformity resolution failed');
+            $conformity_update->close();
+
+            $final_case=$conn->prepare("UPDATE community_law_final_review_cases SET status='enacted',enacted_at=NOW() WHERE law_version_id=? AND status IN ('appeal_period','appeal_hold')");
+            if (!$final_case) throw new RuntimeException('amendment final review close prepare failed');
+            $final_case->bind_param('i',$version_id);
+            if (!$final_case->execute() || $final_case->affected_rows!==1) throw new RuntimeException('amendment final review close failed');
+            $final_case->close();
+
+            $details=json_encode([
+                'base_version_id'=>$base_version_id,'enacted_version_id'=>$version_id,
+                'law_current_version_updated'=>true,'previous_version_preserved_as_superseded'=>true,
+                'implementation_progress_preserved'=>true
+            ],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
+            $event=$conn->prepare("INSERT INTO community_law_amendment_events (case_id,actor_user_id,event_type,details) VALUES (?,?,'amendment_enacted',?)");
+            if (!$event) throw new RuntimeException('amendment enactment event prepare failed');
+            $event->bind_param('iis',$amendment_id,$user_id,$details);
+            if (!$event->execute()) throw new RuntimeException('amendment enactment event failed');
+            $event->close();
+
+            if (!community_law_record_history(
+                $conn,$law_id,$version_id,$community_id,$user_id,'law_amendment_enacted',
+                'نسخه اصلاحی پس از رأی محلی، بررسی انطباق جامعه مادر، بررسی نهایی مستقل، پایان مهلت اعتراض و رسیدگی به اعتراض‌ها به‌صورت اتمی جایگزین نسخه قبلی شد.'
+            )) throw new RuntimeException('amendment enactment history failed');
+
+            if (!$conn->commit()) throw new RuntimeException('amendment enactment commit failed');
+            $started=false;
+            return true;
+        } catch (Throwable $e) {
+            if ($started) $conn->rollback();
+            error_log('[Dolate Eshgh amendment enactment] '.$e->getMessage());
+            return false;
+        }
+    }
+}
