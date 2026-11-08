@@ -178,10 +178,32 @@ if (!function_exists('community_law_conformity_review_conflict')) {
             $update->close();
 
             $case_status = (string)$row['status'];
-            if ($aggregate === 'conflict_confirmed') $case_status = 'amendment_required';
-            $case_update = $conn->prepare('UPDATE community_law_conformity_cases SET status=? WHERE id=?');
+            $resolved_at_sql = null;
+            if ($aggregate === 'conflict_confirmed') {
+                // تأیید یک‌طرفه برای احتیاط، اصلاحیه را لازم می‌کند؛ اما به معنی توافق دوطرفه نیست.
+                $case_status = 'amendment_required';
+            } elseif ($aggregate === 'no_conflict') {
+                // پرونده فقط وقتی بسته/حل‌شده می‌شود که هیچ تعارض دیگری باز یا تأییدشده نمانده باشد.
+                $remaining = $conn->prepare(
+                    "SELECT COUNT(*) AS total FROM community_law_conformity_conflicts
+                     WHERE case_id=? AND id<>? AND finding<>'no_conflict'"
+                );
+                if (!$remaining) throw new RuntimeException('remaining conflict check prepare failed');
+                $case_id_for_check = (int)$row['case_id'];
+                $remaining->bind_param('ii', $case_id_for_check, $conflict_id);
+                if (!$remaining->execute()) throw new RuntimeException('remaining conflict check failed');
+                $remaining_count = (int)$remaining->get_result()->fetch_assoc()['total'];
+                $remaining->close();
+                if ($remaining_count === 0) {
+                    $case_status = 'resolved';
+                    $resolved_at_sql = date('Y-m-d H:i:s');
+                }
+            }
+            $case_update = $conn->prepare(
+                'UPDATE community_law_conformity_cases SET status=?, resolved_at=? WHERE id=?'
+            );
             if (!$case_update) throw new RuntimeException('case update prepare failed');
-            $case_update->bind_param('si', $case_status, $row['case_id']);
+            $case_update->bind_param('ssi', $case_status, $resolved_at_sql, $row['case_id']);
             if (!$case_update->execute()) throw new RuntimeException('case update failed');
             $case_update->close();
 
