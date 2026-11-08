@@ -24,7 +24,7 @@ function clca_redirect(int $community_id,string $status): void {
     header('Location: community_law_change_cases.php?community_id='.$community_id.'&status='.rawurlencode($status));
     exit;
 }
-if (!community_law_change_tables_ready($conn)) clca_redirect($community_id,'schema');
+if (!community_law_tables_ready($conn) || !community_law_change_tables_ready($conn)) clca_redirect($community_id,'schema');
 
 $action=(string)($_POST['action']??'');
 try {
