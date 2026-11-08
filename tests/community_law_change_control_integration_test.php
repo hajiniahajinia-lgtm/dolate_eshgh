@@ -25,6 +25,7 @@ try {
     change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_change_effects.sql');
     change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_conformity_workflow.sql');
     change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_amendment_workflow.sql');
+    change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_amendment_submission.sql');
     require_once __DIR__.'/../community_law_helpers.php';
     require_once __DIR__.'/../community_law_amendment_helpers.php';
     require_once __DIR__.'/../community_law_change_helpers.php';
@@ -39,6 +40,8 @@ try {
     $db->query("INSERT INTO community_law_scopes (law_version_id,scope_community_id,include_descendants) VALUES (99001,90010,1)");
     $db->query("INSERT INTO community_laws (id,law_code,originating_community_id,created_by,status,current_version_id,effective_at) VALUES (9502,'LAW-LOCAL-CONFORMITY-TEST',90020,90200,'approved',99002,NOW())");
     $db->query("INSERT INTO community_law_versions (id,law_id,version_number,title,law_text,proposed_by,status,approved_at) VALUES (99002,9502,1,'قانون محلی آزمایشی','متن قانون محلی',90200,'approved',NOW())");
+    $db->query("INSERT INTO community_law_scopes (law_version_id,scope_community_id,include_descendants) VALUES (99002,90020,1)");
+    $db->query("INSERT INTO community_law_voting_rules (law_version_id,jurisdiction_level,individual_quorum_percent,individual_approval_percent,community_quorum_percent,community_approval_percent,community_aggregate_quorum_percent,community_aggregate_approval_percent,require_community_approval,individual_vote_basis,community_vote_basis,status,configured_by,configured_at,approved_at) VALUES (99002,'local',50,50.01,NULL,NULL,NULL,NULL,0,'count',NULL,'approved',90200,NOW(),NOW())");
     change_case_check(community_law_register_hierarchy_conformity_reviews($db,[90010=>0,90020=>90010],90020,90100),'a hierarchy change opens a conformity review for an approved local law under an applicable parent law');
     $conformity=$db->query("SELECT community_id,parent_community_id,local_law_id,local_law_version_id,parent_law_id,parent_law_version_id,status FROM community_law_conformity_cases WHERE community_id=90020 AND local_law_version_id=99002 AND parent_law_version_id=99001")->fetch_assoc();
     change_case_check($conformity && (int)$conformity['parent_community_id']===90010 && (int)$conformity['local_law_id']===9502 && $conformity['status']==='review_required','conformity case captures both exact law versions and awaits human review');
@@ -76,6 +79,16 @@ try {
     change_case_check($amendment && $amendment['law_text']==='متن اصلاح‌شدهٔ قانون محلی','only the explicitly selected article text is replaced in the new draft while the rest of the approved law text is preserved');
     $amendment_articles=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_amendment_articles WHERE case_id=".$amendment_id)->fetch_assoc()['n'];
     change_case_check($amendment_articles===1,'article reference, previous wording, proposed wording and reason are separately preserved');
+    $copied_scope=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_scopes WHERE law_version_id=".(int)$amendment['proposed_version_id']." AND scope_community_id=90020 AND include_descendants=1")->fetch_assoc()['n'];
+    change_case_check($copied_scope===1,'amendment draft snapshots the exact approved base-law scope');
+    change_case_check(!community_law_submit_amendment_for_vote($db,$amendment_id,90020,90201,false),'amendment cannot be submitted without explicit acceptance of the approved base voting rules');
+    change_case_check(community_law_submit_amendment_for_vote($db,$amendment_id,90020,90201,true),'local member can submit amendment after explicitly adopting the approved base voting rules');
+    $submitted=$db->query("SELECT a.status,a.voting_rules_source_version_id,a.rules_adopted_by,a.rules_adopted_at,a.base_version_id,a.proposed_version_id,v.status AS proposed_status,l.status AS law_status,l.current_version_id,r.status AS copied_rules_status FROM community_law_amendment_cases a JOIN community_law_versions v ON v.id=a.proposed_version_id JOIN community_laws l ON l.id=a.law_id JOIN community_law_voting_rules r ON r.law_version_id=a.proposed_version_id WHERE a.id=".(int)$amendment_id)->fetch_assoc();
+    change_case_check($submitted && $submitted['status']==='submitted' && (int)$submitted['voting_rules_source_version_id']===99002 && (int)$submitted['rules_adopted_by']===90201 && $submitted['rules_adopted_at']!==null && $submitted['proposed_status']==='proposed' && $submitted['copied_rules_status']==='approved','submission records the exact source and actor for the unchanged approved voting rules');
+    change_case_check($submitted && $submitted['law_status']==='approved' && (int)$submitted['current_version_id']===99002,'submitting an amendment never changes the current approved law or its status');
+    $submission_event=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_amendment_events WHERE case_id=".(int)$amendment_id." AND event_type='amendment_submitted'")->fetch_assoc()['n'];
+    change_case_check($submission_event===1,'explicit rule adoption and amendment submission are recorded as an immutable event');
+
     change_case_check(community_law_create_amendment_draft($db,$conformity_case_id,90020,90200,'درخواست با متن تکراری.',[[
         'reference'=>'ماده ۴','previous_text'=>'متن محلی','proposed_text'=>'متن تازه','reason'=>'دلیل'
     ]])===false,'a second parallel amendment is blocked while the first is open');
