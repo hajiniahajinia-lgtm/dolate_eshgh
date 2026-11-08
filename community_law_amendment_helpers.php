@@ -624,6 +624,7 @@ if (!function_exists('community_law_submit_amendment_parent_review')) {
             $lock=$conn->prepare(
                 "SELECT a.id,a.status,a.proposed_by,a.law_id,a.proposed_version_id,a.conformity_case_id,
                         a.base_version_id,c.parent_community_id,c.parent_law_version_id AS parent_version_id,c.community_id,
+                        child.parent_community_id AS current_parent_community_id,
                         l.status AS local_law_status,l.current_version_id,
                         base.status AS base_status,proposed.status AS proposed_status,
                         pl.status AS parent_law_status,pl.current_version_id AS parent_current_version_id,
@@ -635,6 +636,7 @@ if (!function_exists('community_law_submit_amendment_parent_review')) {
                         ) AS prior_conformity_reviewer
                  FROM community_law_amendment_cases a
                  JOIN community_law_conformity_cases c ON c.id=a.conformity_case_id
+                 JOIN communities child ON child.id=c.community_id
                  JOIN community_laws l ON l.id=a.law_id
                  JOIN community_law_versions base ON base.id=a.base_version_id AND base.law_id=a.law_id
                  JOIN community_law_versions proposed ON proposed.id=a.proposed_version_id AND proposed.law_id=a.law_id
@@ -649,6 +651,7 @@ if (!function_exists('community_law_submit_amendment_parent_review')) {
             $lock->close();
             if (!$row || $row['status']!=='parent_review' ||
                 (int)$row['parent_community_id']!==$parent_community_id ||
+                (int)$row['current_parent_community_id']!==(int)$row['parent_community_id'] ||
                 (int)$row['proposed_by']===$user_id || (int)$row['prior_conformity_reviewer']===1 ||
                 $row['local_law_status']!=='approved' ||
                 (int)$row['current_version_id']!==(int)$row['base_version_id'] ||
