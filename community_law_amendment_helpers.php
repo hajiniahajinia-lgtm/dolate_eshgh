@@ -8,7 +8,8 @@ if (!function_exists('community_law_amendment_tables_ready')) {
         $tables=['community_law_amendment_cases','community_law_amendment_articles','community_law_amendment_events'];
         $stmt=$conn->prepare("SELECT COUNT(*) AS n FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN (?,?,?)");
         if (!$stmt) return false;
-        $stmt->bind_param('sss',$tables[0],$tables[1],$tables[2]);
+        $table1=$tables[0]; $table2=$tables[1]; $table3=$tables[2];
+        $stmt->bind_param('sss',$table1,$table2,$table3);
         if (!$stmt->execute()) { $stmt->close(); return false; }
         $n=(int)$stmt->get_result()->fetch_assoc()['n'];
         $stmt->close();
