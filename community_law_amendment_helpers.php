@@ -106,7 +106,7 @@ if (!function_exists('community_law_create_amendment_draft')) {
             $member->close();
 
             $case_stmt=$conn->prepare(
-                "SELECT c.id,c.community_id,c.local_law_id,c.local_law_version_id,c.parent_community_id,c.status,
+                "SELECT c.id,c.community_id,c.local_law_id,c.local_law_version_id,c.parent_community_id,c.parent_law_version_id,c.status,
                         l.originating_community_id,l.status AS law_status,l.current_version_id,
                         v.version_number,v.title,v.law_text,v.implementation_plan,v.source_topic_id,v.source_idea_id,
                         v.source_decision_id,v.status AS version_status,
