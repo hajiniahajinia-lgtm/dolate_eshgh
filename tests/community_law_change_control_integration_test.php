@@ -286,6 +286,7 @@ try {
     change_case_check($vote_case && $vote_case['status']==='approved' && $vote_case['vote_result']==='approved','vote outcome is permanently recorded');
     $law=$db->query("SELECT status,repealed_at,suspended_at FROM community_laws WHERE id=9501")->fetch_assoc();
     change_case_check($law && $law['status']==='suspended' && $law['repealed_at']===null && $law['suspended_at']!==null,'an approved parent-community vote applies suspension and preserves repeal history');
+    change_case_check(community_law_open_change_case($db,9501,90200,90020,'suspend','درخواست تعلیق تکراری')===false,'an already suspended law cannot receive a second suspension request');
     $implementation_states=$db->query("SELECT status FROM community_law_implementations WHERE law_version_id=99001 ORDER BY community_id")->fetch_all(MYSQLI_ASSOC);
     change_case_check(count($implementation_states)===2 && $implementation_states[0]['status']==='suspended' && $implementation_states[1]['status']==='suspended','all affected community implementation records enter suspended state');
     $snapshot_count=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_change_implementation_snapshots WHERE case_id=".(int)$case_id)->fetch_assoc()['n'];
@@ -342,6 +343,9 @@ try {
     change_case_check(community_law_change_finalize_vote($db,$reinstate_case)==='approved','parent vote successfully retries reinstatement after the notice failure is removed');
     $restored_law=$db->query('SELECT status,suspended_at,suspension_case_id FROM community_laws WHERE id=9501')->fetch_assoc();
     change_case_check($restored_law && $restored_law['status']==='approved' && $restored_law['suspended_at']===null && $restored_law['suspension_case_id']===null,'approved reinstatement restores the law to active status');
+    $db->query("UPDATE community_laws SET expires_at=DATE_ADD(NOW(),INTERVAL 7 DAY) WHERE id=9501");
+    change_case_check(community_law_open_change_case($db,9501,90200,90020,'reinstate','بازگردانی نزدیک به پایان اعتبار')===false,'reinstatement is not opened when the law is within the eight-day expiry safety window');
+    $db->query("UPDATE community_laws SET expires_at=NULL WHERE id=9501");
     $restored=$db->query('SELECT community_id,responsible_user_id,local_plan,status,progress_report,started_at,target_date,completed_at FROM community_law_implementations WHERE law_version_id=99001 ORDER BY community_id')->fetch_all(MYSQLI_ASSOC);
     change_case_check(count($restored)===2 && $restored[0]['status']==='in_progress' && $restored[0]['responsible_user_id']==='90101' && $restored[0]['local_plan']==='برنامهٔ جامعهٔ مادر' && $restored[0]['progress_report']==='گزارش پیشرفت مادر' && $restored[0]['started_at']!==null && $restored[0]['target_date']!==null && $restored[0]['completed_at']===null && $restored[1]['status']==='completed' && $restored[1]['responsible_user_id']==='90102' && $restored[1]['local_plan']==='برنامهٔ زیرجامعه' && $restored[1]['progress_report']==='گزارش تکمیل زیرجامعه' && $restored[1]['started_at']!==null && $restored[1]['target_date']!==null,'all implementation owners, plans, statuses, dates and progress reports are restored from suspension snapshots');
     $reinstated_notices=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_community_notices WHERE case_id=".(int)$reinstate_case." AND event_type='reinstated'")->fetch_assoc()['n'];
