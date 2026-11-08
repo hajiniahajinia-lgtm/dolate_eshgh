@@ -831,6 +831,7 @@ if (!function_exists('community_law_enact_amendment')) {
             if (!$row || (int)$row['originating_community_id']!==$community_id ||
                 $row['law_status']!=='approved' || $row['version_status']!=='appeal_period' ||
                 (int)$row['current_parent_community_id']!==(int)$row['parent_community_id'] ||
+                community_law_scope_match_checked($conn,(int)$row['parent_law_version_id'],$community_id)!==true ||
                 $row['amendment_status']!=='parent_review_approved' ||
                 (int)$row['current_version_id']!==(int)$row['base_version_id'] ||
                 $row['base_version_status']!=='approved' ||
