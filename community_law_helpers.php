@@ -579,6 +579,71 @@ if (!function_exists('community_law_record_hierarchy_scope_changes')) {
     }
 }
 
+if (!function_exists('community_law_initialize_implementations')) {
+    /**
+     * اطمینان می‌دهد برای هر جامعه مشمول قانون، رکورد پیگیری اجرا ساخته شده است.
+     * تابع باید در تراکنش فراخواننده اجرا شود تا ابلاغ و ثبت تعهدها اتمیک بمانند.
+     */
+    function community_law_initialize_implementations(
+        mysqli $conn,
+        int $law_id,
+        int $law_version_id,
+        int $actor_user_id,
+        array $community_ids
+    ): bool {
+        if ($law_id <= 0 || $law_version_id <= 0 || !$community_ids) return false;
+
+        $normalized = [];
+        foreach ($community_ids as $community_id) {
+            if (!is_int($community_id) && !(is_string($community_id) && ctype_digit($community_id))) {
+                return false;
+            }
+            $community_id = (int)$community_id;
+            if ($community_id <= 0) return false;
+            $normalized[$community_id] = true;
+        }
+        $ids = array_keys($normalized);
+        sort($ids, SORT_NUMERIC);
+        if (!$ids) return false;
+
+        $insert = $conn->prepare(
+            "INSERT IGNORE INTO community_law_implementations
+                (law_version_id, community_id, status)
+             VALUES (?, ?, 'pending')"
+        );
+        if (!$insert) return false;
+
+        foreach ($ids as $community_id) {
+            $insert->bind_param('ii', $law_version_id, $community_id);
+            if (!$insert->execute()) {
+                $insert->close();
+                return false;
+            }
+            if ($insert->affected_rows === 1) {
+                $details = json_encode([
+                    'status' => 'pending',
+                    'trigger' => 'law_enactment',
+                    'law_version_id' => $law_version_id
+                ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                if (!is_string($details) || !community_law_record_history(
+                    $conn,
+                    $law_id,
+                    $law_version_id,
+                    $community_id,
+                    $actor_user_id > 0 ? $actor_user_id : null,
+                    'implementation_initialized',
+                    $details
+                )) {
+                    $insert->close();
+                    return false;
+                }
+            }
+        }
+        $insert->close();
+        return true;
+    }
+}
+
 if (!function_exists('community_law_version_is_effective')) {
     function community_law_version_is_effective(mysqli $conn, int $law_version_id): bool {
         if ($law_version_id <= 0) return false;
