@@ -373,6 +373,27 @@ try {
         change_case_check(community_law_change_cast_vote($db,$repeal_case,(int)$voter['user_id'],'yes'),'parent voter can approve repeal');
     }
     $db->query('UPDATE community_law_change_cases SET vote_closes_at=DATE_SUB(NOW(),INTERVAL 1 SECOND) WHERE id='.(int)$repeal_case);
+    // شکست اعلان لغو باید کل رأی نهایی و اثر حقوقی را rollback کند؛ سپس همان رأی قابل تکرار باشد.
+    $db->query("CREATE TRIGGER test_fail_repeal_notice BEFORE INSERT ON community_law_community_notices
+        FOR EACH ROW BEGIN
+            IF NEW.case_id=".$repeal_case." AND NEW.event_type='repealed' THEN
+                SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='forced repeal notice failure';
+            END IF;
+        END");
+    change_case_check(community_law_change_finalize_vote($db,$repeal_case)===false,'a failed repeal notice aborts the parent vote finalization');
+    $db->query("DROP TRIGGER test_fail_repeal_notice");
+    $repeal_rollback=$db->query("SELECT c.status,c.vote_result,c.decided_at,c.effect_applied_at,
+        l.status AS law_status,l.repealed_at,
+        (SELECT COUNT(*) FROM community_law_change_implementation_snapshots s WHERE s.case_id=".$repeal_case.") AS snapshots,
+        (SELECT COUNT(*) FROM community_law_community_notices n WHERE n.case_id=".$repeal_case." AND n.event_type='repealed') AS notices,
+        (SELECT COUNT(*) FROM community_law_history h WHERE h.law_id=9501 AND h.event_type='law_repealed') AS repeal_history
+        FROM community_law_change_cases c JOIN community_laws l ON l.id=c.law_id
+        WHERE c.id=".$repeal_case)->fetch_assoc();
+    $repeal_rollback_impl=$db->query("SELECT community_id,status,progress_report FROM community_law_implementations WHERE law_version_id=99001 ORDER BY community_id")->fetch_all(MYSQLI_ASSOC);
+    change_case_check($repeal_rollback && $repeal_rollback['status']==='awaiting_vote' && $repeal_rollback['vote_result']===null && $repeal_rollback['decided_at']===null && $repeal_rollback['effect_applied_at']===null,'failed repeal notification restores the pending vote without a partial decision');
+    change_case_check($repeal_rollback && $repeal_rollback['law_status']==='approved' && $repeal_rollback['repealed_at']===null && (int)$repeal_rollback['snapshots']===0 && (int)$repeal_rollback['notices']===0 && (int)$repeal_rollback['repeal_history']===0,'failed repeal notification rolls back law status, snapshots, notices and permanent history');
+    change_case_check(count($repeal_rollback_impl)===2 && $repeal_rollback_impl[0]['status']==='in_progress' && $repeal_rollback_impl[1]['status']==='completed' && $repeal_rollback_impl[0]['progress_report']==='گزارش پیشرفت مادر' && $repeal_rollback_impl[1]['progress_report']==='گزارش تکمیل زیرجامعه','failed repeal preserves all live implementation states and progress evidence');
+    change_case_check(community_law_change_finalize_vote($db,$repeal_case)==='approved','parent vote successfully retries repeal after the notice failure is removed');
     change_case_check(community_law_change_finalize_vote($db,$repeal_case)==='approved','parent vote approves repeal and applies it atomically');
     $repealed=$db->query('SELECT status,repealed_at,last_status_change_case_id FROM community_laws WHERE id=9501')->fetch_assoc();
     change_case_check($repealed && $repealed['status']==='repealed' && $repealed['repealed_at']!==null && (int)$repealed['last_status_change_case_id']===$repeal_case,'repeal is recorded as the authoritative law status transition');
