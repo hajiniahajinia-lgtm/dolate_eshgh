@@ -35,6 +35,7 @@ try {
         source_topic_id INT NOT NULL UNIQUE,
         knowledge_entry_id BIGINT UNSIGNED NULL,
         acceptance_status ENUM('accepted','not_accepted','no_votes') NOT NULL DEFAULT 'no_votes',
+        enforceability_status ENUM('enforceable','not_enforceable','undecided') NOT NULL DEFAULT 'undecided',
         record_status ENUM('recorded','superseded','voided') NOT NULL DEFAULT 'recorded',
         decided_at DATETIME NOT NULL
     ) ENGINE=InnoDB");
