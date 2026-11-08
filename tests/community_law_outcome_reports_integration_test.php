@@ -274,6 +274,20 @@ try {
     )->fetch_assoc()['total'];
     outcome_check($corrective_history===3,'each corrective progress update is recorded in law history');
 
+    // خروج جامعه از دامنه قانون، گزارش تازه و اقدام اصلاحی تازه را متوقف می‌کند؛
+    // گزارش‌ها و اقدامات قبلی همچنان در تاریخچه باقی می‌مانند.
+    $db->query("UPDATE community_law_implementations
+                SET status='not_applicable'
+                WHERE law_version_id=990001 AND community_id=920");
+    outcome_check(community_law_submit_outcome_report(
+        $db,990000,990001,920,9700,'progress','2026-03-01','2026-03-31',
+        'گزارش پس از خروج از دامنه'
+    )===false,'community outside the law scope cannot submit a new execution report');
+    outcome_check(community_law_create_outcome_corrective_action(
+        $db,$disputed_report,9701,'اقدام خارج از دامنه','نباید پس از خروج جامعه ایجاد شود',
+        'معیار موفقیت','2026-12-20'
+    )===false,'new corrective action cannot be created after implementation leaves the law scope');
+
     $provenance=$db->query(
         "SELECT v.source_decision_id,d.knowledge_entry_id,d.acceptance_status,d.record_status,
                 ke.status AS knowledge_status,ke.version_no,ke.title
