@@ -288,20 +288,22 @@ try {
         'two of three separate appeal reviewers dismiss the appeal'
     );
 
-    $appealAssessment = $db->prepare(
-        "INSERT INTO community_charter_amendment_appeal_reviewers
-         (appeal_id,reviewer_user_id,verdict,reasoning) VALUES (?,?,?,'استدلال آزمایشی رسیدگی به اعتراض.')"
-    );
+    $db->begin_transaction();
+    $appealStatus = 'under_review';
     foreach ($appealVotes as $appealVote) {
-        $reviewerId = $appealVote['reviewer_user_id'];
-        $verdict = $appealVote['verdict'];
-        $appealAssessment->bind_param('iis', $appealId, $reviewerId, $verdict);
-        $appealAssessment->execute();
+        $appealStatus = community_charter_record_appeal_assessment(
+            $db,
+            $appealId,
+            (int)$appealVote['reviewer_user_id'],
+            (string)$appealVote['verdict'],
+            'استدلال آزمایشی رسیدگی به اعتراض و بررسی شواهد ارائه‌شده.'
+        );
     }
-    $appealAssessment->close();
-    $db->query(
-        "UPDATE community_charter_amendment_appeals
-         SET status='dismissed',resolved_at=NOW() WHERE id=" . $appealId
+    $db->commit();
+    integration_check($appealStatus === 'dismissed', 'the production assessment service resolves an appeal by the three assigned reviewers');
+    integration_check(
+        (string)$db->query("SELECT status FROM community_charter_amendment_appeals WHERE id=" . $appealId)->fetch_assoc()['status'] === 'dismissed',
+        'the production assessment service persists the final dismissed appeal status'
     );
 
     // Force a mid-transaction failure after superseding the old version; rollback must restore it.
