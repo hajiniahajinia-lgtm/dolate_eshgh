@@ -19,6 +19,7 @@ try {
     change_case_apply_sql($db,__DIR__.'/../migrations/20261106_community_law_objections_schema_repair.sql');
     change_case_apply_sql($db,__DIR__.'/../migrations/20261107_community_law_framework.sql');
     change_case_apply_sql($db,__DIR__.'/../migrations/20261107_community_law_voting_rules.sql');
+    change_case_apply_sql($db,__DIR__.'/../migrations/20261107_community_law_direct_voting.sql');
     change_case_apply_sql($db,__DIR__.'/../migrations/20261107_community_law_legal_screening.sql');
     change_case_apply_sql($db,__DIR__.'/../migrations/20261107_community_law_authority_review.sql');
     change_case_apply_sql($db,__DIR__.'/../migrations/20261107_community_law_final_results.sql');
