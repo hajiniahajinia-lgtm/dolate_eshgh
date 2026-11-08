@@ -252,6 +252,24 @@ try {
     $applied=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_change_cases WHERE id=".(int)$case_id." AND effect_applied_at IS NOT NULL")->fetch_assoc()['n'];
     change_case_check($applied===1,'the applied legal effect is marked idempotently');
 
+    // اجرای دوبارهٔ اثرِ تأییدشده نباید snapshot، تاریخچه یا اعلان تکراری بسازد.
+    $before_replay_snapshots=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_change_implementation_snapshots WHERE case_id=".(int)$case_id)->fetch_assoc()['n'];
+    $before_replay_notices=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_community_notices WHERE case_id=".(int)$case_id)->fetch_assoc()['n'];
+    $before_replay_history=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_history WHERE law_id=9501 AND event_type='law_suspended'")->fetch_assoc()['n'];
+    change_case_check(
+        community_law_change_apply_approved_case($db,(int)$case_id,null),
+        'replaying an already applied approved change returns safely'
+    );
+    $after_replay_snapshots=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_change_implementation_snapshots WHERE case_id=".(int)$case_id)->fetch_assoc()['n'];
+    $after_replay_notices=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_community_notices WHERE case_id=".(int)$case_id)->fetch_assoc()['n'];
+    $after_replay_history=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_history WHERE law_id=9501 AND event_type='law_suspended'")->fetch_assoc()['n'];
+    change_case_check(
+        $before_replay_snapshots===$after_replay_snapshots &&
+        $before_replay_notices===$after_replay_notices &&
+        $before_replay_history===$after_replay_history,
+        'replaying a completed legal effect creates no duplicate snapshots, notices or history'
+    );
+
     $reinstate_case=community_law_open_change_case($db,9501,90200,90020,'reinstate','درخواست بازگرداندن قانون پس از رفع علت تعلیق','گزارش رفع مانع');
     change_case_check(is_int($reinstate_case) && $reinstate_case>0,'a member of an affected child community can request reinstatement');
     $reinstate_reviewers=$db->query('SELECT reviewer_user_id FROM community_law_change_reviewers WHERE case_id='.(int)$reinstate_case)->fetch_all(MYSQLI_ASSOC);
