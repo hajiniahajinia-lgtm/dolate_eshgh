@@ -3919,12 +3919,18 @@ if ($schema_ready) {
         "SELECT l.id AS law_id, l.law_code, v.id AS version_id, v.title,
                 fr.final_status
          FROM community_laws l
-         JOIN community_law_versions v ON v.id=l.current_version_id
+         JOIN community_law_versions v ON v.law_id=l.id
          JOIN community_law_final_results fr ON fr.law_version_id=v.id
+         LEFT JOIN community_law_amendment_cases a ON a.proposed_version_id=v.id
          LEFT JOIN community_law_final_review_cases fc ON fc.law_version_id=v.id
-         WHERE l.originating_community_id=? AND l.status='voting'
-           AND v.status='voting' AND fr.final_status='vote_passed'
+         WHERE l.originating_community_id=? AND fr.final_status='vote_passed'
            AND fc.law_version_id IS NULL
+           AND (
+                (l.status='voting' AND l.current_version_id=v.id AND v.status='voting')
+                OR
+                (l.status='approved' AND a.status='parent_review_approved'
+                 AND l.current_version_id=a.base_version_id AND v.status='voting')
+           )
          ORDER BY v.created_at DESC LIMIT 30"
     );
     if ($passed_final_stmt) {
@@ -3940,7 +3946,7 @@ if ($schema_ready) {
         "SELECT l.id AS law_id, l.law_code, l.originating_community_id,
                 l.status AS law_status, v.id AS version_id, v.title,
                 v.law_text, v.implementation_plan, v.source_topic_id, v.source_idea_id,
-                v.source_decision_id,
+                v.source_decision_id,a.id AS amendment_case_id,
                 v.status AS version_status, fc.status AS final_status,
                 fc.reviewer_quorum, fc.appeal_period_days, fc.appeal_deadline,
                 (SELECT COUNT(*) FROM community_law_final_review_assessments a
@@ -3958,7 +3964,13 @@ if ($schema_ready) {
          FROM community_law_final_review_cases fc
          JOIN community_law_versions v ON v.id=fc.law_version_id
          JOIN community_laws l ON l.id=v.law_id
-         WHERE l.current_version_id=v.id
+         LEFT JOIN community_law_amendment_cases a ON a.proposed_version_id=v.id
+         WHERE (
+                l.current_version_id=v.id
+                OR (a.id IS NOT NULL AND l.status='approved'
+                    AND l.current_version_id=a.base_version_id
+                    AND a.status IN ('parent_review_approved','revision_required'))
+           )
            AND fc.status IN ('pending','review_clear','conflict_found','needs_revision','appeal_period','appeal_hold','ready_for_enactment')
          ORDER BY fc.opened_at DESC LIMIT 100"
     );
@@ -5099,6 +5111,7 @@ details>summary{cursor:pointer;font-weight:bold}
                 <?php if (
                     $is_member &&
                     (int)$final_law['originating_community_id'] === $community_id &&
+                    empty($final_law['amendment_case_id']) &&
                     in_array($final_law['final_status'], ['conflict_found','needs_revision'], true) &&
                     (int)$final_law['unresolved_appeals'] === 0
                 ): ?>
