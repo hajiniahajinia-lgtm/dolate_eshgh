@@ -3209,6 +3209,40 @@ if ($schema_ready) {
         $law_result->free();
     }
 
+    // زنجیرهٔ منشأ قانون تا دانش مرتبط فقط به‌صورت ارجاعی نمایش داده می‌شود.
+    // شواهد اجرا و اقدام اصلاحی خودکار به مدخل دانش یا تصمیم جدید تبدیل نمی‌شوند.
+    $law_source_knowledge_by_decision=[];
+    $knowledge_entries_ready=false;
+    $knowledge_table_check=$conn->query(
+        "SELECT COUNT(*) AS total FROM information_schema.tables
+         WHERE table_schema=DATABASE() AND table_name='collective_knowledge_entries'"
+    );
+    $knowledge_entries_ready=$knowledge_table_check &&
+        (int)$knowledge_table_check->fetch_assoc()['total']===1;
+    if ($knowledge_table_check) $knowledge_table_check->free();
+    if ($decision_ledger_ready && $knowledge_entries_ready && $effective_laws) {
+        $source_decision_ids=array_values(array_unique(array_filter(array_map(
+            static fn($law_row)=>(int)($law_row['source_decision_id']??0),
+            $effective_laws
+        ),static fn($id)=>$id>0)));
+        if ($source_decision_ids) {
+            $source_decision_id_list=implode(',', $source_decision_ids);
+            $source_knowledge_result=$conn->query(
+                "SELECT d.id AS decision_id,d.knowledge_entry_id,
+                        ke.title AS knowledge_title,ke.status AS knowledge_status,ke.version_no
+                 FROM community_decision_records d
+                 LEFT JOIN collective_knowledge_entries ke ON ke.id=d.knowledge_entry_id
+                 WHERE d.id IN ($source_decision_id_list)"
+            );
+            if ($source_knowledge_result) {
+                while ($source_knowledge_row=$source_knowledge_result->fetch_assoc()) {
+                    $law_source_knowledge_by_decision[(int)$source_knowledge_row['decision_id']]=$source_knowledge_row;
+                }
+                $source_knowledge_result->free();
+            }
+        }
+    }
+
     $draft_stmt = $conn->prepare(
         "SELECT l.id AS law_id, l.law_code, v.id AS version_id, v.title, v.created_at, v.proposed_by
          FROM community_laws l
@@ -4196,6 +4230,7 @@ details>summary{cursor:pointer;font-weight:bold}
                 </details>
                 <details style="margin-top:10px">
                     <summary>گزارش پیشرفت و پیامدهای واقعی قانون (<?= count($outcome_reports) ?>)</summary>
+                    <p class="muted">گزارش‌های اجرا، شواهد و اقدام‌های اصلاحی در تاریخچهٔ قانون نگهداری می‌شوند. این اطلاعات به‌تنهایی دانش تأییدشده یا تصمیم جمعی جدید نیستند؛ برای تثبیت آموخته‌ها به‌عنوان دانش، باید از مسیر مستقل دانش و ارزیابی آن عبور کنند.</p>
                     <?php if (!$outcome_reports_ready): ?>
                         <p class="muted">ساختار ثبت گزارش هنوز نصب نشده است؛ پس از نصب migration این بخش فعال می‌شود.</p>
                     <?php elseif (!$outcome_reports): ?>
@@ -4522,6 +4557,19 @@ details>summary{cursor:pointer;font-weight:bold}
                         <?php endif; ?>
                         <?php if (!empty($law['source_topic_id'])): ?>
                             — <a href="archived_topics.php?community_id=<?= (int)$law['originating_community_id'] ?>#topic-card-<?= (int)$law['source_topic_id'] ?>">مشاهدهٔ موضوع منشأ در آرشیو جامعهٔ مبدأ</a>
+                        <?php endif; ?>
+                    </p>
+                <?php endif; ?>
+                <?php if (!empty($law['source_decision_id'])): ?>
+                    <?php $source_knowledge=$law_source_knowledge_by_decision[(int)$law['source_decision_id']] ?? null; ?>
+                    <p class="meta" style="margin-top:6px;padding:8px 10px;background:#f8fafc;border-radius:7px">
+                        <?php if ($source_knowledge && !empty($source_knowledge['knowledge_entry_id']) && !empty($source_knowledge['knowledge_title'])): ?>
+                            دانش مرتبط با تصمیم منشأ:
+                            <?= community_laws_escape($source_knowledge['knowledge_title']) ?>
+                            — وضعیت دانش: <?= community_laws_escape($source_knowledge['knowledge_status']) ?>
+                            — نسخه <?= (int)$source_knowledge['version_no'] ?>
+                        <?php else: ?>
+                            این تصمیم هنوز به مدخل دانش مشخصی پیوند نخورده است؛ تصمیم و قانون مستقل از پروندهٔ دانش باقی می‌مانند.
                         <?php endif; ?>
                     </p>
                 <?php endif; ?>
