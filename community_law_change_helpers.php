@@ -603,8 +603,8 @@ if (!function_exists('community_law_change_finalize_vote')) {
 
 if (!function_exists('community_law_change_mark_notice_read')) {
     /**
-     * فقط عضو همان جامعه می‌تواند اعلان همان جامعه را بخواند؛
-     * منبع اعلان نیز باید صریحاً change یا scope باشد.
+     * عضویت، جامعهٔ اعلان و منبع اعلان در همان UPDATE کنترل می‌شوند تا
+     * لغو هم‌زمان عضویت نتواند بین بررسی و تغییر وضعیت فاصله ایجاد کند.
      */
     function community_law_change_mark_notice_read(
         mysqli $conn,
@@ -616,24 +616,19 @@ if (!function_exists('community_law_change_mark_notice_read')) {
         if ($community_id<=0 || $user_id<=0 || $notice_id<=0 ||
             !in_array($notice_source,['change','scope'],true)) return false;
 
-        $member=$conn->prepare(
-            'SELECT 1 FROM community_members WHERE community_id=? AND user_id=? LIMIT 1'
-        );
-        if (!$member) return false;
-        $member->bind_param('ii',$community_id,$user_id);
-        $member_ok=$member->execute() && (bool)$member->get_result()->fetch_row();
-        $member->close();
-        if (!$member_ok) return false;
-
         $table=$notice_source==='scope'
             ? 'community_law_scope_notices'
             : 'community_law_community_notices';
         $mark=$conn->prepare(
             "UPDATE {$table} SET read_at=NOW()
-             WHERE id=? AND community_id=? AND read_at IS NULL"
+             WHERE id=? AND community_id=? AND read_at IS NULL
+               AND EXISTS (
+                   SELECT 1 FROM community_members
+                   WHERE community_id=? AND user_id=?
+               )"
         );
         if (!$mark) return false;
-        $mark->bind_param('ii',$notice_id,$community_id);
+        $mark->bind_param('iiii',$notice_id,$community_id,$community_id,$user_id);
         $ok=$mark->execute() && $mark->affected_rows===1;
         $mark->close();
         return $ok;
