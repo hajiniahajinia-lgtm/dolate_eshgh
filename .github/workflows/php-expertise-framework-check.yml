@@ -36,9 +36,6 @@ on:
       - 'tests/community_decision_ledger_integration_test.php'
       - 'tests/community_decision_knowledge_separation_integration_test.php'
       - 'tests/community_law_implementation_integration_test.php'
-      - 'community_decision_ledger.php'
-      - 'migrations/20261108_community_decision_ledger.sql'
-      - 'tests/community_decision_ledger_integration_test.php'
       - '.github/workflows/php-expertise-framework-check.yml'
   pull_request:
     paths:
@@ -52,6 +49,10 @@ on:
       - 'migrations/20261107_community_charter_amendments.sql'
       - 'migrations/20261108_community_charter_amendment_appeal_assignments.sql'
       - 'community.php'
+      - 'collective_knowledge_finalizer.php'
+      - 'community_decision_ledger.php'
+      - 'migrations/20261107_community_law_framework.sql'
+      - 'migrations/20261108_community_decision_ledger.sql'
       - 'community_law_helpers.php'
       - 'set_community_parent.php'
       - 'request_member_removal.php'
@@ -66,6 +67,9 @@ on:
       - 'tests/community_law_hierarchy_helpers_test.php'
       - 'tests/community_charter_amendments_test.php'
       - 'tests/community_charter_amendments_integration_test.php'
+      - 'tests/community_law_implementation_integration_test.php'
+      - 'tests/community_decision_ledger_integration_test.php'
+      - 'tests/community_decision_knowledge_separation_integration_test.php'
       - '.github/workflows/php-expertise-framework-check.yml'
 
 jobs:
@@ -134,7 +138,7 @@ jobs:
         with:
           php-version: '8.4'
           extensions: mysqli
-      - name: Run isolated charter amendment database integration test
+      - name: Run isolated MySQL integration tests
         env:
           DB_HOST: 127.0.0.1
           DB_PORT: 3306
