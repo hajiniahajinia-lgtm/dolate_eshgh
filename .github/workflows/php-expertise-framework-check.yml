@@ -57,6 +57,8 @@ on:
       - 'tests/community_decision_knowledge_separation_integration_test.php'
       - 'tests/community_decision_knowledge_link_integration_test.php'
       - 'tests/community_law_implementation_integration_test.php'
+      - 'migrations/20261108_community_law_outcome_reports.sql'
+      - 'tests/community_law_outcome_reports_integration_test.php'
       - '.github/workflows/php-expertise-framework-check.yml'
   pull_request:
     paths:
@@ -149,6 +151,7 @@ jobs:
           php -l tests/community_charter_amendments_test.php
           php -l tests/community_charter_amendments_integration_test.php
           php -l tests/community_law_implementation_integration_test.php
+          php -l tests/community_law_outcome_reports_integration_test.php
           php -l community_decision_ledger.php
           php -l tests/community_law_decision_origin_migration_test.php
           php -l tests/community_decision_knowledge_link_integration_test.php
@@ -193,6 +196,7 @@ jobs:
         run: |
           php tests/community_charter_amendments_integration_test.php
           php tests/community_law_implementation_integration_test.php
+          php tests/community_law_outcome_reports_integration_test.php
           php tests/community_law_change_control_integration_test.php
           php tests/community_law_decision_origin_migration_test.php
           php tests/community_decision_knowledge_link_integration_test.php
