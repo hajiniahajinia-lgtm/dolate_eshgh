@@ -52,6 +52,21 @@ try {
     change_case_check($confirmed && $confirmed['finding']==='conflict_confirmed' && $confirmed['status']==='amendment_required','two-sided confirmed conflict requires a local amendment and records the finding');
     $review_history=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_history WHERE law_id=9502 AND event_type='conformity_conflict_reviewed'")->fetch_assoc()['n'];
     change_case_check($review_history===2,'both independent reviews are preserved in the local law history');
+
+    // مسیر مستقل: هر دو جامعه تعارض را رد می‌کنند؛ پرونده باید حل‌شده شود.
+    $db->query("INSERT INTO community_laws (id,law_code,originating_community_id,created_by,status,current_version_id,effective_at) VALUES (9503,'LAW-LOCAL-NO-CONFLICT-TEST',90020,90200,'approved',99003,NOW())");
+    $db->query("INSERT INTO community_law_versions (id,law_id,version_number,title,law_text,proposed_by,status,approved_at) VALUES (99003,9503,1,'قانون محلی بدون تعارض','متن قانون محلی دوم',90200,'approved',NOW())");
+    $db->query("INSERT INTO community_law_conformity_cases (community_id,parent_community_id,local_law_id,local_law_version_id,parent_law_id,parent_law_version_id,status,trigger_type,opened_by) VALUES (90020,90010,9503,99003,9501,99001,'review_required','manual_review',90100)");
+    $no_conflict_case_id=(int)$db->insert_id;
+    $no_conflict_id=community_law_conformity_add_conflict($db,$no_conflict_case_id,90200,'ماده ۲','ماده ۵','تعارض احتمالی برای آزمون رد تعارض','مستندات بررسی');
+    change_case_check(is_int($no_conflict_id) && $no_conflict_id>0,'second conformity case accepts a separately documented possible conflict');
+    change_case_check(community_law_conformity_review_conflict($db,$no_conflict_id,90201,90020,'no_conflict','بررسی متن نشان می‌دهد دو ماده موضوع و دامنهٔ متفاوتی دارند.'),'local community can independently reject the alleged conflict');
+    $still_pending=$db->query("SELECT status FROM community_law_conformity_cases WHERE id=".$no_conflict_case_id)->fetch_assoc();
+    change_case_check($still_pending && $still_pending['status']==='review_required','one no-conflict review alone cannot resolve the case');
+    change_case_check(community_law_conformity_review_conflict($db,$no_conflict_id,90103,90010,'no_conflict','بررسی جامعهٔ مادر نیز نشان می‌دهد میان دو ماده تعارضی وجود ندارد.'),'parent community can independently reject the alleged conflict');
+    $resolved_no_conflict=$db->query("SELECT f.finding,c.status,c.resolved_at FROM community_law_conformity_conflicts f JOIN community_law_conformity_cases c ON c.id=f.case_id WHERE f.id=".$no_conflict_id)->fetch_assoc();
+    change_case_check($resolved_no_conflict && $resolved_no_conflict['finding']==='no_conflict' && $resolved_no_conflict['status']==='resolved' && $resolved_no_conflict['resolved_at']!==null,'two independent no-conflict reviews resolve and timestamp the conformity case');
+
     $db->query("INSERT INTO community_law_implementations (law_version_id,community_id,responsible_user_id,local_plan,status,started_at,target_date,progress_report) VALUES (99001,90010,90101,'برنامهٔ جامعهٔ مادر','in_progress',NOW(),DATE_ADD(CURDATE(),INTERVAL 5 DAY),'گزارش پیشرفت مادر'),(99001,90020,90102,'برنامهٔ زیرجامعه','completed',NOW(),DATE_ADD(CURDATE(),INTERVAL 1 DAY),'گزارش تکمیل زیرجامعه')");
 
     $case_id=community_law_open_change_case($db,9501,90200,90020,'suspend','خطر جدی برای حقوق اعضا','گزارش مستند',true);
