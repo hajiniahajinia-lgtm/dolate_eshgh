@@ -2,6 +2,7 @@
 session_start();
 require __DIR__ . '/db.php';
 require_once __DIR__ . '/community_law_helpers.php';
+require_once __DIR__ . '/community_law_amendment_helpers.php';
 
 if (!isset($_SESSION['user_id'])) {
     header('Location: login.php');
@@ -47,6 +48,7 @@ function community_laws_redirect(int $community_id, string $status): void {
 }
 
 $schema_ready = community_law_tables_ready($conn);
+$amendment_schema_ready = community_law_amendment_tables_ready($conn);
 $outcome_reports_ready=false;
 if ($schema_ready) {
     $outcome_table_check=$conn->query(
@@ -888,6 +890,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (isset($_POST['start_law_vote'])) {
+        if (!$amendment_schema_ready) community_laws_redirect($community_id, 'schema');
         if (!$is_member) community_laws_redirect($community_id, 'not_member');
 
         $law_id = (int)($_POST['law_id'] ?? 0);
@@ -1313,6 +1316,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (isset($_POST['finalize_law_tally'])) {
+        if (!$amendment_schema_ready) community_laws_redirect($community_id, 'schema');
         if (!$is_member) community_laws_redirect($community_id, 'not_member');
 
         $law_id = (int)($_POST['law_id'] ?? 0);
@@ -1719,6 +1723,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (isset($_POST['cast_law_direct_vote'])) {
+        if (!$amendment_schema_ready) community_laws_redirect($community_id, 'schema');
         $version_id = (int)($_POST['version_id'] ?? 0);
         $vote = (string)($_POST['direct_vote'] ?? '');
         $comment = trim((string)($_POST['direct_comment'] ?? ''));
@@ -1786,6 +1791,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (isset($_POST['cast_law_vote'])) {
+        if (!$amendment_schema_ready) community_laws_redirect($community_id, 'schema');
         $version_id = (int)($_POST['version_id'] ?? 0);
         $vote = (string)($_POST['vote'] ?? '');
         $comment = trim((string)($_POST['comment'] ?? ''));
@@ -1845,6 +1851,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (isset($_POST['submit_position_discussion'])) {
+        if (!$amendment_schema_ready) community_laws_redirect($community_id, 'schema');
         if (!$is_member) community_laws_redirect($community_id, 'not_member');
 
         $version_id = (int)($_POST['version_id'] ?? 0);
