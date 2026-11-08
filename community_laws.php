@@ -3192,6 +3192,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ) throw new RuntimeException('law_scope_unresolved');
 
             if ($is_amendment_enactment) {
+                $base_version_id=(int)$law['amendment_base_version_id'];
+                $implementation_count_stmt=$conn->prepare('SELECT COUNT(*) AS total FROM community_law_implementations WHERE law_version_id=?');
+                if (!$implementation_count_stmt) throw new Exception('amendment implementation snapshot count prepare failed');
+                $implementation_count_stmt->bind_param('i',$base_version_id);
+                if (!$implementation_count_stmt->execute()) throw new Exception('amendment implementation snapshot count failed');
+                $base_implementation_count=(int)$implementation_count_stmt->get_result()->fetch_assoc()['total'];
+                $implementation_count_stmt->close();
+                if ($base_implementation_count!==count($implementation_community_ids)) {
+                    throw new RuntimeException('law_implementation_snapshot_missing');
+                }
+                $implementation_copy=$conn->prepare(
+                    "INSERT INTO community_law_implementations
+                        (law_version_id,community_id,responsible_user_id,local_plan,status,
+                         started_at,target_date,completed_at,progress_report)
+                     SELECT ?,community_id,responsible_user_id,local_plan,status,
+                            started_at,target_date,completed_at,progress_report
+                     FROM community_law_implementations WHERE law_version_id=?"
+                );
+                if (!$implementation_copy) throw new Exception('amendment implementation copy prepare failed');
+                $implementation_copy->bind_param('ii',$version_id,$base_version_id);
+                if (!$implementation_copy->execute() || $implementation_copy->affected_rows!==$base_implementation_count) {
+                    throw new Exception('amendment implementation state copy failed');
+                }
+                $implementation_copy->close();
+
                 $law_update=$conn->prepare(
                     "UPDATE community_laws SET current_version_id=?
                      WHERE id=? AND status='approved' AND current_version_id=?"
