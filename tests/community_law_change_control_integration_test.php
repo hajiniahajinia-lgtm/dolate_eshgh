@@ -196,9 +196,9 @@ try {
     ]])===false,'parent-community members cannot author a local law amendment in place of the local community');
 
     // مسیر مستقل: هر دو جامعه تعارض را رد می‌کنند؛ پرونده باید حل‌شده شود.
-    $db->query("INSERT INTO community_laws (id,law_code,originating_community_id,created_by,status,current_version_id,effective_at) VALUES (9503,'LAW-LOCAL-NO-CONFLICT-TEST',90020,90200,'approved',99003,NOW())");
-    $db->query("INSERT INTO community_law_versions (id,law_id,version_number,title,law_text,proposed_by,status,approved_at) VALUES (99003,9503,1,'قانون محلی بدون تعارض','متن قانون محلی دوم',90200,'approved',NOW())");
-    $db->query("INSERT INTO community_law_conformity_cases (community_id,parent_community_id,local_law_id,local_law_version_id,parent_law_id,parent_law_version_id,status,trigger_type,opened_by) VALUES (90020,90010,9503,99003,9501,99001,'review_required','manual_review',90100)");
+    $db->query("INSERT INTO community_laws (id,law_code,originating_community_id,created_by,status,current_version_id,effective_at) VALUES (9504,'LAW-LOCAL-NO-CONFLICT-TEST',90020,90200,'approved',99004,NOW())");
+    $db->query("INSERT INTO community_law_versions (id,law_id,version_number,title,law_text,proposed_by,status,approved_at) VALUES (99004,9504,1,'قانون محلی بدون تعارض','متن قانون محلی دوم',90200,'approved',NOW())");
+    $db->query("INSERT INTO community_law_conformity_cases (community_id,parent_community_id,local_law_id,local_law_version_id,parent_law_id,parent_law_version_id,status,trigger_type,opened_by) VALUES (90020,90010,9504,99004,9501,99001,'review_required','manual_review',90100)");
     $no_conflict_case_id=(int)$db->insert_id;
     $no_conflict_id=community_law_conformity_add_conflict($db,$no_conflict_case_id,90200,'ماده ۲','ماده ۵','تعارض احتمالی برای آزمون رد تعارض','مستندات بررسی');
     change_case_check(is_int($no_conflict_id) && $no_conflict_id>0,'second conformity case accepts a separately documented possible conflict');
