@@ -69,13 +69,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $implementation_plan = trim((string)($_POST['implementation_plan'] ?? ''));
         $source_topic_id = (int)($_POST['source_topic_id'] ?? 0);
         $source_idea_id = (int)($_POST['source_idea_id'] ?? 0);
+        $source_decision_id = (int)($_POST['source_decision_id'] ?? 0);
         $source_topic_id = $source_topic_id > 0 ? $source_topic_id : null;
         $source_idea_id = $source_idea_id > 0 ? $source_idea_id : null;
+        $source_decision_id = $source_decision_id > 0 ? $source_decision_id : null;
         // قانون مصوب هر جامعه، در صورت احراز صلاحیت، برای همه زیرشاخه‌های آن نیز لازم‌الرعایه است.
         $include_descendants = 1;
 
         if ($title === '' || mb_strlen($title) > 200 || $law_text === '' || mb_strlen($law_text) > 50000 || mb_strlen($implementation_plan) > 30000) {
             community_laws_redirect($community_id, 'invalid');
+        }
+
+        // اگر پیش‌نویس از یک تصمیم جمعی منشأ گرفته باشد، پیوند باید به تصمیم ثبت‌شدهٔ همین جامعه باشد.
+        if ($source_decision_id !== null) {
+            $decision_source_stmt = $conn->prepare(
+                "SELECT source_topic_id, source_idea_id
+                 FROM community_decision_records
+                 WHERE id=? AND community_id=? AND record_status='recorded'
+                 LIMIT 1"
+            );
+            if (!$decision_source_stmt) community_laws_redirect($community_id, 'invalid_source');
+            $decision_source_stmt->bind_param('ii', $source_decision_id, $community_id);
+            if (!$decision_source_stmt->execute()) community_laws_redirect($community_id, 'invalid_source');
+            $decision_source = $decision_source_stmt->get_result()->fetch_assoc();
+            $decision_source_stmt->close();
+            if (
+                !$decision_source ||
+                ($source_topic_id !== null && $source_topic_id !== (int)$decision_source['source_topic_id']) ||
+                ($source_idea_id !== null && (int)($decision_source['source_idea_id'] ?? 0) !== $source_idea_id)
+            ) {
+                community_laws_redirect($community_id, 'invalid_source');
+            }
+            $source_topic_id = (int)$decision_source['source_topic_id'];
+            $source_idea_id = $decision_source['source_idea_id'] !== null
+                ? (int)$decision_source['source_idea_id']
+                : null;
         }
 
         if ($source_idea_id !== null) {
@@ -118,18 +146,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $version_insert = $conn->prepare(
                 "INSERT INTO community_law_versions
-                    (law_id, version_number, title, law_text, implementation_plan, source_topic_id, source_idea_id, proposed_by, status)
-                 VALUES (?, 1, ?, ?, ?, ?, ?, ?, 'draft')"
+                    (law_id, version_number, title, law_text, implementation_plan,
+                     source_topic_id, source_idea_id, source_decision_id, proposed_by, status)
+                 VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, 'draft')"
             );
             if (!$version_insert) throw new Exception('version insert prepare failed');
             $version_insert->bind_param(
-                'isssiii',
+                'isssiiii',
                 $law_id,
                 $title,
                 $law_text,
                 $implementation_plan,
                 $source_topic_id,
                 $source_idea_id,
+                $source_decision_id,
                 $user_id
             );
             if (!$version_insert->execute()) throw new Exception('version insert failed');
@@ -4650,9 +4680,12 @@ details>summary{cursor:pointer;font-weight:bold}
         <textarea name="law_text" maxlength="50000" required placeholder="متن دقیق و روشن قانون را بنویسید."></textarea>
         <label>برنامه اجرایی (اختیاری)</label>
         <textarea name="implementation_plan" maxlength="30000" placeholder="مسئول اجرا، منابع، زمان‌بندی و شاخص ارزیابی را مشخص کنید."></textarea>
-        <label>شناسه موضوع مرتبط (اختیاری)</label>
+        <label>شناسه تصمیم جمعی منشأ قانون (اختیاری)</label>
+        <input type="number" name="source_decision_id" min="1">
+        <p class="muted">با ثبت شناسه تصمیم، موضوع و ایدهٔ مرتبط از دفتر مستقل تصمیم‌ها بررسی و به‌صورت خودکار پیوند داده می‌شوند. این پیوند به‌تنهایی قانون را تصویب یا لازم‌الاجرا نمی‌کند.</p>
+        <label>شناسه موضوع مرتبط (اختیاری، در صورت نداشتن شناسه تصمیم)</label>
         <input type="number" name="source_topic_id" min="1">
-        <label>شناسه ایده مرتبط (اختیاری)</label>
+        <label>شناسه ایده مرتبط (اختیاری، در صورت نداشتن شناسه تصمیم)</label>
         <input type="number" name="source_idea_id" min="1">
         <div class="notice">
             در صورت تصویب و پس از طی بررسی صلاحیت و مراحل نهایی، این قانون برای همه جوامع زیرشاخه نیز لازم‌الرعایه خواهد بود. دامنه شمول به‌صورت خودکار با تغییرات معتبر سلسله‌مراتب به‌روزرسانی و تاریخچه آن ثبت می‌شود.
