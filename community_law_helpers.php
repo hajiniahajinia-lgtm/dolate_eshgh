@@ -914,7 +914,7 @@ if (!function_exists('community_law_review_outcome_report')) {
         );
         if (!$update) return false;
         $update->bind_param('si',$new_status,$report_id);
-        $updated=$update->execute() && $update->affected_rows===1;
+        $updated=$update->execute();
         $update->close();
         if (!$updated) return false;
 
