@@ -336,7 +336,7 @@ try {
             'community_law_charter_references',
             'community_law_charter_assessments'
         ];
-    $present_tables=array_column($db->query("SELECT table_name FROM information_schema.tables WHERE table_schema=DATABASE()")->fetch_all(MYSQLI_ASSOC),'table_name');
+    $present_tables=array_column($db->query("SELECT table_name AS table_name FROM information_schema.tables WHERE table_schema=DATABASE()")->fetch_all(MYSQLI_ASSOC),'table_name');
     $missing_tables=array_values(array_diff($required_debug,$present_tables));
     $decision_column=(int)$db->query("SELECT COUNT(*) AS n FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='community_law_versions' AND column_name='source_decision_id'")->fetch_assoc()['n'];
     $ready_debug=community_law_tables_ready($db);
@@ -349,7 +349,7 @@ try {
             'new'=>community_law_scope_ids_for_parent_map($db,$version,$new_scope_map)
         ];
     }
-    fwrite(STDERR,"SCOPE DEBUG ".json_encode(['missing_tables'=>$missing_tables,'tables_ready'=>$ready_debug,'conformity_result'=>$conformity_debug,'pending_dependency'=>$pending_debug,'laws'=>$scope_debug_ids,'scope_diff'=>$scope_diff_debug],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)."\\n");
+    fwrite(STDERR,"SCOPE DEBUG ".json_encode(['missing_tables'=>$missing_tables,'decision_column'=>$decision_column,'tables_ready'=>$ready_debug,'conformity_result'=>$conformity_debug,'pending_dependency'=>$pending_debug,'laws'=>$scope_debug_ids,'scope_diff'=>$scope_diff_debug],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)."\\n");
     change_case_check(
         community_law_record_hierarchy_scope_changes($db,$old_scope_map,$new_scope_map,91030,90200),
         'hierarchy scope exit is recorded and notified'
