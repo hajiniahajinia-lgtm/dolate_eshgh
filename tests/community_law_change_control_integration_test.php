@@ -31,6 +31,13 @@ try {
     $db->query("INSERT INTO community_laws (id,law_code,originating_community_id,created_by,status,current_version_id,effective_at) VALUES (9501,'LAW-CHANGE-TEST',90010,90100,'approved',99001,NOW())");
     $db->query("INSERT INTO community_law_versions (id,law_id,version_number,title,law_text,proposed_by,status,approved_at) VALUES (99001,9501,1,'قانون آزمایشی','متن قانون',90100,'approved',NOW())");
     $db->query("INSERT INTO community_law_scopes (law_version_id,scope_community_id,include_descendants) VALUES (99001,90010,1)");
+    $db->query("INSERT INTO community_laws (id,law_code,originating_community_id,created_by,status,current_version_id,effective_at) VALUES (9502,'LAW-LOCAL-CONFORMITY-TEST',90020,90200,'approved',99002,NOW())");
+    $db->query("INSERT INTO community_law_versions (id,law_id,version_number,title,law_text,proposed_by,status,approved_at) VALUES (99002,9502,1,'قانون محلی آزمایشی','متن قانون محلی',90200,'approved',NOW())");
+    change_case_check(community_law_register_hierarchy_conformity_reviews($db,[90010=>0,90020=>90010],90020,90100),'a hierarchy change opens a conformity review for an approved local law under an applicable parent law');
+    $conformity=$db->query("SELECT community_id,parent_community_id,local_law_id,local_law_version_id,parent_law_id,parent_law_version_id,status FROM community_law_conformity_cases WHERE community_id=90020 AND local_law_version_id=99002 AND parent_law_version_id=99001")->fetch_assoc();
+    change_case_check($conformity && (int)$conformity['parent_community_id']===90010 && (int)$conformity['local_law_id']===9502 && $conformity['status']==='review_required','conformity case captures both exact law versions and awaits human review');
+    $conflict_count=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_conformity_conflicts WHERE case_id=(SELECT id FROM community_law_conformity_cases WHERE community_id=90020 AND local_law_version_id=99002 AND parent_law_version_id=99001)")->fetch_assoc()['n'];
+    change_case_check($conflict_count===0,'opening a conformity review does not falsely declare a semantic conflict');
     $db->query("INSERT INTO community_law_implementations (law_version_id,community_id,responsible_user_id,local_plan,status,started_at,target_date,progress_report) VALUES (99001,90010,90101,'برنامهٔ جامعهٔ مادر','in_progress',NOW(),DATE_ADD(CURDATE(),INTERVAL 5 DAY),'گزارش پیشرفت مادر'),(99001,90020,90102,'برنامهٔ زیرجامعه','completed',NOW(),DATE_ADD(CURDATE(),INTERVAL 1 DAY),'گزارش تکمیل زیرجامعه')");
 
     $case_id=community_law_open_change_case($db,9501,90200,90020,'suspend','خطر جدی برای حقوق اعضا','گزارش مستند',true);
