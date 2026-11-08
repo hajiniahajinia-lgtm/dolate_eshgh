@@ -24,11 +24,12 @@ try {
     change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_change_effects.sql');
     change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_conformity_workflow.sql');
     require_once __DIR__.'/../community_law_change_helpers.php';
+    require_once __DIR__.'/../community_law_conformity_helpers.php';
 
     $db->query("CREATE TABLE IF NOT EXISTS communities (id INT PRIMARY KEY, parent_community_id INT NULL)");
     $db->query("CREATE TABLE IF NOT EXISTS community_members (community_id INT NOT NULL, user_id INT NOT NULL, PRIMARY KEY(community_id,user_id))");
     $db->query("INSERT INTO communities (id,parent_community_id) VALUES (90010,NULL),(90020,90010) ON DUPLICATE KEY UPDATE parent_community_id=VALUES(parent_community_id)");
-    $db->query("INSERT INTO community_members (community_id,user_id) VALUES (90010,90100),(90020,90200),(90010,90101),(90010,90102),(90010,90103),(90010,90104),(90010,90105),(90010,90106),(90010,90107),(90010,90108) ON DUPLICATE KEY UPDATE user_id=VALUES(user_id)");
+    $db->query("INSERT INTO community_members (community_id,user_id) VALUES (90010,90100),(90020,90200),(90010,90101),(90010,90102),(90010,90103),(90010,90104),(90010,90105),(90010,90106),(90010,90107),(90010,90108),(90020,90201) ON DUPLICATE KEY UPDATE user_id=VALUES(user_id)");
     $db->query("INSERT INTO community_laws (id,law_code,originating_community_id,created_by,status,current_version_id,effective_at) VALUES (9501,'LAW-CHANGE-TEST',90010,90100,'approved',99001,NOW())");
     $db->query("INSERT INTO community_law_versions (id,law_id,version_number,title,law_text,proposed_by,status,approved_at) VALUES (99001,9501,1,'قانون آزمایشی','متن قانون',90100,'approved',NOW())");
     $db->query("INSERT INTO community_law_scopes (law_version_id,scope_community_id,include_descendants) VALUES (99001,90010,1)");
@@ -39,6 +40,18 @@ try {
     change_case_check($conformity && (int)$conformity['parent_community_id']===90010 && (int)$conformity['local_law_id']===9502 && $conformity['status']==='review_required','conformity case captures both exact law versions and awaits human review');
     $conflict_count=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_conformity_conflicts WHERE case_id=(SELECT id FROM community_law_conformity_cases WHERE community_id=90020 AND local_law_version_id=99002 AND parent_law_version_id=99001)")->fetch_assoc()['n'];
     change_case_check($conflict_count===0,'opening a conformity review does not falsely declare a semantic conflict');
+    $conformity_case_id=(int)$db->query("SELECT id FROM community_law_conformity_cases WHERE community_id=90020 AND local_law_version_id=99002 AND parent_law_version_id=99001")->fetch_assoc()['id'];
+    $conflict_id=community_law_conformity_add_conflict($db,$conformity_case_id,90200,'ماده ۳','ماده ۷','تعارض احتمالی دربارهٔ دامنهٔ اختیار جامعهٔ محلی','متن و مستندات دو ماده');
+    change_case_check(is_int($conflict_id) && $conflict_id>0,'local member can record a conflict with exact article references and evidence');
+    change_case_check(!community_law_conformity_review_conflict($db,$conflict_id,90200,90020,'conflict_confirmed','این بررسی نباید توسط ثبت‌کنندهٔ تعارض انجام شود.'),'conflict submitter cannot review their own conflict');
+    change_case_check(community_law_conformity_review_conflict($db,$conflict_id,90201,90020,'conflict_confirmed','از منظر جامعهٔ محلی، تعارض با مادهٔ بالادستی مستند است.'),'a separate local-community member can submit the local review');
+    $pending_finding=$db->query("SELECT finding FROM community_law_conformity_conflicts WHERE id=".$conflict_id)->fetch_assoc()['finding'];
+    change_case_check($pending_finding==='unreviewed','one side alone cannot finalize a conformity conflict');
+    change_case_check(community_law_conformity_review_conflict($db,$conflict_id,90102,90010,'conflict_confirmed','از منظر جامعهٔ مادر، تعارض با مادهٔ لازم‌الاجرا تأیید می‌شود.'),'a separate parent-community member can submit the parent review');
+    $confirmed=$db->query("SELECT f.finding,c.status FROM community_law_conformity_conflicts f JOIN community_law_conformity_cases c ON c.id=f.case_id WHERE f.id=".$conflict_id)->fetch_assoc();
+    change_case_check($confirmed && $confirmed['finding']==='conflict_confirmed' && $confirmed['status']==='amendment_required','two-sided confirmed conflict requires a local amendment and records the finding');
+    $review_history=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_history WHERE law_id=9502 AND event_type='conformity_conflict_reviewed'")->fetch_assoc()['n'];
+    change_case_check($review_history===2,'both independent reviews are preserved in the local law history');
     $db->query("INSERT INTO community_law_implementations (law_version_id,community_id,responsible_user_id,local_plan,status,started_at,target_date,progress_report) VALUES (99001,90010,90101,'برنامهٔ جامعهٔ مادر','in_progress',NOW(),DATE_ADD(CURDATE(),INTERVAL 5 DAY),'گزارش پیشرفت مادر'),(99001,90020,90102,'برنامهٔ زیرجامعه','completed',NOW(),DATE_ADD(CURDATE(),INTERVAL 1 DAY),'گزارش تکمیل زیرجامعه')");
 
     $case_id=community_law_open_change_case($db,9501,90200,90020,'suspend','خطر جدی برای حقوق اعضا','گزارش مستند',true);
