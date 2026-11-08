@@ -59,6 +59,9 @@ on:
       - 'tests/community_law_implementation_integration_test.php'
       - 'migrations/20261108_community_law_outcome_reports.sql'
       - 'tests/community_law_outcome_reports_integration_test.php'
+      - 'community_law_outcome_action.php'
+      - 'migrations/20261108_community_law_outcome_reports.sql'
+      - 'tests/community_law_outcome_reports_integration_test.php'
       - '.github/workflows/php-expertise-framework-check.yml'
   pull_request:
     paths:
