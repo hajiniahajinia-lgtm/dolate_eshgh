@@ -69,6 +69,26 @@ try {
     $applied=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_change_cases WHERE id=".(int)$case_id." AND effect_applied_at IS NOT NULL")->fetch_assoc()['n'];
     change_case_check($applied===1,'the applied legal effect is marked idempotently');
 
+    $reinstate_case=community_law_open_change_case($db,9501,90200,90020,'reinstate','درخواست بازگرداندن قانون پس از رفع علت تعلیق','گزارش رفع مانع');
+    change_case_check(is_int($reinstate_case) && $reinstate_case>0,'a member of an affected child community can request reinstatement');
+    $reinstate_reviewers=$db->query('SELECT reviewer_user_id FROM community_law_change_reviewers WHERE case_id='.(int)$reinstate_case)->fetch_all(MYSQLI_ASSOC);
+    change_case_check(count($reinstate_reviewers)===5,'reinstatement also receives five independent reviewers');
+    foreach ($reinstate_reviewers as $index=>$reviewer) {
+        $verdict=$index<4?'uphold':'dismiss';
+        change_case_check(community_law_submit_change_assessment($db,$reinstate_case,(int)$reviewer['reviewer_user_id'],$verdict,'بررسی مستقل درخواست بازگردانی با شواهد انجام شد.')!==false,'reinstatement assessment is accepted');
+    }
+    $reinstate_electorate=$db->query('SELECT user_id FROM community_law_change_electorate WHERE case_id='.(int)$reinstate_case.' ORDER BY user_id')->fetch_all(MYSQLI_ASSOC);
+    change_case_check(count($reinstate_electorate)===4,'reinstatement vote uses a separate parent-community electorate');
+    foreach (array_slice($reinstate_electorate,0,3) as $voter) {
+        change_case_check(community_law_change_cast_vote($db,$reinstate_case,(int)$voter['user_id'],'yes'),'parent voter can approve reinstatement');
+    }
+    $db->query('UPDATE community_law_change_cases SET vote_closes_at=DATE_SUB(NOW(),INTERVAL 1 SECOND) WHERE id='.(int)$reinstate_case);
+    change_case_check(community_law_change_finalize_vote($db,$reinstate_case)==='approved','parent vote approves reinstatement');
+    $restored_law=$db->query('SELECT status,suspended_at,suspension_case_id FROM community_laws WHERE id=9501')->fetch_assoc();
+    change_case_check($restored_law && $restored_law['status']==='approved' && $restored_law['suspended_at']===null && $restored_law['suspension_case_id']===null,'approved reinstatement restores the law to active status');
+    $restored=$db->query('SELECT community_id,responsible_user_id,local_plan,status,progress_report FROM community_law_implementations WHERE law_version_id=99001 ORDER BY community_id')->fetch_all(MYSQLI_ASSOC);
+    change_case_check(count($restored)===2 && $restored[0]['status']==='in_progress' && $restored[0]['responsible_user_id']==='90101' && $restored[0]['local_plan']==='برنامهٔ جامعهٔ مادر' && $restored[1]['status']==='completed' && $restored[1]['responsible_user_id']==='90102' && $restored[1]['local_plan']==='برنامهٔ زیرجامعه','implementation owners, plans and statuses are restored from suspension snapshots');
+
     change_case_check(community_law_open_change_case($db,9501,999999,90020,'repeal','درخواست نامعتبر')===false,'non-member cannot submit a change request');
     change_case_check(community_law_open_change_case($db,9501,90200,90020,'repeal','')===false,'empty reasons are rejected');
     change_case_check(community_law_open_change_case($db,9501,90200,90020,'repeal','درخواست اضطراری',null,true)===false,'emergency flag is restricted to suspension requests');
