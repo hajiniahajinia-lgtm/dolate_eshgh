@@ -21,8 +21,6 @@ $db=new mysqli($host,$user,$password,$name,$port);
 $db->set_charset('utf8mb4');
 try {
     outcome_apply_sql($db,__DIR__.'/../migrations/20261106_collective_knowledge_library.sql');
-    outcome_apply_sql($db,__DIR__.'/../migrations/20261108_community_decision_ledger.sql');
-    outcome_apply_sql($db,__DIR__.'/../migrations/20261108_community_decision_knowledge_link.sql');
     outcome_apply_sql($db,__DIR__.'/../migrations/20261106_community_law_objections_schema_repair.sql');
     outcome_apply_sql($db,__DIR__.'/../migrations/20261107_community_law_framework.sql');
     outcome_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_decision_origin.sql');
@@ -31,6 +29,15 @@ try {
     outcome_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_outcome_followups.sql');
     outcome_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_outcome_reassessments.sql');
     outcome_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_outcome_corrective_actions.sql');
+    $db->query("CREATE TEMPORARY TABLE community_decision_records (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        community_id INT NOT NULL,
+        source_topic_id INT NOT NULL UNIQUE,
+        knowledge_entry_id BIGINT UNSIGNED NULL,
+        acceptance_status ENUM('accepted','not_accepted','no_votes') NOT NULL DEFAULT 'no_votes',
+        record_status ENUM('recorded','superseded','voided') NOT NULL DEFAULT 'recorded',
+        decided_at DATETIME NOT NULL
+    ) ENGINE=InnoDB");
     $db->query("CREATE TEMPORARY TABLE community_members (community_id INT NOT NULL,user_id INT NOT NULL,PRIMARY KEY(community_id,user_id)) ENGINE=InnoDB");
     $db->query("INSERT INTO community_members VALUES (920,9700),(920,9701),(920,9702),(920,9703),(920,9704),(920,9706),(920,9707),(920,9708)");
     $db->query("INSERT INTO collective_knowledge_entries
