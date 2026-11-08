@@ -319,6 +319,42 @@ try {
     $scope_unread=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_scope_notices WHERE law_id=96001 AND community_id=91030 AND read_at IS NULL")->fetch_assoc()['n'];
     change_case_check($scope_unread===2,'each scope transition creates a separate unread community notice');
 
+    // اعلان‌ها فقط توسط عضو همان جامعه و از مسیر جدول منبع صحیح خوانده می‌شوند.
+    $db->query("INSERT INTO community_members (community_id,user_id) VALUES (91030,90300) ON DUPLICATE KEY UPDATE user_id=VALUES(user_id)");
+    $scope_notice_id=(int)$db->query("SELECT id FROM community_law_scope_notices WHERE law_id=96001 AND community_id=91030 AND read_at IS NULL ORDER BY id LIMIT 1")->fetch_assoc()['id'];
+    change_case_check(
+        !community_law_change_mark_notice_read($db,91030,90301,$scope_notice_id,'scope'),
+        'a non-member cannot mark a scope notice as read'
+    );
+    change_case_check(
+        !community_law_change_mark_notice_read($db,91020,90300,$scope_notice_id,'scope'),
+        'a member of another community cannot mark this community notice as read'
+    );
+    change_case_check(
+        !community_law_change_mark_notice_read($db,91030,90300,$scope_notice_id,'unknown'),
+        'an unknown notice source is rejected instead of falling back to change notices'
+    );
+    change_case_check(
+        community_law_change_mark_notice_read($db,91030,90300,$scope_notice_id,'scope'),
+        'a member can mark their own community scope notice as read'
+    );
+    $scope_read=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_scope_notices WHERE id=".$scope_notice_id." AND read_at IS NOT NULL")->fetch_assoc()['n'];
+    change_case_check($scope_read===1,'scope notice read status is updated in the scope-notice table');
+
+    $change_notice=$db->query("SELECT id,community_id FROM community_law_community_notices WHERE case_id=".(int)$case_id." ORDER BY id LIMIT 1")->fetch_assoc();
+    change_case_check($change_notice!==null,'the change workflow has a notice fixture for source-routing checks');
+    change_case_check(
+        !community_law_change_mark_notice_read($db,(int)$change_notice['community_id'],999999,(int)$change_notice['id'],'change'),
+        'a non-member cannot mark a change notice as read'
+    );
+    $change_member=(int)$db->query("SELECT user_id FROM community_members WHERE community_id=".(int)$change_notice['community_id']." ORDER BY user_id LIMIT 1")->fetch_assoc()['user_id'];
+    change_case_check(
+        community_law_change_mark_notice_read($db,(int)$change_notice['community_id'],$change_member,(int)$change_notice['id'],'change'),
+        'a member can mark a change notice as read through the change-notice table'
+    );
+    $change_read=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_community_notices WHERE id=".(int)$change_notice['id']." AND read_at IS NOT NULL")->fetch_assoc()['n'];
+    change_case_check($change_read===1,'change notice read status is updated in the change-notice table');
+
     fwrite(STDOUT,"OK: community law change-control integration checks passed.\n");
 } finally { $db->close(); }
 ?>
