@@ -394,7 +394,7 @@ if (!function_exists('community_law_submit_amendment_for_vote')) {
             }
             $has_descendant_scope=false;
             foreach ($scope_ids as $scope_id) {
-                if (!community_law_is_descendant_or_same($parent_map,$community_id,(int)$scope_id)) {
+                if (!community_law_is_descendant_or_same($parent_map,(int)$scope_id,$community_id)) {
                     throw new RuntimeException('amendment scope exceeds local authority');
                 }
                 if ((int)$scope_id!==$community_id) $has_descendant_scope=true;
