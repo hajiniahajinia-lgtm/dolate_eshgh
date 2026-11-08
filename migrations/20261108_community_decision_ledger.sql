@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS community_decision_records (
     community_id INT NOT NULL,
     source_topic_id INT NOT NULL,
     source_idea_id INT NULL,
+    knowledge_entry_id BIGINT UNSIGNED NULL,
     topic_purpose_snapshot ENUM('knowledge','execution','mixed') NOT NULL DEFAULT 'mixed',
     selected_idea_content MEDIUMTEXT NULL,
     acceptance_status ENUM('accepted','not_accepted','no_votes') NOT NULL DEFAULT 'no_votes',
@@ -22,6 +23,7 @@ CREATE TABLE IF NOT EXISTS community_decision_records (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     UNIQUE KEY uq_community_decision_source_topic (source_topic_id),
+    KEY idx_decision_knowledge_entry (knowledge_entry_id),
     KEY idx_community_decision_community_date (community_id, decided_at, id),
     KEY idx_community_decision_status (record_status, decided_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
