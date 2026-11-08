@@ -391,6 +391,31 @@ try {
     $scope_read=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_scope_notices WHERE id=".$scope_notice_id." AND read_at IS NOT NULL")->fetch_assoc()['n'];
     change_case_check($scope_read===1,'scope notice read status is updated in the scope-notice table');
 
+    // اعلان فعال‌شدن نسخهٔ جدید قانون نیز باید فقط برای عضو همان جامعه قابل خواندن باشد.
+    $db->query("INSERT INTO community_law_version_notices
+        (law_id,law_version_id,previous_version_id,community_id,actor_user_id,event_type,notice_text)
+        VALUES (96001,99601,NULL,91030,90200,'version_activated','نسخهٔ جدید قانون فعال شد')");
+    $version_notice_id=(int)$db->insert_id;
+    change_case_check($version_notice_id>0,'an enacted law version can create a dedicated community notice');
+    change_case_check(
+        !community_law_change_mark_notice_read($db,91030,90301,$version_notice_id,'version'),
+        'a non-member cannot mark a law version notice as read'
+    );
+    change_case_check(
+        !community_law_change_mark_notice_read($db,91020,90300,$version_notice_id,'version'),
+        'a member of another community cannot mark a law version notice as read'
+    );
+    change_case_check(
+        !community_law_change_mark_notice_read($db,91030,90300,$version_notice_id,'unknown'),
+        'an unknown source cannot route to the law version notice table'
+    );
+    change_case_check(
+        community_law_change_mark_notice_read($db,91030,90300,$version_notice_id,'version'),
+        'a member can mark their own law version notice as read'
+    );
+    $version_notice_read=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_version_notices WHERE id=".$version_notice_id." AND read_at IS NOT NULL")->fetch_assoc()['n'];
+    change_case_check($version_notice_read===1,'law version notice read status is updated only in its dedicated table');
+
     $change_notice=$db->query("SELECT id,community_id FROM community_law_community_notices WHERE case_id=".(int)$case_id." ORDER BY id LIMIT 1")->fetch_assoc();
     change_case_check($change_notice!==null,'the change workflow has a notice fixture for source-routing checks');
     change_case_check(
