@@ -223,6 +223,27 @@ if($is_member && $draft['status']==='local_voting' && !empty($draft['vote_deadli
 }
 ?><details class="article"><summary>اصلاحیه #<?=(int)$draft['id']?> — نسخهٔ پیشنهادی <?=(int)$draft['version_number']?> — <?=clamp_h($draft['status'])?></summary>
 <p><?=clamp_h($draft['rationale'])?></p><pre><?=clamp_h($draft['law_text'])?></pre>
+<?php
+$review_rows=[];
+$review_list=$conn->prepare('SELECT finding,conflicting_article_references,reasoning,evidence,created_at FROM community_law_amendment_parent_reviews WHERE case_id=? ORDER BY id');
+if($review_list) {
+    $review_list->bind_param('i',$draft['id']);
+    if($review_list->execute()) { $review_result=$review_list->get_result(); while($review_row=$review_result->fetch_assoc()) $review_rows[]=$review_row; }
+    $review_list->close();
+}
+?>
+<?php if($review_rows):?>
+<div class="article"><strong>گزارش بررسی‌های مستقل جامعهٔ مادر</strong>
+<?php foreach($review_rows as $review_row):?>
+<p><strong><?= $review_row['finding']==='compatible'?'سازگار':'تعارض باقی‌مانده'?></strong> — <?=clamp_h($review_row['created_at'])?></p>
+<?php $review_refs=json_decode((string)$review_row['conflicting_article_references'],true); if(is_array($review_refs) && $review_refs):?>
+<p>مواد مورد اشاره: <?=clamp_h(implode('، ',$review_refs))?></p>
+<?php endif;?>
+<p><?=nl2br(clamp_h($review_row['reasoning']))?></p>
+<?php if(!empty($review_row['evidence'])):?><p class="muted">شواهد: <?=nl2br(clamp_h($review_row['evidence']))?></p><?php endif;?>
+<?php endforeach;?>
+</div>
+<?php endif;?>
 <?php if($draft['status']==='draft' && (int)$draft['originating_community_id']===$community_id):?>
 <form method="post">
 <input type="hidden" name="csrf_token" value="<?=clamp_h($csrf)?>">
