@@ -731,6 +731,97 @@ if (!function_exists('community_law_record_history')) {
 }
 
 
+
+if (!function_exists('community_law_submit_outcome_report')) {
+    /**
+     * گزارش پیشرفت یا پیامد را به‌صورت سند مستقل و غیرقابل‌جایگزینی ثبت می‌کند.
+     * ثبت گزارش به معنی تأیید آن نیست؛ بررسی مستقل در گردش‌کار جداگانه انجام می‌شود.
+     */
+    function community_law_submit_outcome_report(
+        mysqli $conn,
+        int $law_id,
+        int $law_version_id,
+        int $community_id,
+        int $actor_user_id,
+        string $report_type,
+        string $period_start,
+        string $period_end,
+        string $summary,
+        ?string $evidence=null,
+        ?string $metrics_json=null
+    ): int|false {
+        $summary=trim($summary);
+        if ($law_id<=0 || $law_version_id<=0 || $community_id<=0 || $actor_user_id<=0 ||
+            !in_array($report_type,['progress','outcome'],true) ||
+            $summary==='' || mb_strlen($summary)>30000 ||
+            ($evidence!==null && mb_strlen($evidence)>30000)) return false;
+
+        $start=DateTime::createFromFormat('Y-m-d',$period_start);
+        $end=DateTime::createFromFormat('Y-m-d',$period_end);
+        if (!$start || $start->format('Y-m-d')!==$period_start ||
+            !$end || $end->format('Y-m-d')!==$period_end ||
+            $period_end<$period_start) return false;
+
+        if ($metrics_json!==null) {
+            $decoded=json_decode($metrics_json,true);
+            if (!is_array($decoded) || json_last_error()!==JSON_ERROR_NONE ||
+                mb_strlen($metrics_json)>20000) return false;
+        }
+
+        $member=$conn->prepare(
+            'SELECT 1 FROM community_members WHERE community_id=? AND user_id=? LIMIT 1'
+        );
+        if (!$member) return false;
+        $member->bind_param('ii',$community_id,$actor_user_id);
+        if (!$member->execute()) { $member->close(); return false; }
+        $is_member=(bool)$member->get_result()->fetch_row();
+        $member->close();
+        if (!$is_member) return false;
+
+        $implementation=$conn->prepare(
+            "SELECT i.id
+             FROM community_law_implementations i
+             JOIN community_law_versions v ON v.id=i.law_version_id
+             WHERE v.law_id=? AND i.law_version_id=? AND i.community_id=?
+             LIMIT 1"
+        );
+        if (!$implementation) return false;
+        $implementation->bind_param('iii',$law_id,$law_version_id,$community_id);
+        if (!$implementation->execute()) { $implementation->close(); return false; }
+        $implementation_row=$implementation->get_result()->fetch_assoc();
+        $implementation->close();
+        if (!$implementation_row) return false;
+        $implementation_id=(int)$implementation_row['id'];
+
+        $insert=$conn->prepare(
+            "INSERT INTO community_law_outcome_reports
+                (law_id,law_version_id,implementation_id,community_id,submitted_by,
+                 report_type,period_start,period_end,summary,evidence,metrics_json)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?)"
+        );
+        if (!$insert) return false;
+        $insert->bind_param(
+            'iiiiissssss',
+            $law_id,$law_version_id,$implementation_id,$community_id,$actor_user_id,
+            $report_type,$period_start,$period_end,$summary,$evidence,$metrics_json
+        );
+        if (!$insert->execute()) { $insert->close(); return false; }
+        $report_id=(int)$conn->insert_id;
+        $insert->close();
+
+        $details=json_encode([
+            'report_id'=>$report_id,'report_type'=>$report_type,
+            'period_start'=>$period_start,'period_end'=>$period_end
+        ],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
+        if (!community_law_record_history(
+            $conn,$law_id,$law_version_id,$community_id,$actor_user_id,
+            'outcome_report_submitted',$details
+        )) return false;
+        return $report_id;
+    }
+}
+
+
 if (!function_exists('community_law_charter_tables_ready')) {
     function community_law_charter_tables_ready(mysqli $conn): bool {
         $required = [
