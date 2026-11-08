@@ -2361,7 +2361,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $amendment_final_review_state=$is_amendment_final_review &&
                 $law['status']==='approved' && $law['version_status']==='voting' &&
                 $law['amendment_status']==='parent_review_approved' &&
-                (int)$law['current_version_id']===(int)$law['amendment_base_version_id';
+                (int)$law['current_version_id']===(int)$law['amendment_base_version_id'];
             if (
                 (!$standard_final_review_state && !$amendment_final_review_state) ||
                 $law['final_status']!=='vote_passed'
