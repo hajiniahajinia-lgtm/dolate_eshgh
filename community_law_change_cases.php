@@ -64,11 +64,14 @@ if ($schema_ready) {
              UNION ALL
              SELECT id,NULL AS case_id,transition AS event_type,notice_text,created_at,read_at,'scope' AS notice_source
              FROM community_law_scope_notices WHERE community_id=?
+             UNION ALL
+             SELECT id,NULL AS case_id,event_type,notice_text,created_at,read_at,'version' AS notice_source
+             FROM community_law_version_notices WHERE community_id=?
          ) notices
          ORDER BY created_at DESC,id DESC LIMIT 30"
     );
     if ($notice_stmt) {
-        $notice_stmt->bind_param('ii',$community_id,$community_id);
+        $notice_stmt->bind_param('iii',$community_id,$community_id,$community_id);
         if ($notice_stmt->execute()) {
             $res=$notice_stmt->get_result();
             while ($row=$res->fetch_assoc()) $notices[]=$row;
@@ -149,7 +152,8 @@ $notice_labels=[
     'suspension_requested'=>'درخواست تعلیق','suspended'=>'تعلیق قانون',
     'repealed'=>'لغو قانون','expiry_review_requested'=>'درخواست بازبینی اعتبار',
     'expiry_updated'=>'به‌روزرسانی اعتبار','reinstated'=>'بازگردانی قانون',
-    'scope_entered'=>'ورود به دامنهٔ قانون','scope_left'=>'خروج از دامنهٔ قانون'
+    'scope_entered'=>'ورود به دامنهٔ قانون','scope_left'=>'خروج از دامنهٔ قانون',
+    'version_activated'=>'فعال‌شدن نسخهٔ جدید قانون'
 ];
 ?>
 <!DOCTYPE html>
