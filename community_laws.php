@@ -2369,6 +2369,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $version_id = (int)($_POST['version_id'] ?? 0);
         if ($law_id <= 0 || $version_id <= 0) community_laws_redirect($community_id, 'invalid_final_review');
 
+        $amendment_lookup=$conn->prepare('SELECT id FROM community_law_amendment_cases WHERE law_id=? AND proposed_version_id=? LIMIT 1');
+        if (!$amendment_lookup) community_laws_redirect($community_id,'save_error');
+        $amendment_lookup->bind_param('ii',$law_id,$version_id);
+        if (!$amendment_lookup->execute()) { $amendment_lookup->close(); community_laws_redirect($community_id,'save_error'); }
+        $amendment_row=$amendment_lookup->get_result()->fetch_assoc();
+        $amendment_lookup->close();
+        if ($amendment_row) {
+            $opened=community_law_open_amendment_final_review($conn,$law_id,$version_id,$community_id,$user_id);
+            community_laws_redirect($community_id,$opened?'final_review_opened':'final_review_not_ready');
+        }
+
         if (!$conn->begin_transaction()) community_laws_redirect($community_id, 'save_error');
         try {
             // قفل نقشه سلسله‌مراتب پیش از پرونده قانون؛ هم‌راستا با مسیر تغییر والد.
