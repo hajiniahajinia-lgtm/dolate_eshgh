@@ -332,6 +332,176 @@ if (!function_exists('community_law_change_cast_vote')) {
     }
 }
 
+if (!function_exists('community_law_change_apply_approved_case')) {
+    /**
+     * اثر مصوب را داخل تراکنش رأی نهایی اعمال می‌کند.
+     * snapshot اجرای قبلی هر زیرجامعه پیش از تغییر وضعیت ذخیره می‌شود.
+     */
+    function community_law_change_apply_approved_case(mysqli $conn,int $case_id,?int $actor_user_id=null): bool {
+        if ($case_id<=0) return false;
+        $stmt=$conn->prepare(
+            "SELECT c.law_id,c.law_version_id,c.request_type,c.requested_effective_at,
+                    c.status,c.vote_result,c.effect_applied_at,
+                    l.originating_community_id,l.status AS law_status,
+                    l.current_version_id,l.suspension_case_id,l.expires_at
+             FROM community_law_change_cases c
+             JOIN community_laws l ON l.id=c.law_id
+             WHERE c.id=? FOR UPDATE"
+        );
+        if (!$stmt) return false;
+        $stmt->bind_param('i',$case_id);
+        if (!$stmt->execute()) { $stmt->close(); return false; }
+        $row=$stmt->get_result()->fetch_assoc(); $stmt->close();
+        if (!$row || $row['status']!=='approved' || $row['vote_result']!=='approved' ||
+            (int)$row['current_version_id']!==(int)$row['law_version_id']) return false;
+        if ($row['effect_applied_at']!==null) return true;
+
+        $law_id=(int)$row['law_id']; $version_id=(int)$row['law_version_id'];
+        $request_type=(string)$row['request_type']; $origin_id=(int)$row['originating_community_id'];
+        $snapshot_stmt=null;
+        if (in_array($request_type,['suspend','repeal'],true)) {
+            $snapshot_stmt=$conn->prepare(
+                "INSERT IGNORE INTO community_law_change_implementation_snapshots
+                 (case_id,law_id,law_version_id,community_id,previous_responsible_user_id,
+                  previous_local_plan,previous_status,previous_started_at,previous_target_date,
+                  previous_completed_at,previous_progress_report)
+                 SELECT ?,?,law_version_id,community_id,responsible_user_id,local_plan,status,
+                        started_at,target_date,completed_at,progress_report
+                 FROM community_law_implementations WHERE law_version_id=?"
+            );
+            if (!$snapshot_stmt) return false;
+            $snapshot_stmt->bind_param('iii',$case_id,$law_id,$version_id);
+            if (!$snapshot_stmt->execute()) { $snapshot_stmt->close(); return false; }
+            $snapshot_stmt->close();
+        }
+
+        $notice_event=''; $history_event=''; $notice_text=''; $effect=[];
+        if ($request_type==='suspend') {
+            if ($row['law_status']!=='approved') return false;
+            $update_law=$conn->prepare(
+                "UPDATE community_laws SET status='suspended',suspended_at=NOW(),
+                    suspension_case_id=?,last_status_change_case_id=?
+                 WHERE id=? AND status='approved' AND repealed_at IS NULL"
+            );
+            if (!$update_law) return false;
+            $update_law->bind_param('iii',$case_id,$case_id,$law_id);
+            $ok=$update_law->execute() && $update_law->affected_rows===1; $update_law->close();
+            if (!$ok) return false;
+            $update_impl=$conn->prepare(
+                "UPDATE community_law_implementations SET status='suspended'
+                 WHERE law_version_id=? AND status<>'not_applicable'"
+            );
+            if (!$update_impl) return false;
+            $update_impl->bind_param('i',$version_id);
+            $ok=$update_impl->execute(); $update_impl->close();
+            if (!$ok) return false;
+            $notice_event='suspended'; $history_event='law_suspended';
+            $notice_text='قانون پس از رأی معتبر جامعهٔ مادر به حالت تعلیق درآمده است؛ سوابق اجرای قبلی حفظ شده‌اند.';
+            $effect=['status'=>'suspended','implementation_snapshots'=>true];
+        } elseif ($request_type==='repeal') {
+            if (!in_array($row['law_status'],['approved','suspended'],true)) return false;
+            $update_law=$conn->prepare(
+                "UPDATE community_laws SET status='repealed',repealed_at=NOW(),
+                    last_status_change_case_id=?
+                 WHERE id=? AND status IN ('approved','suspended') AND repealed_at IS NULL"
+            );
+            if (!$update_law) return false;
+            $update_law->bind_param('ii',$case_id,$law_id);
+            $ok=$update_law->execute() && $update_law->affected_rows===1; $update_law->close();
+            if (!$ok) return false;
+            $update_impl=$conn->prepare(
+                "UPDATE community_law_implementations SET status='not_applicable'
+                 WHERE law_version_id=?"
+            );
+            if (!$update_impl) return false;
+            $update_impl->bind_param('i',$version_id);
+            $ok=$update_impl->execute(); $update_impl->close();
+            if (!$ok) return false;
+            $notice_event='repealed'; $history_event='law_repealed';
+            $notice_text='قانون پس از رأی معتبر جامعهٔ مادر لغو شد؛ سوابق و گزارش‌های اجرای پیشین حفظ شده‌اند.';
+            $effect=['status'=>'repealed','implementation_snapshots'=>true];
+        } elseif ($request_type==='review_expiry') {
+            $new_expiry=(string)($row['requested_effective_at']??'');
+            $date=DateTime::createFromFormat('Y-m-d H:i:s',$new_expiry);
+            if ($row['law_status']!=='approved' || !$date ||
+                $date->format('Y-m-d H:i:s')!==$new_expiry || $date->getTimestamp()<=time()) return false;
+            $update_law=$conn->prepare(
+                "UPDATE community_laws SET expires_at=?,last_status_change_case_id=?
+                 WHERE id=? AND status='approved' AND repealed_at IS NULL"
+            );
+            if (!$update_law) return false;
+            $update_law->bind_param('sii',$new_expiry,$case_id,$law_id);
+            $ok=$update_law->execute(); $update_law->close();
+            if (!$ok) return false;
+            $notice_event='expiry_updated'; $history_event='law_expiry_updated';
+            $notice_text='تاریخ پایان اعتبار قانون طبق رأی معتبر جامعهٔ مادر بازبینی و به‌روزرسانی شد.';
+            $effect=['expires_at'=>$new_expiry];
+        } elseif ($request_type==='reinstate') {
+            if ($row['law_status']!=='suspended' || $row['suspension_case_id']===null ||
+                ($row['expires_at']!==null && strtotime((string)$row['expires_at'])<=time())) return false;
+            $suspension_case_id=(int)$row['suspension_case_id'];
+            $restore=$conn->prepare(
+                "UPDATE community_law_implementations i
+                 JOIN community_law_change_implementation_snapshots s
+                   ON s.community_id=i.community_id AND s.law_version_id=i.law_version_id
+                 SET i.responsible_user_id=s.previous_responsible_user_id,
+                     i.local_plan=s.previous_local_plan,i.status=s.previous_status,
+                     i.started_at=s.previous_started_at,i.target_date=s.previous_target_date,
+                     i.completed_at=s.previous_completed_at,i.progress_report=s.previous_progress_report
+                 WHERE s.case_id=? AND s.law_version_id=?"
+            );
+            if (!$restore) return false;
+            $restore->bind_param('ii',$suspension_case_id,$version_id);
+            $ok=$restore->execute(); $restore->close();
+            if (!$ok) return false;
+            $update_law=$conn->prepare(
+                "UPDATE community_laws SET status='approved',suspended_at=NULL,
+                    suspension_case_id=NULL,last_status_change_case_id=?
+                 WHERE id=? AND status='suspended' AND repealed_at IS NULL"
+            );
+            if (!$update_law) return false;
+            $update_law->bind_param('ii',$case_id,$law_id);
+            $ok=$update_law->execute() && $update_law->affected_rows===1; $update_law->close();
+            if (!$ok) return false;
+            $notice_event='reinstated'; $history_event='law_reinstated';
+            $notice_text='قانون پس از رأی معتبر جامعهٔ مادر از تعلیق خارج شد و وضعیت اجرای قبلی زیرجامعه‌ها بازیابی شد.';
+            $effect=['status'=>'approved','restored_from_suspension_case'=>$suspension_case_id];
+        } else {
+            return false;
+        }
+
+        $effect_json=json_encode($effect,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
+        if (!is_string($effect_json) || !community_law_record_history(
+            $conn,$law_id,$version_id,$origin_id,$actor_user_id,$history_event,$effect_json
+        )) return false;
+
+        $scope_ids=community_law_scope_community_ids($conn,$version_id);
+        if ($scope_ids===null) return false;
+        $scope_ids[]=$origin_id;
+        $scope_ids=array_values(array_unique(array_map('intval',$scope_ids)));
+        $notice=$conn->prepare(
+            'INSERT IGNORE INTO community_law_community_notices
+             (case_id,law_id,law_version_id,community_id,event_type,notice_text) VALUES (?,?,?,?,?,?)'
+        );
+        if (!$notice) return false;
+        foreach ($scope_ids as $community_id) {
+            $notice->bind_param('iiiiss',$case_id,$law_id,$version_id,$community_id,$notice_event,$notice_text);
+            if (!$notice->execute()) { $notice->close(); return false; }
+        }
+        $notice->close();
+
+        $mark=$conn->prepare(
+            'UPDATE community_law_change_cases
+             SET effect_applied_at=NOW(),effect_applied_by=?,effect_summary=?
+             WHERE id=? AND effect_applied_at IS NULL'
+        );
+        if (!$mark) return false;
+        $mark->bind_param('isi',$actor_user_id,$effect_json,$case_id);
+        $ok=$mark->execute() && $mark->affected_rows===1; $mark->close();
+        return $ok;
+    }
+}
+
 if (!function_exists('community_law_change_finalize_vote')) {
     function community_law_change_finalize_vote(mysqli $conn,int $case_id): string|false {
         if ($case_id<=0 || !$conn->begin_transaction()) return false;
