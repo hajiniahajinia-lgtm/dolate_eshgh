@@ -535,19 +535,24 @@ if (!function_exists('community_law_change_finalize_vote')) {
             $note=json_encode([
                 'electorate'=>$electorate,'turnout'=>$turnout,'yes'=>$yes,'no'=>$no,
                 'abstain'=>$turnout-$valid_votes,'turnout_required'=>'2/3',
-                'approval_required'=>'2/3','result'=>$result,'law_status_changed'=>false
+                'approval_required'=>'2/3','result'=>$result,'law_effect_applied'=>($status==='approved')
             ],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
             $update=$conn->prepare("UPDATE community_law_change_cases SET status=?,vote_result=?,decided_at=NOW(),decision_note=? WHERE id=? AND status='awaiting_vote'");
             if (!$update) throw new RuntimeException('vote result update prepare failed');
             $update->bind_param('sssi',$status,$result,$note,$case_id);
             if (!$update->execute() || $update->affected_rows!==1) throw new RuntimeException('vote result update failed');
             $update->close();
+            if ($status==='approved' && !community_law_change_apply_approved_case($conn,$case_id,null)) {
+                throw new RuntimeException('approved law change could not be applied atomically');
+            }
             if (!community_law_record_history($conn,(int)$case['law_id'],(int)$case['law_version_id'],null,null,'change_case_parent_vote_finalized',$note)) throw new RuntimeException('vote result history failed');
 
             $scope_ids=community_law_scope_community_ids($conn,(int)$case['law_version_id']);
             if ($scope_ids===null) throw new RuntimeException('law scope unavailable');
+            $scope_ids[]=(int)$conn->query('SELECT originating_community_id FROM community_laws WHERE id='.(int)$case['law_id'])->fetch_assoc()['originating_community_id'];
+            $scope_ids=array_values(array_unique(array_map('intval',$scope_ids)));
             $message=$status==='approved'
-                ? 'رأی جامعهٔ مادر به پذیرش درخواست تغییر قانون انجامید؛ اثر حقوقی هنوز اعمال نشده و در انتظار ثبت مرحلهٔ اجرایی معتبر است.'
+                ? 'درخواست تغییر قانون با رأی معتبر جامعهٔ مادر تصویب شد و اثر حقوقی آن در همان تراکنش اعمال گردید.'
                 : 'درخواست تغییر قانون در رأی جامعهٔ مادر پذیرفته نشد؛ قانون بدون تغییر به اعتبار خود ادامه می‌دهد.';
             $notice=$conn->prepare("INSERT IGNORE INTO community_law_community_notices (case_id,law_id,law_version_id,community_id,event_type,notice_text) VALUES (?,?,?,?, 'change_vote_result',?)");
             if (!$notice) throw new RuntimeException('vote notice prepare failed');
