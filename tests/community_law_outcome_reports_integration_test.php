@@ -102,6 +102,10 @@ try {
     $disputed_status=$db->query("SELECT review_status FROM community_law_outcome_reports WHERE id=".(int)$disputed_report)->fetch_assoc();
     outcome_check($disputed_status && $disputed_status['review_status']==='disputed','three reviews with majority challenge mark report disputed');
 
+    outcome_check(community_law_review_disputed_outcome_followups(
+        $db,$disputed_report,9706,'confirm_report','نباید پیش از ثبت پاسخ و شاهد آغاز شود'
+    )===false,'second-stage review is blocked until both required follow-ups exist');
+
     $db->begin_transaction();
     $response_id=community_law_submit_outcome_followup(
         $db,$disputed_report,9700,'executor_response',
@@ -109,6 +113,10 @@ try {
     );
     outcome_check(is_int($response_id) && $response_id>0,'report author can submit an immutable response');
     $db->commit();
+
+    outcome_check(community_law_review_disputed_outcome_followups(
+        $db,$disputed_report,9706,'confirm_report','شواهد تکمیلی هنوز ثبت نشده است'
+    )===false,'second-stage review requires supplemental evidence as well as executor response');
 
     $db->begin_transaction();
     $evidence_id=community_law_submit_outcome_followup(
@@ -133,9 +141,6 @@ try {
     outcome_check($followup_history===2,'each follow-up entry is recorded in immutable law history');
 
     // رسیدگی دوم فقط با پاسخ مجری و شواهد تازه و ارزیابان کاملاً جدید آغاز می‌شود.
-    outcome_check(community_law_review_disputed_outcome_followups(
-        $db,$disputed_report,9706,'confirm_report','نباید پیش از ثبت هر دو نوع پیگیری آغاز شود'
-    )===false,'second-stage review requires executor response and supplemental evidence');
     outcome_check(community_law_review_disputed_outcome_followups(
         $db,$disputed_report,9701,'confirm_report','ارزیاب مرحله اول نباید دوباره ارزیابی کند'
     )===false,'original reviewer is excluded from second-stage review');
