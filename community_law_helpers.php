@@ -1900,3 +1900,143 @@ if (!function_exists('community_charter_amendment_activate')) {
         }
     }
 }
+
+if (!function_exists('community_law_create_outcome_corrective_action')) {
+    /**
+     * فقط نتیجهٔ نهایی «اصلاح برنامهٔ اجرا» می‌تواند اقدام اصلاحی ایجاد کند.
+     * مسئول اقدام همان مسئول اجرای ثبت‌شده است؛ تعیین مسئول جدید از این مسیر مجاز نیست.
+     */
+    function community_law_create_outcome_corrective_action(
+        mysqli $conn,int $report_id,int $actor_user_id,string $title,
+        string $action_details,string $success_criteria,string $target_date
+    ): int|false {
+        $title=trim($title); $action_details=trim($action_details); $success_criteria=trim($success_criteria);
+        $date=DateTime::createFromFormat('Y-m-d',$target_date);
+        if ($report_id<=0 || $actor_user_id<=0 || $title==='' || mb_strlen($title)>200 ||
+            $action_details==='' || mb_strlen($action_details)>20000 ||
+            $success_criteria==='' || mb_strlen($success_criteria)>12000 ||
+            !$date || $date->format('Y-m-d')!==$target_date) return false;
+
+        $stmt=$conn->prepare(
+            "SELECT r.law_id,r.law_version_id,r.community_id,r.implementation_id,
+                    i.responsible_user_id,ra.id AS reassessment_id,ra.final_outcome,ra.status AS reassessment_status
+             FROM community_law_outcome_reports r
+             JOIN community_law_implementations i ON i.id=r.implementation_id
+             JOIN community_law_outcome_reassessments ra ON ra.report_id=r.id
+             WHERE r.id=? LIMIT 1 FOR UPDATE"
+        );
+        if (!$stmt) return false;
+        $stmt->bind_param('i',$report_id);
+        if (!$stmt->execute()) { $stmt->close(); return false; }
+        $row=$stmt->get_result()->fetch_assoc(); $stmt->close();
+        if (!$row || $row['reassessment_status']!=='finalized' ||
+            $row['final_outcome']!=='revise_execution_plan' ||
+            (int)$row['responsible_user_id']<=0) return false;
+
+        $community_id=(int)$row['community_id'];
+        $membership=$conn->prepare(
+            'SELECT COUNT(*) AS total FROM community_members WHERE community_id=? AND user_id IN (?,?)'
+        );
+        if (!$membership) return false;
+        $responsible_id=(int)$row['responsible_user_id'];
+        $membership->bind_param('iii',$community_id,$actor_user_id,$responsible_id);
+        if (!$membership->execute()) { $membership->close(); return false; }
+        $member_count=(int)$membership->get_result()->fetch_assoc()['total'];
+        $membership->close();
+        if ($member_count<1) return false;
+
+        $insert=$conn->prepare(
+            "INSERT INTO community_law_outcome_corrective_actions
+             (reassessment_id,report_id,law_id,law_version_id,community_id,created_by,
+              responsible_user_id,title,action_details,success_criteria,target_date)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?)"
+        );
+        if (!$insert) return false;
+        $reassessment_id=(int)$row['reassessment_id']; $law_id=(int)$row['law_id'];
+        $version_id=(int)$row['law_version_id'];
+        $insert->bind_param(
+            'iiiii iissss',
+            $reassessment_id,$report_id,$law_id,$version_id,$community_id,$actor_user_id,
+            $responsible_id,$title,$action_details,$success_criteria,$target_date
+        );
+        // Bind types without spaces for mysqli.
+        $insert->close();
+        $insert=$conn->prepare(
+            "INSERT INTO community_law_outcome_corrective_actions
+             (reassessment_id,report_id,law_id,law_version_id,community_id,created_by,
+              responsible_user_id,title,action_details,success_criteria,target_date)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?)"
+        );
+        if (!$insert) return false;
+        $insert->bind_param(
+            'iiiiiiissss',
+            $reassessment_id,$report_id,$law_id,$version_id,$community_id,$actor_user_id,
+            $responsible_id,$title,$action_details,$success_criteria,$target_date
+        );
+        $ok=$insert->execute(); $action_id=(int)$conn->insert_id; $insert->close();
+        if (!$ok) return false;
+        $details=json_encode(['report_id'=>$report_id,'action_id'=>$action_id,
+            'responsible_user_id'=>$responsible_id,'target_date'=>$target_date],
+            JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
+        if (!community_law_record_history($conn,$law_id,$version_id,$community_id,
+            $actor_user_id,'outcome_corrective_action_created',$details)) return false;
+        return $action_id;
+    }
+}
+
+if (!function_exists('community_law_submit_outcome_corrective_update')) {
+    /** فقط مسئول تعیین‌شده می‌تواند وضعیت و پیشرفت اقدام را گزارش کند؛ سابقه‌ها قابل بازنویسی نیستند. */
+    function community_law_submit_outcome_corrective_update(
+        mysqli $conn,int $action_id,int $actor_user_id,string $status,
+        string $update_text,?string $evidence=null
+    ): int|false {
+        $update_text=trim($update_text);
+        if ($action_id<=0 || $actor_user_id<=0 ||
+            !in_array($status,['in_progress','blocked','completed'],true) ||
+            $update_text==='' || mb_strlen($update_text)>20000 ||
+            ($evidence!==null && mb_strlen($evidence)>20000)) return false;
+        $stmt=$conn->prepare(
+            "SELECT id,report_id,law_id,law_version_id,community_id,responsible_user_id
+             FROM community_law_outcome_corrective_actions WHERE id=? LIMIT 1 FOR UPDATE"
+        );
+        if (!$stmt) return false;
+        $stmt->bind_param('i',$action_id);
+        if (!$stmt->execute()) { $stmt->close(); return false; }
+        $action=$stmt->get_result()->fetch_assoc(); $stmt->close();
+        if (!$action || (int)$action['responsible_user_id']!==$actor_user_id) return false;
+        $community_id=(int)$action['community_id'];
+        $member=$conn->prepare('SELECT 1 FROM community_members WHERE community_id=? AND user_id=? LIMIT 1');
+        if (!$member) return false;
+        $member->bind_param('ii',$community_id,$actor_user_id);
+        if (!$member->execute()) { $member->close(); return false; }
+        $is_member=(bool)$member->get_result()->fetch_row(); $member->close();
+        if (!$is_member) return false;
+
+        $latest=$conn->prepare(
+            "SELECT status FROM community_law_outcome_corrective_updates
+             WHERE action_id=? ORDER BY id DESC LIMIT 1"
+        );
+        if (!$latest) return false;
+        $latest->bind_param('i',$action_id);
+        if (!$latest->execute()) { $latest->close(); return false; }
+        $last=$latest->get_result()->fetch_assoc(); $latest->close();
+        if ($last && $last['status']==='completed') return false;
+
+        $insert=$conn->prepare(
+            "INSERT INTO community_law_outcome_corrective_updates
+             (action_id,report_id,community_id,submitted_by,status,update_text,evidence)
+             VALUES (?,?,?,?,?,?,?)"
+        );
+        if (!$insert) return false;
+        $report_id=(int)$action['report_id'];
+        $insert->bind_param('iiiisss',$action_id,$report_id,$community_id,$actor_user_id,$status,$update_text,$evidence);
+        $ok=$insert->execute(); $update_id=(int)$conn->insert_id; $insert->close();
+        if (!$ok) return false;
+        $details=json_encode(['report_id'=>$report_id,'action_id'=>$action_id,
+            'update_id'=>$update_id,'status'=>$status],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
+        if (!community_law_record_history($conn,(int)$action['law_id'],(int)$action['law_version_id'],
+            $community_id,$actor_user_id,'outcome_corrective_action_updated',$details)) return false;
+        return $update_id;
+    }
+}
+
