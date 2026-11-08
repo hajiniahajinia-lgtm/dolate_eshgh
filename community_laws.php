@@ -932,7 +932,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $record['status'] === 'approved' &&
                 $record['version_status'] === 'proposed' &&
                 $record['amendment_status'] === 'submitted' &&
-                $record['conformity_status'] === 'amendment_required' &&
+                $record['conformity_status'] === 'amendment_in_progress' &&
                 $record['parent_law_status'] === 'approved' &&
                 $record['parent_version_status'] === 'approved' &&
                 (int)$record['parent_current_version_id'] === (int)$record['parent_law_version_id'] &&
