@@ -3922,6 +3922,7 @@ details>summary{cursor:pointer;font-weight:bold}
     <p><a href="community.php?id=<?= $community_id ?>">↩ بازگشت به صفحه جامعه</a></p>
     <p><a href="community_law_change_cases.php?community_id=<?= $community_id ?>">رسیدگی به درخواست‌های تعلیق، لغو و بازبینی اعتبار قوانین</a></p>
     <p><a href="community_law_conformity_cases.php?community_id=<?= $community_id ?>">پرونده‌های هم‌ترازی قوانین محلی با قوانین مادر</a></p>
+    <p><a href="community_law_amendments.php?community_id=<?= $community_id ?>">پیشنهاد اصلاح قوانین محلی و پیگیری نسخه‌ها</a></p>
 </div>
 
 <?php if (isset($status_messages[$status])): ?>
