@@ -908,7 +908,7 @@ if (!function_exists('community_law_enact_amendment')) {
                 if (!$scope_stmt->execute()) { $scope_stmt->close(); $reference_stmt->close(); throw new RuntimeException('amendment reference scope failed'); }
                 $reference_scopes=[];
                 $scope_result=$scope_stmt->get_result();
-                while ($scope_row=$scope_result->fetch_assoc()) $reference_scopes[]=$scope_row;
+                while ($scope_row=$scope_result->fetch_assoc()) $reference_scopes[]=['scope_community_id'=>(int)$scope_row['scope_community_id'],'include_descendants'=>(int)$scope_row['include_descendants']];
                 $scope_stmt->close();
                 $actual_scope_fingerprint=hash('sha256',json_encode($reference_scopes));
                 if (!$reference_scopes || !hash_equals((string)$reference['scope_fingerprint'],$actual_scope_fingerprint)) {
