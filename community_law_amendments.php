@@ -91,7 +91,7 @@ if ($schema_ready) {
             while($row=$res->fetch_assoc()) {
                 $visible=(int)$row['originating_community_id']===$community_id ||
                     community_law_scope_match_checked($conn,(int)$row['proposed_version_id'],$community_id)===true;
-                if (!$visible && $row['status']==='local_voting') {
+                if (!$visible && in_array($row['status'],['local_voting','parent_review','vote_insufficient','rejected','approved'],true)) {
                     $snapshot_member=$conn->prepare(
                         'SELECT 1 FROM community_law_electorate WHERE law_version_id=? AND voting_community_id=? AND user_id=? LIMIT 1'
                     );
