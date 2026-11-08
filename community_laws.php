@@ -902,7 +902,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $lock = $conn->prepare(
                 "SELECT l.status, l.current_version_id, v.status AS version_status,
                         v.source_topic_id,a.id AS amendment_case_id,a.status AS amendment_status,
-                        a.base_version_id AS amendment_base_version_id,
+                        a.base_version_id AS amendment_base_version_id,a.conformity_case_id,
                         cc.status AS conformity_status,pl.status AS parent_law_status,
                         pl.current_version_id AS parent_current_version_id,
                         pl.effective_at AS parent_effective_at,pl.expires_at AS parent_expires_at,
@@ -1268,6 +1268,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     throw new Exception('amendment vote state update failed');
                 }
                 $amendment_update->close();
+                if ($final_status!=='vote_passed') {
+                    $conformity_reset=$conn->prepare(
+                        "UPDATE community_law_conformity_cases
+                         SET status='amendment_required'
+                         WHERE id=? AND status='amendment_in_progress'"
+                    );
+                    if (!$conformity_reset) throw new Exception('conformity retry state prepare failed');
+                    $conformity_case_id=(int)$record['conformity_case_id'];
+                    $conformity_reset->bind_param('i',$conformity_case_id);
+                    if (!$conformity_reset->execute() || $conformity_reset->affected_rows!==1) {
+                        throw new Exception('conformity retry state update failed');
+                    }
+                    $conformity_reset->close();
+                }
                 $amendment_details=json_encode([
                     'base_version_id'=>(int)$record['amendment_base_version_id'],
                     'proposed_version_id'=>$version_id,'current_law_unchanged'=>true,
