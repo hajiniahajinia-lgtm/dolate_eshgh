@@ -297,7 +297,17 @@ try {
             'scope_ids'=>community_law_scope_ids_for_parent_map($db,(int)$debug_law['current_version_id'],$old_scope_map)
         ];
     }
-    fwrite(STDERR,"SCOPE DEBUG ".json_encode(['pending_dependency'=>$pending_debug,'laws'=>$scope_debug_ids],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)."\\n");
+    $ready_debug=community_law_tables_ready($db);
+    $conformity_debug=community_law_register_hierarchy_conformity_reviews($db,$new_scope_map,91030,90200);
+    $scope_diff_debug=[];
+    foreach ($scope_debug as $debug_law) {
+        $version=(int)$debug_law['current_version_id'];
+        $scope_diff_debug[$version]=[
+            'old'=>community_law_scope_ids_for_parent_map($db,$version,$old_scope_map),
+            'new'=>community_law_scope_ids_for_parent_map($db,$version,$new_scope_map)
+        ];
+    }
+    fwrite(STDERR,"SCOPE DEBUG ".json_encode(['tables_ready'=>$ready_debug,'conformity_result'=>$conformity_debug,'pending_dependency'=>$pending_debug,'laws'=>$scope_debug_ids,'scope_diff'=>$scope_diff_debug],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)."\\n");
     change_case_check(
         community_law_record_hierarchy_scope_changes($db,$old_scope_map,$new_scope_map,91030,90200),
         'hierarchy scope exit is recorded and notified'
