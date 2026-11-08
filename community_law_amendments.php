@@ -205,7 +205,7 @@ if($is_member && $draft['status']==='local_voting') {
 }
 ?><details class="article"><summary>اصلاحیه #<?=(int)$draft['id']?> — نسخهٔ پیشنهادی <?=(int)$draft['version_number']?> — <?=clamp_h($draft['status'])?></summary>
 <p><?=clamp_h($draft['rationale'])?></p><pre><?=clamp_h($draft['law_text'])?></pre>
-<?php if($draft['status']==='draft'):?>
+<?php if($draft['status']==='draft' && (int)$draft['originating_community_id']===$community_id):?>
 <form method="post">
 <input type="hidden" name="csrf_token" value="<?=clamp_h($csrf)?>">
 <input type="hidden" name="community_id" value="<?=$community_id?>">
@@ -214,6 +214,8 @@ if($is_member && $draft['status']==='local_voting') {
 <p class="muted">قواعد جدیدی ساخته یا بی‌سابقه تصویب نمی‌شود؛ نسخهٔ دقیق قواعد مصوب مبنا برای این اصلاحیه snapshot می‌شود. اگر قواعد مصوبی برای نسخهٔ مبنا وجود نداشته باشد، ارسال ممکن نیست.</p>
 <button type="submit" name="submit_amendment_for_vote" value="1">ارسال اصلاحیه برای رأی جامعهٔ محلی</button>
 </form>
+<?php elseif($draft['status']==='draft'):?>
+<p class="muted">پیش‌نویس اصلاحیه در جامعهٔ مبدأ در حال آماده‌سازی است و هنوز برای رأی‌گیری ارسال نشده است.</p>
 <?php elseif($draft['status']==='submitted'):?>
 <p class="notice">اصلاحیه ارسال شده است. قواعد رأی‌گیری از نسخهٔ مصوب مبنا گرفته شده و منشأ آن ثبت شده است؛ قانون جاری هنوز تغییر نکرده است.</p>
 <?php if((int)$draft['originating_community_id']===$community_id):?>
