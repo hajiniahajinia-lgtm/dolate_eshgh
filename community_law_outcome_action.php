@@ -19,9 +19,9 @@ if (!community_law_tables_ready($conn)) clor_redirect($community_id,'schema');
 $outcome_schema_check=$conn->query(
     "SELECT COUNT(*) AS total FROM information_schema.tables
      WHERE table_schema=DATABASE()
-       AND table_name IN ('community_law_outcome_reports','community_law_outcome_reviews','community_law_outcome_followups')"
+       AND table_name IN ('community_law_outcome_reports','community_law_outcome_reviews','community_law_outcome_followups','community_law_outcome_reassessments','community_law_outcome_reassessment_reviews')"
 );
-$outcome_schema_ready=$outcome_schema_check && (int)$outcome_schema_check->fetch_assoc()['total']===3;
+$outcome_schema_ready=$outcome_schema_check && (int)$outcome_schema_check->fetch_assoc()['total']===5;
 if ($outcome_schema_check) $outcome_schema_check->free();
 if (!$outcome_schema_ready) clor_redirect($community_id,'schema');
 try {
@@ -39,6 +39,19 @@ try {
         if ($followup_id===false) { $conn->rollback(); clor_redirect($community_id,'outcome_followup_failed'); }
         if (!$conn->commit()) throw new RuntimeException('follow-up transaction commit failed');
         clor_redirect($community_id,'outcome_followup_saved');
+    }
+    if (($_POST['action']??'')==='reassess') {
+        $reassessment_result=community_law_review_disputed_outcome_followups(
+            $conn,
+            (int)($_POST['report_id']??0),
+            $user_id,
+            (string)($_POST['reassessment_outcome']??''),
+            trim((string)($_POST['reassessment_rationale']??'')),
+            trim((string)($_POST['reassessment_evidence']??''))?:null
+        );
+        if ($reassessment_result===false) { $conn->rollback(); clor_redirect($community_id,'outcome_reassessment_failed'); }
+        if (!$conn->commit()) throw new RuntimeException('reassessment transaction commit failed');
+        clor_redirect($community_id,$reassessment_result['status']==='finalized'?'outcome_reassessment_finalized':'outcome_reassessment_saved');
     }
     if (($_POST['action']??'')==='review') {
         $review_result=community_law_review_outcome_report(
