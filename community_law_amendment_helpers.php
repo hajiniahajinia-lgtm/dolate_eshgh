@@ -73,10 +73,15 @@ if (!function_exists('community_law_create_amendment_draft')) {
                 "SELECT c.id,c.community_id,c.local_law_id,c.local_law_version_id,c.parent_community_id,c.status,
                         l.originating_community_id,l.status AS law_status,l.current_version_id,
                         v.version_number,v.title,v.law_text,v.implementation_plan,v.source_topic_id,v.source_idea_id,
-                        v.source_decision_id,v.status AS version_status
+                        v.source_decision_id,v.status AS version_status,
+                        pl.status AS parent_law_status,pl.current_version_id AS parent_current_version_id,
+                        pl.effective_at AS parent_effective_at,pl.expires_at AS parent_expires_at,
+                        pl.repealed_at AS parent_repealed_at,pv.status AS parent_version_status
                  FROM community_law_conformity_cases c
                  JOIN community_laws l ON l.id=c.local_law_id
                  JOIN community_law_versions v ON v.id=c.local_law_version_id
+                 JOIN community_laws pl ON pl.id=c.parent_law_id
+                 JOIN community_law_versions pv ON pv.id=c.parent_law_version_id AND pv.law_id=pl.id
                  WHERE c.id=? FOR UPDATE"
             );
             if (!$case_stmt) throw new RuntimeException('conformity case prepare failed');
@@ -88,7 +93,12 @@ if (!function_exists('community_law_create_amendment_draft')) {
                 (int)$record['originating_community_id']!==$community_id ||
                 $record['status']!=='amendment_required' ||
                 $record['law_status']!=='approved' || $record['version_status']!=='approved' ||
-                (int)$record['current_version_id']!==(int)$record['local_law_version_id']) {
+                (int)$record['current_version_id']!==(int)$record['local_law_version_id'] ||
+                $record['parent_law_status']!=='approved' || $record['parent_version_status']!=='approved' ||
+                (int)$record['parent_current_version_id']!==(int)$record['parent_law_version_id'] ||
+                !empty($record['parent_repealed_at']) ||
+                (!empty($record['parent_effective_at']) && strtotime($record['parent_effective_at'])>time()) ||
+                (!empty($record['parent_expires_at']) && strtotime($record['parent_expires_at'])<=time())) {
                 throw new RuntimeException('amendment is not authorized for this current local law version');
             }
 
@@ -104,6 +114,27 @@ if (!function_exists('community_law_create_amendment_draft')) {
             $has_open=(bool)$open->get_result()->fetch_row();
             $open->close();
             if ($has_open) throw new RuntimeException('an amendment is already in progress for this law');
+
+            $confirmed_refs=[];
+            $conflict_refs=$conn->prepare(
+                "SELECT DISTINCT local_article_reference
+                 FROM community_law_conformity_conflicts
+                 WHERE case_id=? AND finding='conflict_confirmed'"
+            );
+            if (!$conflict_refs) throw new RuntimeException('confirmed conflict article lookup prepare failed');
+            $conflict_refs->bind_param('i',$conformity_case_id);
+            if (!$conflict_refs->execute()) throw new RuntimeException('confirmed conflict article lookup failed');
+            $conflict_rows=$conflict_refs->get_result();
+            while ($conflict_row=$conflict_rows->fetch_assoc()) {
+                $confirmed_refs[(string)$conflict_row['local_article_reference']]=true;
+            }
+            $conflict_refs->close();
+            if (!$confirmed_refs) throw new RuntimeException('no independently confirmed conflict articles');
+            foreach ($normalized as $article) {
+                if (!isset($confirmed_refs[$article['reference']])) {
+                    throw new RuntimeException('amendment may only change articles with a confirmed conflict');
+                }
+            }
 
             $base_text=(string)$record['law_text'];
             $replacements=[];
@@ -240,12 +271,17 @@ if (!function_exists('community_law_submit_amendment_for_vote')) {
                         a.community_id,l.status AS law_status,l.current_version_id,l.originating_community_id,
                         base.status AS base_status,base.version_number,
                         proposed.status AS proposed_status,
-                        c.status AS conformity_status,c.parent_community_id
+                        c.status AS conformity_status,c.parent_community_id,
+                        pl.status AS parent_law_status,pl.current_version_id AS parent_current_version_id,
+                        pl.effective_at AS parent_effective_at,pl.expires_at AS parent_expires_at,
+                        pl.repealed_at AS parent_repealed_at,pv.status AS parent_version_status
                  FROM community_law_amendment_cases a
                  JOIN community_laws l ON l.id=a.law_id
                  JOIN community_law_versions base ON base.id=a.base_version_id AND base.law_id=a.law_id
                  JOIN community_law_versions proposed ON proposed.id=a.proposed_version_id AND proposed.law_id=a.law_id
                  JOIN community_law_conformity_cases c ON c.id=a.conformity_case_id
+                 JOIN community_laws pl ON pl.id=c.parent_law_id
+                 JOIN community_law_versions pv ON pv.id=c.parent_law_version_id AND pv.law_id=pl.id
                  WHERE a.id=? FOR UPDATE"
             );
             if (!$lock) throw new RuntimeException('amendment submit lock prepare failed');
@@ -258,7 +294,12 @@ if (!function_exists('community_law_submit_amendment_for_vote')) {
                 $row['status']!=='draft' || $row['law_status']!=='approved' ||
                 (int)$row['current_version_id']!==(int)$row['base_version_id'] ||
                 $row['base_status']!=='approved' || $row['proposed_status']!=='draft' ||
-                $row['conformity_status']!=='amendment_required') {
+                $row['conformity_status']!=='amendment_required' ||
+                $row['parent_law_status']!=='approved' || $row['parent_version_status']!=='approved' ||
+                (int)$row['parent_current_version_id']!==(int)$row['parent_law_version_id'] ||
+                !empty($row['parent_repealed_at']) ||
+                (!empty($row['parent_effective_at']) && strtotime($row['parent_effective_at'])>time()) ||
+                (!empty($row['parent_expires_at']) && strtotime($row['parent_expires_at'])<=time())) {
                 throw new RuntimeException('amendment submission state is no longer valid');
             }
 
