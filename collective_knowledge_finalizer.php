@@ -121,7 +121,7 @@ function create_collective_knowledge_decision($conn, $topic_id, $fallback_user_i
         $decision_time_row = $decision_time_result->fetch_assoc() ?: [];
         $decision_time_result->free();
         $decision_snapshot = [
-            'community_id' => $community_value,
+            'community_id' => (int)$topic['community_id'],
             'source_topic_id' => (int)$topic_id,
             'source_idea_id' => $source_idea_id,
             'topic_purpose_snapshot' => $purpose,
