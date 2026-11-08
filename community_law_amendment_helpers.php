@@ -311,7 +311,7 @@ if (!function_exists('community_law_submit_amendment_for_vote')) {
             $member->close();
 
             $lock=$conn->prepare(
-                "SELECT a.id,a.status,a.law_id,a.base_version_id,a.proposed_version_id,a.conformity_case_id,
+                "SELECT a.id,a.status,a.proposed_by,a.law_id,a.base_version_id,a.proposed_version_id,a.conformity_case_id,
                         a.community_id,l.status AS law_status,l.current_version_id,l.originating_community_id,
                         base.status AS base_status,base.version_number,
                         proposed.status AS proposed_status,
@@ -336,6 +336,7 @@ if (!function_exists('community_law_submit_amendment_for_vote')) {
             $row=$lock->get_result()->fetch_assoc();
             $lock->close();
             if (!$row || (int)$row['community_id']!==$community_id ||
+                (int)$row['proposed_by']!==$user_id ||
                 (int)$row['originating_community_id']!==$community_id ||
                 (int)$row['current_parent_community_id']!==(int)$row['parent_community_id'] ||
                 $row['status']!=='draft' || $row['law_status']!=='approved' ||
