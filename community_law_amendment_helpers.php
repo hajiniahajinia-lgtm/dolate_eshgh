@@ -1167,13 +1167,18 @@ if (!function_exists('community_law_open_amendment_final_review')) {
                    AND NOT EXISTS (
                        SELECT 1 FROM community_law_authority_assessments ar
                        WHERE ar.law_version_id=? AND ar.reviewer_user_id=cm.user_id
+                   )
+                   AND NOT EXISTS (
+                       SELECT 1 FROM community_law_amendment_parent_reviews pr
+                       JOIN community_law_amendment_cases a ON a.id=pr.case_id
+                       WHERE a.proposed_version_id=? AND pr.reviewer_user_id=cm.user_id
                    )"
             );
             if (!$electorate) throw new RuntimeException('amendment final review electorate prepare failed');
             foreach ($scope_ids as $scope_id) {
                 $scope_id=(int)$scope_id;
                 $proposer_id=(int)$row['proposed_by'];
-                $electorate->bind_param('iiiii',$version_id,$scope_id,$proposer_id,$version_id,$version_id);
+                $electorate->bind_param('iiiiii',$version_id,$scope_id,$proposer_id,$version_id,$version_id,$version_id);
                 if (!$electorate->execute()) throw new RuntimeException('amendment final review electorate snapshot failed');
             }
             $electorate->close();
