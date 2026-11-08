@@ -52,7 +52,7 @@ try {
     change_case_check(community_law_open_change_case($db,501,999,20,'repeal','درخواست نامعتبر')===false,'non-member cannot submit a change request');
     change_case_check(community_law_open_change_case($db,501,200,20,'repeal','')===false,'empty reasons are rejected');
     change_case_check(community_law_open_change_case($db,501,200,20,'repeal','درخواست اضطراری',null,true)===false,'emergency flag is restricted to suspension requests');
-    $history=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_history WHERE law_id=501 AND event_type='change_case_submitted'")->fetch_assoc()['n'];
+    $history=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_history WHERE law_id=501 AND event_type IN ('change_case_submitted','change_case_independent_review_completed')")->fetch_assoc()['n'];
     change_case_check($history===2,'request submission and completed independent review are recorded in permanent law history');
     fwrite(STDOUT,"OK: community law change-control integration checks passed.\n");
 } finally { $db->close(); }
