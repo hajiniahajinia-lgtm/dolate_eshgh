@@ -115,7 +115,6 @@ CREATE TABLE IF NOT EXISTS community_law_objections (
     decision_note MEDIUMTEXT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     decided_at DATETIME NULL,
-    PRIMARY KEY (id),
     KEY idx_law_objections_version_status (law_version_id, status, created_at),
     KEY idx_law_objections_community (community_id, status),
     KEY idx_law_objections_submitter (submitted_by)
