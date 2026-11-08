@@ -1059,3 +1059,225 @@ if (!function_exists('community_law_enact_amendment')) {
         }
     }
 }
+
+
+if (!function_exists('community_law_open_amendment_final_review')) {
+    /**
+     * بازکردن بررسی نهایی اصلاحیه با snapshot مستقل ارزیابان، قوانین مرجع و منشور.
+     * قانون مادر و نسخه جاری محلی در این مرحله تغییر نمی‌کنند.
+     */
+    function community_law_open_amendment_final_review(
+        mysqli $conn,
+        int $law_id,
+        int $version_id,
+        int $community_id,
+        int $user_id
+    ): bool {
+        if ($law_id<=0 || $version_id<=0 || $community_id<=0 || $user_id<=0 ||
+            !community_law_amendment_tables_ready($conn)) return false;
+        $started=false;
+        try {
+            if (!$conn->begin_transaction()) return false;
+            $started=true;
+            $hierarchy=$conn->query('SELECT id,parent_community_id FROM communities ORDER BY id FOR UPDATE');
+            if (!$hierarchy) throw new RuntimeException('amendment final review hierarchy lock failed');
+            $hierarchy->free();
+
+            $member=$conn->prepare('SELECT 1 FROM community_members WHERE community_id=? AND user_id=? LIMIT 1');
+            if (!$member) throw new RuntimeException('amendment final review membership prepare failed');
+            $member->bind_param('ii',$community_id,$user_id);
+            if (!$member->execute() || !$member->get_result()->fetch_row()) {
+                $member->close();
+                throw new RuntimeException('amendment final review membership required');
+            }
+            $member->close();
+
+            $lock=$conn->prepare(
+                "SELECT l.status AS law_status,l.current_version_id,l.originating_community_id,
+                        v.status AS version_status,v.proposed_by,fr.final_status AS vote_result,
+                        a.id AS amendment_case_id,a.status AS amendment_status,a.base_version_id,
+                        a.conformity_case_id,cc.status AS conformity_status,
+                        cc.parent_community_id,cc.parent_law_id,cc.parent_law_version_id,
+                        child.parent_community_id AS current_parent_community_id,
+                        base.status AS base_version_status,pl.status AS parent_law_status,
+                        pl.current_version_id AS parent_current_version_id,
+                        pv.status AS parent_version_status,pl.effective_at,pl.expires_at,pl.repealed_at,
+                        rc.status AS screening_status,ac.status AS authority_status
+                 FROM community_law_versions v
+                 JOIN community_laws l ON l.id=v.law_id
+                 JOIN community_law_final_results fr ON fr.law_version_id=v.id
+                 JOIN community_law_amendment_cases a ON a.proposed_version_id=v.id
+                 JOIN community_law_conformity_cases cc ON cc.id=a.conformity_case_id
+                 JOIN communities child ON child.id=cc.community_id
+                 JOIN community_law_versions base ON base.id=a.base_version_id AND base.law_id=l.id
+                 JOIN community_laws pl ON pl.id=cc.parent_law_id
+                 JOIN community_law_versions pv ON pv.id=cc.parent_law_version_id AND pv.law_id=pl.id
+                 JOIN community_law_review_cases rc ON rc.law_version_id=v.id
+                 JOIN community_law_authority_cases ac ON ac.law_version_id=v.id
+                 WHERE l.id=? AND v.id=? FOR UPDATE"
+            );
+            if (!$lock) throw new RuntimeException('amendment final review lock prepare failed');
+            $lock->bind_param('ii',$law_id,$version_id);
+            if (!$lock->execute()) throw new RuntimeException('amendment final review lock failed');
+            $row=$lock->get_result()->fetch_assoc();
+            $lock->close();
+            if (!$row || (int)$row['originating_community_id']!==$community_id ||
+                $row['law_status']!=='approved' || $row['version_status']!=='voting' ||
+                $row['amendment_status']!=='parent_review_approved' ||
+                $row['conformity_status']!=='amendment_in_progress' ||
+                (int)$row['current_version_id']!==(int)$row['base_version_id'] ||
+                $row['base_version_status']!=='approved' ||
+                (int)$row['current_parent_community_id']!==(int)$row['parent_community_id'] ||
+                $row['parent_law_status']!=='approved' || $row['parent_version_status']!=='approved' ||
+                (int)$row['parent_current_version_id']!==(int)$row['parent_law_version_id'] ||
+                !empty($row['repealed_at']) ||
+                (!empty($row['effective_at']) && strtotime($row['effective_at'])>time()) ||
+                (!empty($row['expires_at']) && strtotime($row['expires_at'])<=time()) ||
+                $row['screening_status']!=='screening_clear' ||
+                $row['authority_status']!=='confirmed' || $row['vote_result']!=='vote_passed') {
+                throw new RuntimeException('amendment final review state is invalid');
+            }
+
+            $existing=$conn->prepare('SELECT 1 FROM community_law_final_review_cases WHERE law_version_id=? LIMIT 1 FOR UPDATE');
+            if (!$existing) throw new RuntimeException('amendment final review existence prepare failed');
+            $existing->bind_param('i',$version_id);
+            if (!$existing->execute()) throw new RuntimeException('amendment final review existence lookup failed');
+            $has_case=(bool)$existing->get_result()->fetch_row();
+            $existing->close();
+            if ($has_case) throw new RuntimeException('amendment final review already opened');
+
+            $scope_ids=community_law_scope_community_ids($conn,$version_id);
+            if (!$scope_ids || !in_array($community_id,$scope_ids,true)) {
+                throw new RuntimeException('amendment final review scope invalid');
+            }
+            $electorate=$conn->prepare(
+                "INSERT IGNORE INTO community_law_final_review_electorate (law_version_id,user_id)
+                 SELECT ?,cm.user_id FROM community_members cm
+                 WHERE cm.community_id=? AND cm.user_id<>?
+                   AND NOT EXISTS (
+                       SELECT 1 FROM community_law_review_assessments r
+                       WHERE r.law_version_id=? AND r.reviewer_user_id=cm.user_id
+                   )
+                   AND NOT EXISTS (
+                       SELECT 1 FROM community_law_authority_assessments ar
+                       WHERE ar.law_version_id=? AND ar.reviewer_user_id=cm.user_id
+                   )"
+            );
+            if (!$electorate) throw new RuntimeException('amendment final review electorate prepare failed');
+            foreach ($scope_ids as $scope_id) {
+                $scope_id=(int)$scope_id;
+                $proposer_id=(int)$row['proposed_by'];
+                $electorate->bind_param('iiiii',$version_id,$scope_id,$proposer_id,$version_id,$version_id);
+                if (!$electorate->execute()) throw new RuntimeException('amendment final review electorate snapshot failed');
+            }
+            $electorate->close();
+
+            $capacity=$conn->prepare('SELECT COUNT(*) AS total FROM community_law_final_review_electorate WHERE law_version_id=?');
+            if (!$capacity) throw new RuntimeException('amendment final review capacity prepare failed');
+            $capacity->bind_param('i',$version_id);
+            if (!$capacity->execute()) throw new RuntimeException('amendment final review capacity failed');
+            $reviewer_count=(int)$capacity->get_result()->fetch_assoc()['total'];
+            $capacity->close();
+            if ($reviewer_count<3) throw new RuntimeException('amendment requires three independent final reviewers');
+
+            $references=$conn->prepare(
+                "SELECT ar.reference_law_id,ar.reference_law_version_id,
+                        rl.current_version_id,rl.status AS reference_status,
+                        rv.status AS reference_version_status,rl.effective_at,rl.expires_at,rl.repealed_at
+                 FROM community_law_authority_references ar
+                 JOIN community_laws rl ON rl.id=ar.reference_law_id
+                 JOIN community_law_versions rv ON rv.id=ar.reference_law_version_id
+                 WHERE ar.law_version_id=?"
+            );
+            if (!$references) throw new RuntimeException('amendment final review references prepare failed');
+            $references->bind_param('i',$version_id);
+            if (!$references->execute()) throw new RuntimeException('amendment final review references lookup failed');
+            $reference_rows=$references->get_result();
+            $reference_insert=$conn->prepare(
+                "INSERT INTO community_law_final_review_references
+                    (law_version_id,reference_law_id,reference_law_version_id,
+                     reference_origin_community_id,relation_type,scope_fingerprint)
+                 SELECT ?,ar.reference_law_id,ar.reference_law_version_id,
+                        ar.reference_origin_community_id,ar.relation_type,?
+                 FROM community_law_authority_references ar
+                 WHERE ar.law_version_id=? AND ar.reference_law_version_id=?"
+            );
+            if (!$reference_insert) { $references->close(); throw new RuntimeException('amendment final reference insert prepare failed'); }
+            $reference_count=0;
+            while ($reference=$reference_rows->fetch_assoc()) {
+                if ((int)$reference['current_version_id']!==(int)$reference['reference_law_version_id'] ||
+                    $reference['reference_status']!=='approved' || $reference['reference_version_status']!=='approved' ||
+                    !empty($reference['repealed_at']) ||
+                    (!empty($reference['effective_at']) && strtotime($reference['effective_at'])>time()) ||
+                    (!empty($reference['expires_at']) && strtotime($reference['expires_at'])<=time())) {
+                    $references->close();$reference_insert->close();
+                    throw new RuntimeException('amendment authority reference changed');
+                }
+                $scope_stmt=$conn->prepare('SELECT scope_community_id,include_descendants FROM community_law_scopes WHERE law_version_id=? ORDER BY scope_community_id');
+                if (!$scope_stmt) { $references->close();$reference_insert->close();throw new RuntimeException('amendment reference scope prepare failed'); }
+                $reference_version_id=(int)$reference['reference_law_version_id'];
+                $scope_stmt->bind_param('i',$reference_version_id);
+                if (!$scope_stmt->execute()) { $scope_stmt->close();$references->close();$reference_insert->close();throw new RuntimeException('amendment reference scope lookup failed'); }
+                $scope_rows=[];
+                $scope_result=$scope_stmt->get_result();
+                while ($scope_row=$scope_result->fetch_assoc()) {
+                    $scope_rows[]=['scope_community_id'=>(int)$scope_row['scope_community_id'],'include_descendants'=>(int)$scope_row['include_descendants']];
+                }
+                $scope_stmt->close();
+                if (!$scope_rows) { $references->close();$reference_insert->close();throw new RuntimeException('amendment reference scope missing'); }
+                $fingerprint=hash('sha256',json_encode($scope_rows));
+                $reference_law_id=(int)$reference['reference_law_id'];
+                $reference_insert->bind_param('isii',$version_id,$fingerprint,$version_id,$reference_version_id);
+                if (!$reference_insert->execute()) { $references->close();$reference_insert->close();throw new RuntimeException('amendment final reference snapshot failed'); }
+                $reference_count++;
+            }
+            $references->close();
+            $reference_insert->close();
+            if ($reference_count<1) throw new RuntimeException('amendment has no final review authority references');
+
+            if (!community_law_capture_charter_snapshot($conn,$version_id)) {
+                throw new RuntimeException('amendment charter snapshot unavailable');
+            }
+
+            $case_insert=$conn->prepare(
+                "INSERT INTO community_law_final_review_cases
+                    (law_version_id,status,reviewer_quorum,appeal_period_days,opened_by)
+                 VALUES (?,'pending',3,7,?)"
+            );
+            if (!$case_insert) throw new RuntimeException('amendment final review case prepare failed');
+            $case_insert->bind_param('ii',$version_id,$user_id);
+            if (!$case_insert->execute()) throw new RuntimeException('amendment final review case insert failed');
+            $case_insert->close();
+
+            $version_update=$conn->prepare("UPDATE community_law_versions SET status='pending_final_review' WHERE id=? AND status='voting'");
+            if (!$version_update) throw new RuntimeException('amendment final review version prepare failed');
+            $version_update->bind_param('i',$version_id);
+            if (!$version_update->execute() || $version_update->affected_rows!==1) throw new RuntimeException('amendment final review version update failed');
+            $version_update->close();
+
+            $details=json_encode([
+                'base_version_id'=>(int)$row['base_version_id'],'proposed_version_id'=>$version_id,
+                'final_review_electorate_count'=>$reviewer_count,'law_current_version_unchanged'=>true
+            ],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
+            $event=$conn->prepare("INSERT INTO community_law_amendment_events (case_id,actor_user_id,event_type,details) VALUES (?,?,'final_review_opened',?)");
+            if (!$event) throw new RuntimeException('amendment final review event prepare failed');
+            $amendment_id=(int)$row['amendment_case_id'];
+            $event->bind_param('iis',$amendment_id,$user_id,$details);
+            if (!$event->execute()) throw new RuntimeException('amendment final review event failed');
+            $event->close();
+
+            if (!community_law_record_history(
+                $conn,$law_id,$version_id,$community_id,$user_id,'amendment_final_review_opened',
+                'بررسی نهایی مستقل برای اصلاحیه آغاز شد؛ قانون جاری تا پایان ارزیابی و مهلت اعتراض بدون تغییر می‌ماند.'
+            )) throw new RuntimeException('amendment final review history failed');
+
+            if (!$conn->commit()) throw new RuntimeException('amendment final review commit failed');
+            $started=false;
+            return true;
+        } catch (Throwable $e) {
+            if ($started) $conn->rollback();
+            error_log('[Dolate Eshgh amendment final review open] '.$e->getMessage());
+            return false;
+        }
+    }
+}
