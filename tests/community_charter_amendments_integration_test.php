@@ -240,7 +240,7 @@ try {
     );
 
     $newUsers = $db->prepare("INSERT INTO users (id,username) VALUES (?,?)");
-    for ($id = 17; $id <= 19; $id++) {
+    for ($id = 17; $id <= 22; $id++) {
         $username = 'charter_appeal_test_' . $id;
         $newUsers->bind_param('is', $id, $username);
         $newUsers->execute();
@@ -339,6 +339,86 @@ try {
     integration_check($final['old_status'] === 'superseded', 'the previous charter version is superseded');
     integration_check($final['new_status'] === 'effective', 'the approved proposed version is effective');
     integration_check($final['amendment_status'] === 'activated', 'the amendment reaches activated status');
+
+    // Reset only the isolated test fixture to exercise the upheld-appeal branch independently.
+    $db->begin_transaction();
+    $db->query(
+        "UPDATE community_charter_versions
+         SET status='effective' WHERE id=1"
+    );
+    $resetVersion = $db->prepare(
+        "UPDATE community_charter_versions
+         SET status='draft',approved_at=NULL,effective_at=NULL WHERE id=?"
+    );
+    $resetVersion->bind_param('i', $proposedVersionId);
+    $resetVersion->execute();
+    $resetVersion->close();
+    $resetAmendment = $db->prepare(
+        "UPDATE community_charter_amendments
+         SET status='appeal_period',activated_at=NULL,
+             appeal_closes_at=DATE_SUB(NOW(),INTERVAL 1 SECOND)
+         WHERE id=?"
+    );
+    $resetAmendment->bind_param('i', $amendmentId);
+    $resetAmendment->execute();
+    $resetAmendment->close();
+    $db->commit();
+
+    $upheldAppeal = $db->prepare(
+        "INSERT INTO community_charter_amendment_appeals
+         (amendment_id,appellant_user_id,grounds,evidence,status)
+         VALUES (?,8,'دلایل مستقل و مستند برای اعتراض دوم در آزمون.','شواهد مسیر پذیرش اعتراض','under_review')"
+    );
+    $upheldAppeal->bind_param('i', $amendmentId);
+    $upheldAppeal->execute();
+    $upheldAppealId = (int)$upheldAppeal->insert_id;
+    $upheldAppeal->close();
+
+    $db->begin_transaction();
+    $upheldAssignments = community_charter_assign_appeal_reviewers($db, $upheldAppealId, [20,21,22]);
+    $db->commit();
+    integration_check($upheldAssignments === [20,21,22],
+        'a second independent panel is assigned for the upheld-appeal scenario');
+
+    $upheldVotes = [
+        ['reviewer_user_id'=>20,'verdict'=>'uphold'],
+        ['reviewer_user_id'=>21,'verdict'=>'uphold'],
+        ['reviewer_user_id'=>22,'verdict'=>'dismiss']
+    ];
+    integration_check(
+        community_charter_amendment_appeal_result($upheldVotes) === 'upheld',
+        'two of three separate appeal reviewers uphold the appeal'
+    );
+
+    $db->begin_transaction();
+    $upheldStatus = 'under_review';
+    foreach ($upheldVotes as $appealVote) {
+        $upheldStatus = community_charter_record_appeal_assessment(
+            $db,
+            $upheldAppealId,
+            (int)$appealVote['reviewer_user_id'],
+            (string)$appealVote['verdict'],
+            'استدلال آزمایشی مستقل برای پذیرش اعتراض و ارزیابی آثار اصلاحیه.'
+        );
+    }
+    $db->commit();
+
+    integration_check($upheldStatus === 'upheld',
+        'the production assessment service resolves the second appeal as upheld');
+    integration_check(
+        (string)$db->query("SELECT status FROM community_charter_amendment_appeals WHERE id=" . $upheldAppealId)->fetch_assoc()['status'] === 'upheld',
+        'the upheld appeal result is persisted');
+    integration_check(
+        (string)$db->query("SELECT status FROM community_charter_amendments WHERE id=" . $amendmentId)->fetch_assoc()['status'] === 'rejected',
+        'an upheld appeal rejects the proposed charter amendment');
+    integration_check(
+        (string)$db->query("SELECT status FROM community_charter_versions WHERE id=" . $proposedVersionId)->fetch_assoc()['status'] === 'rejected',
+        'an upheld appeal rejects the proposed charter version');
+    integration_check(!try_activate_amendment($db, $amendmentId),
+        'a rejected amendment cannot be activated after an upheld appeal');
+    integration_check(
+        (string)$db->query("SELECT status FROM community_charter_versions WHERE id=1")->fetch_assoc()['status'] === 'effective',
+        'the original effective charter remains unchanged after an upheld appeal');
 
     fwrite(STDOUT, "OK: charter amendment MySQL integration workflow passed.\n");
 } finally {
