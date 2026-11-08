@@ -220,17 +220,17 @@ if (!function_exists('community_law_submit_change_assessment')) {
             $new_status='under_review'; $review_result=null; $electorate_count=0;
             if ((int)$summary['total']>=5) {
                 if ((int)$summary['uphold_count']>=4) {
-                    $eligible_count_stmt=$conn->prepare('SELECT COUNT(*) AS total FROM community_members WHERE community_id=?');
+                    $eligible_count_stmt=$conn->prepare('SELECT COUNT(*) AS total FROM community_members cm WHERE cm.community_id=? AND NOT EXISTS (SELECT 1 FROM community_law_change_reviewers r WHERE r.case_id=? AND r.reviewer_user_id=cm.user_id)');
                     if (!$eligible_count_stmt) throw new RuntimeException('electorate count prepare failed');
                     $origin_id=(int)$case['originating_community_id'];
-                    $eligible_count_stmt->bind_param('i',$origin_id);
+                    $eligible_count_stmt->bind_param('ii',$origin_id,$case_id);
                     if (!$eligible_count_stmt->execute()) throw new RuntimeException('electorate count failed');
                     $eligible_count=(int)$eligible_count_stmt->get_result()->fetch_assoc()['total'];
                     $eligible_count_stmt->close();
                     if ($eligible_count>=3) {
-                        $capture=$conn->prepare('INSERT IGNORE INTO community_law_change_electorate (case_id,user_id) SELECT ?,user_id FROM community_members WHERE community_id=?');
+                        $capture=$conn->prepare('INSERT IGNORE INTO community_law_change_electorate (case_id,user_id) SELECT ?,cm.user_id FROM community_members cm WHERE cm.community_id=? AND NOT EXISTS (SELECT 1 FROM community_law_change_reviewers r WHERE r.case_id=? AND r.reviewer_user_id=cm.user_id)');
                         if (!$capture) throw new RuntimeException('electorate snapshot prepare failed');
-                        $capture->bind_param('ii',$case_id,$origin_id);
+                        $capture->bind_param('iii',$case_id,$origin_id,$case_id);
                         if (!$capture->execute()) throw new RuntimeException('electorate snapshot failed');
                         $capture->close();
                         $electorate_count=(int)$conn->query('SELECT COUNT(*) AS total FROM community_law_change_electorate WHERE case_id='.(int)$case_id)->fetch_assoc()['total'];
@@ -284,28 +284,38 @@ if (!function_exists('community_law_submit_change_assessment')) {
 }
 
 if (!function_exists('community_law_change_cast_vote')) {
+    /** ارزیابان مستقل در رأی نهایی شرکت نمی‌کنند؛ رأی‌دهندگان فقط از snapshot مادر هستند. */
     function community_law_change_cast_vote(mysqli $conn,int $case_id,int $user_id,string $vote,?string $comment=null): bool {
         if ($case_id<=0 || $user_id<=0 || !in_array($vote,['yes','no','abstain'],true) ||
-            ($comment!==null && mb_strlen($comment)>5000)) return false;
-        $case=$conn->prepare("SELECT status,(vote_closes_at IS NOT NULL AND vote_closes_at>NOW()) AS vote_open FROM community_law_change_cases WHERE id=?");
-        if (!$case) return false;
-        $case->bind_param('i',$case_id);
-        if (!$case->execute()) { $case->close(); return false; }
-        $row=$case->get_result()->fetch_assoc(); $case->close();
-        if (!$row || $row['status']!=='awaiting_vote' || (int)$row['vote_open']!==1) return false;
-        $eligible=$conn->prepare('SELECT 1 FROM community_law_change_electorate WHERE case_id=? AND user_id=? LIMIT 1');
-        if (!$eligible) return false;
-        $eligible->bind_param('ii',$case_id,$user_id);
-        if (!$eligible->execute() || !$eligible->get_result()->fetch_row()) { $eligible->close(); return false; }
-        $eligible->close();
-        $save=$conn->prepare(
-            'INSERT INTO community_law_change_votes (case_id,user_id,vote,comment) VALUES (?,?,?,?)
-             ON DUPLICATE KEY UPDATE vote=VALUES(vote),comment=VALUES(comment),voted_at=NOW()'
-        );
-        if (!$save) return false;
-        $save->bind_param('iiss',$case_id,$user_id,$vote,$comment);
-        $ok=$save->execute(); $save->close();
-        return $ok;
+            ($comment!==null && mb_strlen($comment)>5000) || !$conn->begin_transaction()) return false;
+        try {
+            $case=$conn->prepare("SELECT status,(vote_closes_at IS NOT NULL AND vote_closes_at>NOW()) AS vote_open FROM community_law_change_cases WHERE id=? FOR UPDATE");
+            if (!$case) throw new RuntimeException('vote case lock failed');
+            $case->bind_param('i',$case_id);
+            if (!$case->execute()) throw new RuntimeException('vote case read failed');
+            $row=$case->get_result()->fetch_assoc(); $case->close();
+            if (!$row || $row['status']!=='awaiting_vote' || (int)$row['vote_open']!==1) throw new RuntimeException('vote is closed');
+
+            $eligible=$conn->prepare('SELECT 1 FROM community_law_change_electorate WHERE case_id=? AND user_id=? LIMIT 1');
+            if (!$eligible) throw new RuntimeException('electorate check failed');
+            $eligible->bind_param('ii',$case_id,$user_id);
+            if (!$eligible->execute() || !$eligible->get_result()->fetch_row()) throw new RuntimeException('voter is not in the electorate');
+            $eligible->close();
+
+            $save=$conn->prepare(
+                'INSERT INTO community_law_change_votes (case_id,user_id,vote,comment) VALUES (?,?,?,?)
+                 ON DUPLICATE KEY UPDATE vote=VALUES(vote),comment=VALUES(comment),voted_at=NOW()'
+            );
+            if (!$save) throw new RuntimeException('vote save prepare failed');
+            $save->bind_param('iiss',$case_id,$user_id,$vote,$comment);
+            if (!$save->execute()) throw new RuntimeException('vote save failed');
+            $save->close();
+            if (!$conn->commit()) throw new RuntimeException('vote commit failed');
+            return true;
+        } catch (Throwable $e) {
+            $conn->rollback();
+            return false;
+        }
     }
 }
 
