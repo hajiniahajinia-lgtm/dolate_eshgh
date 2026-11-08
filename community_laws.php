@@ -921,7 +921,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $record['status'] === 'approved' &&
                 $record['version_status'] === 'proposed' &&
                 $record['amendment_status'] === 'submitted' &&
-                (int)$record['current_version_id'] === (int)$record['amendment_base_version_id';
+                (int)$record['current_version_id'] === (int)$record['amendment_base_version_id'];
             if (!$standard_vote_state && !$amendment_vote_state) {
                 throw new RuntimeException('invalid_law_vote_state');
             }
