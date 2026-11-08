@@ -13,7 +13,20 @@ if (!function_exists('community_law_amendment_tables_ready')) {
         if (!$stmt->execute()) { $stmt->close(); return false; }
         $n=(int)$stmt->get_result()->fetch_assoc()['n'];
         $stmt->close();
-        return $n===count($tables);
+        if ($n!==count($tables)) return false;
+
+        $column_check=$conn->prepare(
+            "SELECT COUNT(*) AS n FROM information_schema.columns
+             WHERE table_schema=DATABASE() AND table_name='community_law_amendment_cases'
+               AND column_name IN ('voting_rules_source_version_id','rules_adopted_by','rules_adopted_at')"
+        );
+        if (!$column_check || !$column_check->execute()) {
+            if ($column_check) $column_check->close();
+            return false;
+        }
+        $column_count=(int)$column_check->get_result()->fetch_assoc()['n'];
+        $column_check->close();
+        return $column_count===3;
     }
 }
 
