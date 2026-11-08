@@ -9,3 +9,5 @@ ALTER TABLE community_law_community_notices
         'change_requested','suspension_requested','suspended','repealed',
         'expiry_review_requested','reinstated'
     ) NOT NULL;
+
+ALTER TABLE community_law_change_reviewers MODIFY assigned_by INT NULL;
