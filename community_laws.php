@@ -3176,11 +3176,13 @@ $appeal_assessments_by_id = [];
 if ($schema_ready) {
     $law_result = $conn->query(
         "SELECT l.id AS law_id, l.law_code, l.originating_community_id,
+                origin.name AS originating_community_name,
                 l.effective_at, l.expires_at,
                 v.id AS version_id, v.version_number, v.title, v.law_text,
                 v.implementation_plan, v.approved_at,
                 v.source_topic_id, v.source_idea_id, v.source_decision_id
          FROM community_laws l
+         JOIN communities origin ON origin.id=l.originating_community_id
          JOIN community_law_versions v ON v.id=l.current_version_id
          WHERE l.status='approved' AND v.status='approved'
          ORDER BY l.effective_at DESC, l.id DESC"
@@ -3883,12 +3885,17 @@ details>summary{cursor:pointer;font-weight:bold}
                 <div class="meta">
                     شناسه: <?= community_laws_escape($law['law_code']) ?>
                     — نسخه <?= (int)$law['version_number'] ?>
-                    <?= $law['originating_community_id'] === $community_id ? '— مصوب همین جامعه' : '— قانون بالادستی' ?>
+                    <?= $law['originating_community_id'] === $community_id
+                        ? '— مصوب همین جامعه'
+                        : '— قانون بالادستی از جامعهٔ «' . community_laws_escape($law['originating_community_name']) . '» (شناسهٔ جامعه: ' . (int)$law['originating_community_id'] . ')' ?>
                 </div>
                 <div class="law-text"><?= community_laws_escape($law['law_text']) ?></div>
-                <?php if (!empty($law['source_decision_id'])): ?>
+                <?php if (!empty($law['source_decision_id']) || !empty($law['source_topic_id'])): ?>
                     <p class="meta" style="margin-top:9px;padding:8px 10px;background:#f3f7fc;border-radius:7px">
-                        📋 منشأ این قانون: تصمیم جمعی شمارهٔ <?= (int)$law['source_decision_id'] ?>
+                        📋 منشأ این قانون:
+                        <?php if (!empty($law['source_decision_id'])): ?>
+                            تصمیم جمعی شمارهٔ <?= (int)$law['source_decision_id'] ?>
+                        <?php endif; ?>
                         <?php if (!empty($law['source_topic_id'])): ?>
                             — <a href="archived_topics.php?community_id=<?= (int)$law['originating_community_id'] ?>#topic-card-<?= (int)$law['source_topic_id'] ?>">مشاهدهٔ موضوع منشأ در آرشیو جامعهٔ مبدأ</a>
                         <?php endif; ?>
