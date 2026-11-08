@@ -910,7 +910,11 @@ if (!function_exists('community_law_enact_amendment')) {
                 $scope_result=$scope_stmt->get_result();
                 while ($scope_row=$scope_result->fetch_assoc()) $reference_scopes[]=$scope_row;
                 $scope_stmt->close();
-                if (!$reference_scopes || !hash_equals((string)$reference['scope_fingerprint'],hash('sha256',json_encode($reference_scopes)))) {
+                $actual_scope_fingerprint=hash('sha256',json_encode($reference_scopes));
+                if (!$reference_scopes || !hash_equals((string)$reference['scope_fingerprint'],$actual_scope_fingerprint)) {
+                    error_log('[Dolate Eshgh amendment enactment scope fingerprint] ref_version='.$reference_version.
+                        ' stored='.(string)$reference['scope_fingerprint'].' actual='.$actual_scope_fingerprint.
+                        ' scopes='.json_encode($reference_scopes,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES));
                     $reference_stmt->close();
                     throw new RuntimeException('amendment reference scope changed');
                 }
