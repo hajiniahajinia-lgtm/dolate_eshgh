@@ -167,7 +167,7 @@ if (!function_exists('community_law_open_change_case')) {
                 'case_id'=>$case_id,'request_type'=>$request_type,
                 'requester_community_id'=>$requester_community_id,
                 'emergency_requested'=>$emergency_requested,
-                'reviewer_count'=>count($reviewers),'status_effect_changed'=>false
+                'reviewer_count'=>count($reviewers),'reviewer_user_ids'=>$reviewers,'status_effect_changed'=>false
             ],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
             if (!community_law_record_history($conn,$law_id,$version_id,$requester_community_id,
                 $actor_user_id,'change_case_submitted',$details)) throw new RuntimeException('history failed');
@@ -210,6 +210,12 @@ if (!function_exists('community_law_submit_change_assessment')) {
             $assigned->bind_param('ii',$case_id,$reviewer_user_id);
             if (!$assigned->execute() || !$assigned->get_result()->fetch_row()) throw new RuntimeException('not an assigned reviewer');
             $assigned->close();
+            $current_member=$conn->prepare('SELECT 1 FROM community_members WHERE community_id=? AND user_id=? LIMIT 1');
+            if (!$current_member) throw new RuntimeException('reviewer membership check failed');
+            $origin_id=(int)$case['originating_community_id'];
+            $current_member->bind_param('ii',$origin_id,$reviewer_user_id);
+            if (!$current_member->execute() || !$current_member->get_result()->fetch_row()) throw new RuntimeException('reviewer is no longer a member of the parent community');
+            $current_member->close();
 
             $save=$conn->prepare(
                 'INSERT INTO community_law_change_assessments (case_id,reviewer_user_id,verdict,reasoning,evidence) VALUES (?,?,?,?,?)'
