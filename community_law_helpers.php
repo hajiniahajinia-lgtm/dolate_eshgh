@@ -585,6 +585,38 @@ if (!function_exists('community_law_record_hierarchy_scope_changes')) {
                     $ok = false;
                     break 2;
                 }
+
+                // تغییر دامنه علاوه بر تاریخچه، باید به خود جامعهٔ واردشده یا خارج‌شده نیز اعلام شود.
+                $notice = $conn->prepare(
+                    "INSERT INTO community_law_scope_notices
+                        (law_id,law_version_id,community_id,actor_user_id,transition,notice_text,details)
+                     VALUES (?,?,?,?,?,?,?)"
+                );
+                if (!$notice) {
+                    $ok = false;
+                    break 2;
+                }
+                $transition = $entered ? 'scope_entered' : 'scope_left';
+                $notice_text = $entered
+                    ? 'این جامعه با تغییر سلسله‌مراتب، وارد دامنهٔ شمول یک قانون لازم‌الاجرا شده است؛ تعهد اجرا برای بررسی و برنامه‌ریزی فعال می‌شود.'
+                    : 'این جامعه با تغییر سلسله‌مراتب، از دامنهٔ شمول یک قانون خارج شده است؛ تعهد جاری متوقف می‌شود، اما سوابق و گزارش‌های پیشین محفوظ می‌مانند.';
+                $notice_actor = $actor_user_id > 0 ? $actor_user_id : null;
+                $notice->bind_param(
+                    'iiiisss',
+                    $law_id,
+                    $version_id,
+                    $affected_id,
+                    $notice_actor,
+                    $transition,
+                    $notice_text,
+                    $details
+                );
+                $notice_ok = $notice->execute();
+                $notice->close();
+                if (!$notice_ok) {
+                    $ok = false;
+                    break 2;
+                }
             }
         }
         $active->free();
