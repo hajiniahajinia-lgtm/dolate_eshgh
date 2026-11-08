@@ -144,6 +144,7 @@ if (!function_exists('community_law_create_amendment_draft')) {
             if (!$version_insert->execute()) throw new RuntimeException('new version insert failed');
             $new_version_id=(int)$conn->insert_id;
             $version_insert->close();
+            $base_version_id=(int)$record['local_law_version_id'];
 
             // دامنهٔ الزام‌آور نسخهٔ پیشنهادی دقیقاً از نسخهٔ مصوب مبنا snapshot می‌شود.
             $scope_copy=$conn->prepare(
@@ -164,7 +165,6 @@ if (!function_exists('community_law_create_amendment_draft')) {
                  VALUES (?,?,?,?,?,?,'draft',?,?)"
             );
             if (!$case_insert) throw new RuntimeException('amendment case insert prepare failed');
-            $base_version_id=(int)$record['local_law_version_id'];
             $case_insert->bind_param('iiiiiiss',$law_id,$base_version_id,$new_version_id,$conformity_case_id,$community_id,$user_id,$rationale,$evidence);
             if (!$case_insert->execute()) throw new RuntimeException('amendment case insert failed');
             $amendment_id=(int)$conn->insert_id;
