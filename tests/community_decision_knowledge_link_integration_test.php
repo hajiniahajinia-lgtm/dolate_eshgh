@@ -24,6 +24,7 @@ try {
  if(!community_decision_attach_knowledge_entry($db,987650,12345)) throw new RuntimeException('Could not attach knowledge entry');
  $link=community_decision_get_knowledge_link($db,987650);
  if(!$link||(int)$link['knowledge_entry_id']!==12345||(int)$link['decision_id']<=0) throw new RuntimeException('Decision/knowledge link lookup failed');
+ if(!community_decision_attach_knowledge_entry($db,987650,12345)) throw new RuntimeException('Idempotent retry of the same knowledge link failed');
  if(community_decision_attach_knowledge_entry($db,987650,54321)) throw new RuntimeException('Existing knowledge link was overwritten');
  echo "OK: decision-to-knowledge reference is idempotent and protected from overwrite.\n";
 } finally { $db->query("DROP TABLE IF EXISTS community_decision_records"); $db->close(); }
