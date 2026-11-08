@@ -387,18 +387,7 @@ try {
         cam_secure_shuffle($candidates);
         community_charter_assign_review_panel($conn, $amendment_id, $candidates);
 
-        $update = $conn->prepare(
-            "UPDATE community_charter_amendments
-             SET status='independent_review',review_opens_at=NOW(),
-                 review_closes_at=DATE_ADD(NOW(),INTERVAL 14 DAY)
-             WHERE id=? AND status='draft'"
-        );
-        if (!$update) throw new RuntimeException('آغاز بررسی مستقل ممکن نیست.');
-        $update->bind_param('i', $amendment_id);
-        if (!$update->execute() || $update->affected_rows !== 1) {
-            throw new RuntimeException('آغاز بررسی مستقل انجام نشد.');
-        }
-        $update->close();
+        community_charter_start_independent_review($conn, $amendment_id);
         if (!$conn->commit()) throw new RuntimeException('ثبت آغاز بررسی مستقل نهایی نشد.');
         cam_redirect('review_started');
     }
@@ -473,16 +462,7 @@ try {
         if ($assessments === null) throw new RuntimeException('محاسبه نتیجه بررسی ممکن نیست.');
         $decision = community_charter_amendment_reviewer_result($assessments);
         if ($decision === 'approved') {
-            $advance = $conn->prepare(
-                "UPDATE community_charter_amendments
-                 SET status='public_voting',voting_opens_at=NOW(),
-                     voting_closes_at=DATE_ADD(NOW(),INTERVAL 14 DAY)
-                 WHERE id=? AND status='independent_review'"
-            );
-            if (!$advance) throw new RuntimeException('آغاز رأی‌گیری عمومی ممکن نیست.');
-            $advance->bind_param('i', $amendment_id);
-            if (!$advance->execute() || $advance->affected_rows !== 1) throw new RuntimeException('آغاز رأی‌گیری عمومی انجام نشد.');
-            $advance->close();
+            community_charter_advance_to_public_voting($conn, $amendment_id);
         } elseif ($decision === 'rejected') {
             cam_reject_amendment($conn, $amendment_id, (int)$amendment['proposed_charter_version_id']);
         }
@@ -512,16 +492,7 @@ try {
         if ($assessments === null) throw new RuntimeException('خواندن ارزیابی‌ها ممکن نیست.');
         $decision = community_charter_amendment_reviewer_result($assessments);
         if ($decision === 'approved') {
-            $advance = $conn->prepare(
-                "UPDATE community_charter_amendments
-                 SET status='public_voting',voting_opens_at=NOW(),
-                     voting_closes_at=DATE_ADD(NOW(),INTERVAL 14 DAY)
-                 WHERE id=? AND status='independent_review'"
-            );
-            if (!$advance) throw new RuntimeException('آغاز رأی‌گیری عمومی ممکن نیست.');
-            $advance->bind_param('i', $amendment_id);
-            if (!$advance->execute() || $advance->affected_rows !== 1) throw new RuntimeException('آغاز رأی‌گیری عمومی انجام نشد.');
-            $advance->close();
+            community_charter_advance_to_public_voting($conn, $amendment_id);
         } else {
             cam_reject_amendment($conn, $amendment_id, (int)$amendment['proposed_charter_version_id']);
             $decision = 'rejected';
@@ -610,16 +581,7 @@ try {
             (int)$counts['no_count'], (int)$counts['abstain_count']
         );
         if ($result === 'approved') {
-            $update = $conn->prepare(
-                "UPDATE community_charter_amendments
-                 SET status='appeal_period',approved_at=NOW(),
-                     appeal_closes_at=DATE_ADD(NOW(),INTERVAL 7 DAY)
-                 WHERE id=? AND status='public_voting'"
-            );
-            if (!$update) throw new RuntimeException('ثبت نتیجه رأی‌گیری ممکن نیست.');
-            $update->bind_param('i', $amendment_id);
-            if (!$update->execute() || $update->affected_rows !== 1) throw new RuntimeException('ثبت نتیجه رأی‌گیری انجام نشد.');
-            $update->close();
+            community_charter_advance_to_appeal_period($conn, $amendment_id);
         } else {
             cam_reject_amendment($conn, $amendment_id, (int)$amendment['proposed_charter_version_id']);
         }
