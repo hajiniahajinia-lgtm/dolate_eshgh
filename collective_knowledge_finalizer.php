@@ -268,6 +268,11 @@ function create_collective_knowledge_decision($conn, $topic_id, $fallback_user_i
             $entry_stmt->close();
         }
 
+        // پیوند ارجاعی دانش به تصمیم مستقل؛ تصمیم حتی بدون پروندهٔ دانش نیز معتبر می‌ماند.
+        if (!community_decision_attach_knowledge_entry($conn, (int)$topic_id, (int)$entry_id)) {
+            throw new Exception("knowledge entry could not be linked to its independent decision record");
+        }
+
         // تا زمانی که مصرف‌کنندگان قدیمی به دفتر مستقل منتقل نشده‌اند،
         // snapshot سازگاری فقط در صورت وجود جدول قدیمی نیز نوشته می‌شود.
         if ($legacy_decisions_available) {
