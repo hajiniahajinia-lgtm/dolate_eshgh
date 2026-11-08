@@ -3992,7 +3992,7 @@ details>summary{cursor:pointer;font-weight:bold}
                 if ($outcome_report_ids) {
                     $report_id_list=implode(',', $outcome_report_ids);
                     $review_result=$conn->query(
-                        "SELECT report_id,verdict,rationale,human_impact,social_impact,
+                        "SELECT report_id,reviewer_user_id,verdict,rationale,human_impact,social_impact,
                                 environmental_impact,economic_impact,evidence,created_at
                          FROM community_law_outcome_reviews
                          WHERE report_id IN ($report_id_list)
