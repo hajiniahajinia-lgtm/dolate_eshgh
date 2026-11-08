@@ -68,7 +68,7 @@ try {
     )===false,'report author cannot review own report');
     $db->query("UPDATE community_law_implementations SET responsible_user_id=9704 WHERE law_version_id=990001 AND community_id=920");
     outcome_check(community_law_review_outcome_report(
-        $db,$report_id,9703,'confirm','مسئول اجرا نمی‌تواند گزارش اجرای خود را ارزیابی کند'
+        $db,$report_id,9704,'confirm','مسئول اجرا نمی‌تواند گزارش اجرای خود را ارزیابی کند'
     )===false,'implementation owner cannot review the report');
     $review_one=community_law_review_outcome_report($db,$report_id,9701,'confirm','شواهد با گزارش سازگار است','اثر انسانی مثبت');
     outcome_check(is_array($review_one) && $review_one['review_count']===1 && $review_one['review_status']==='under_review','first independent review keeps report under review');
