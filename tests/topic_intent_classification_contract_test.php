@@ -15,6 +15,7 @@ $finalizer = file_get_contents(__DIR__ . '/../collective_knowledge_finalizer.php
 $ledger = file_get_contents(__DIR__ . '/../community_decision_ledger.php');
 $archive = file_get_contents(__DIR__ . '/../archived_topics.php');
 $library = file_get_contents(__DIR__ . '/../knowledge_library.php');
+$community = file_get_contents(__DIR__ . '/../community.php');
 
 topic_intent_contract_check(
     is_string($community) &&
@@ -77,6 +78,22 @@ topic_intent_contract_check(
     str_contains($community, "COALESCE(t.topic_intent, 'decision')=?") &&
     str_contains($community, 'مسیر موضوع:'),
     'active topic list supports filtering and labels the three topic tracks'
+);
+
+topic_intent_contract_check(
+    is_string($archive) &&
+    str_contains($archive, 'intent_progress') &&
+    str_contains($archive, 'community_law_versions') &&
+    str_contains($archive, 'رأی موضوع فقط منشأ پیشنهاد است'),
+    'archive progress is sourced from formal law records and never equates a topic vote with enactment'
+);
+
+topic_intent_contract_check(
+    is_string($community) &&
+    str_contains($community, 'مسیر پیش‌رو:') &&
+    str_contains($community, 'به‌خودی‌خود الزام اجرایی ندارد') &&
+    str_contains($community, 'رأی این موضوع به‌تنهایی قانون نیست'),
+    'active topic details explain the next stage and legal meaning of each intent'
 );
 
 topic_intent_contract_check(

@@ -1636,6 +1636,15 @@ if ($remaining_seconds < 0) $remaining_seconds = 0;
     </span>
   </summary>
   <div class="community-topic-body">
+  <div style="margin:0 0 10px;padding:7px 10px;background:#f7f5fb;border-right:3px solid #7b6aa6;border-radius:6px;font-size:12px;line-height:1.8;">
+    <?php if ($topic_intent_value === 'knowledge'): ?>
+      <strong>مسیر پیش‌رو: </strong>گردآوری شواهد، مباحثه و ارزیابی برای تولید دانش جمعی؛ نتیجه به‌خودی‌خود الزام اجرایی ندارد.
+    <?php elseif ($topic_intent_value === 'law'): ?>
+      <strong>مسیر پیش‌رو: </strong>پس از جمع‌بندی موضوع، منشأ قابل‌ردیابی برای پیش‌نویس قانون و بررسی رسمی فراهم می‌شود؛ رأی این موضوع به‌تنهایی قانون نیست.
+    <?php else: ?>
+      <strong>مسیر پیش‌رو: </strong>انتخاب نتیجهٔ جمعی و ثبت آن در دفتر تصمیم‌ها؛ الزام‌آوری تابع وضعیت تصمیم و قواعد معتبر جامعه است.
+    <?php endif; ?>
+  </div>
   <?php if (trim((string)($t2['description'] ?? '')) !== ''): ?>
     <div style="margin:0 0 10px;padding:8px 10px;background:rgba(255,255,255,.75);border-radius:7px;line-height:1.8;font-size:13px;"><?= nl2br(htmlspecialchars($t2['description'], ENT_QUOTES, 'UTF-8')) ?></div>
   <?php endif; ?>
