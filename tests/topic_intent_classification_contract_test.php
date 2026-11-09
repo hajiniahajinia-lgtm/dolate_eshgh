@@ -32,7 +32,7 @@ topic_intent_contract_check(
     'the server validates and persists the selected topic intent'
 );
 topic_intent_contract_check(
-    str_contains($handler, "$topic_intent === 'knowledge' ? 'knowledge' : 'execution'"),
+    str_contains($handler, '$topic_purpose = $topic_intent === \'knowledge\' ? \'knowledge\' : \'execution\';'),
     'legacy knowledge-library purpose remains compatible without treating law as enacted'
 );
 
