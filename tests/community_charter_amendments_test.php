@@ -139,7 +139,7 @@ check_charter_amendment(
     strpos($ui_source, "'under_review' => 'در حال رسیدگی مستقل'") !== false &&
     strpos($ui_source, "'upheld' => 'اعتراض وارد تشخیص داده شد'") !== false &&
     strpos($ui_source, "'dismissed' => 'اعتراض وارد تشخیص داده نشد'") !== false &&
-    strpos($ui_source, "cam_page_h($appeal['status'])") === false,
+    strpos($ui_source, 'cam_page_h($appeal[\'status\'])') === false,
     'charter appeal statuses are displayed in Persian instead of raw internal codes'
 );
 check_charter_amendment(
