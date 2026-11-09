@@ -122,9 +122,9 @@ try {
     // شکست ثبت رویداد بررسی سازگاری باید پروندهٔ تازه و تاریخچه را در همان تراکنش برگرداند.
     // از شاخه‌ای مستقل استفاده می‌کنیم تا fixture آزمون با گردش اصلاحیهٔ جامعهٔ دیگر تداخل نکند.
     $db->query("INSERT INTO communities (id,parent_community_id) VALUES (90040,90010) ON DUPLICATE KEY UPDATE parent_community_id=VALUES(parent_community_id)");
-    $db->query("INSERT INTO community_laws (id,law_code,originating_community_id,created_by,status,current_version_id,effective_at) VALUES (9594,'LAW-ROLLBACK-LOCAL-TEST',90040,90200,'approved',99994,NOW())");
-    $db->query("INSERT INTO community_law_versions (id,law_id,version_number,title,law_text,proposed_by,status,approved_at) VALUES (99994,9594,1,'قانون آزمایشی بازگشت','متن قانون',90200,'approved',NOW())");
-    $db->query("INSERT INTO community_law_scopes (law_version_id,scope_community_id,include_descendants) VALUES (99994,90040,1)");
+    $db->query("INSERT INTO community_laws (id,law_code,originating_community_id,created_by,status,current_version_id,effective_at) VALUES (987654321,'LAW-ROLLBACK-LOCAL-TEST',90040,90200,'approved',987654322,NOW())");
+    $db->query("INSERT INTO community_law_versions (id,law_id,version_number,title,law_text,proposed_by,status,approved_at) VALUES (987654322,987654321,1,'قانون آزمایشی بازگشت','متن قانون',90200,'approved',NOW())");
+    $db->query("INSERT INTO community_law_scopes (law_version_id,scope_community_id,include_descendants) VALUES (987654322,90040,1)");
     $db->query("CREATE TRIGGER test_fail_conformity_event BEFORE INSERT ON community_law_conformity_events
         FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='forced conformity event failure'");
     $db->begin_transaction();
@@ -137,8 +137,8 @@ try {
     }
     $db->rollback();
     $db->query("DROP TRIGGER test_fail_conformity_event");
-    $conformity_after_failure = (int)$db->query("SELECT COUNT(*) AS n FROM community_law_conformity_cases WHERE local_law_version_id=99994")->fetch_assoc()['n'];
-    $conformity_history_after_failure = (int)$db->query("SELECT COUNT(*) AS n FROM community_law_history WHERE law_id=9594 AND event_type='conformity_review_opened'")->fetch_assoc()['n'];
+    $conformity_after_failure = (int)$db->query("SELECT COUNT(*) AS n FROM community_law_conformity_cases WHERE local_law_version_id=987654322")->fetch_assoc()['n'];
+    $conformity_history_after_failure = (int)$db->query("SELECT COUNT(*) AS n FROM community_law_history WHERE law_id=987654321 AND event_type='conformity_review_opened'")->fetch_assoc()['n'];
     change_case_check($conformity_event_failed && $conformity_after_failure===0 && $conformity_history_after_failure===0,'a failed conformity event rolls back the newly opened case and law history');
 
     $conformity_case_id=(int)$db->query("SELECT id FROM community_law_conformity_cases WHERE community_id=90020 AND local_law_version_id=99002 AND parent_law_version_id=99001")->fetch_assoc()['id'];
@@ -323,10 +323,10 @@ try {
     ]])===false,'parent-community members cannot author a local law amendment in place of the local community');
 
     // مسیر مستقل: هر دو جامعه تعارض را رد می‌کنند؛ پرونده باید حل‌شده شود.
-    $db->query("INSERT INTO community_laws (id,law_code,originating_community_id,created_by,status,current_version_id,effective_at) VALUES (9594,'LAW-LOCAL-NO-CONFLICT-TEST',90020,90200,'approved',99994,NOW())");
-    $db->query("INSERT INTO community_law_versions (id,law_id,version_number,title,law_text,proposed_by,status,approved_at) VALUES (99994,9594,1,'قانون محلی بدون تعارض','متن قانون محلی دوم',90200,'approved',NOW())");
-    $db->query("INSERT INTO community_law_scopes (law_version_id,scope_community_id,include_descendants) VALUES (99994,90020,1)");
-    $db->query("INSERT INTO community_law_conformity_cases (community_id,parent_community_id,local_law_id,local_law_version_id,parent_law_id,parent_law_version_id,status,trigger_type,opened_by) VALUES (90020,90010,9594,99994,9501,99001,'review_required','manual_review',90100)");
+    $db->query("INSERT INTO community_laws (id,law_code,originating_community_id,created_by,status,current_version_id,effective_at) VALUES (987654321,'LAW-LOCAL-NO-CONFLICT-TEST',90020,90200,'approved',987654322,NOW())");
+    $db->query("INSERT INTO community_law_versions (id,law_id,version_number,title,law_text,proposed_by,status,approved_at) VALUES (987654322,987654321,1,'قانون محلی بدون تعارض','متن قانون محلی دوم',90200,'approved',NOW())");
+    $db->query("INSERT INTO community_law_scopes (law_version_id,scope_community_id,include_descendants) VALUES (987654322,90020,1)");
+    $db->query("INSERT INTO community_law_conformity_cases (community_id,parent_community_id,local_law_id,local_law_version_id,parent_law_id,parent_law_version_id,status,trigger_type,opened_by) VALUES (90020,90010,987654321,987654322,9501,99001,'review_required','manual_review',90100)");
     $no_conflict_case_id=(int)$db->insert_id;
     $no_conflict_id=community_law_conformity_add_conflict($db,$no_conflict_case_id,90200,'ماده ۲','ماده ۵','تعارض احتمالی برای آزمون رد تعارض','مستندات بررسی');
     change_case_check(is_int($no_conflict_id) && $no_conflict_id>0,'second conformity case accepts a separately documented possible conflict');
