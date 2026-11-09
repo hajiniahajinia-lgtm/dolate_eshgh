@@ -829,7 +829,7 @@ if (!function_exists('community_law_submit_outcome_report')) {
         $end=DateTime::createFromFormat('Y-m-d',$period_end);
         if (!$start || $start->format('Y-m-d')!==$period_start ||
             !$end || $end->format('Y-m-d')!==$period_end ||
-            $period_end<$period_start) return false;
+            $period_end<$period_start || $period_end>date('Y-m-d')) return false;
 
         if ($metrics_json!==null) {
             $decoded=json_decode($metrics_json,true);

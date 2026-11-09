@@ -98,6 +98,9 @@ try {
         $db,990000,990001,920,9700,'progress','2026-02-01','2026-01-01','بازهٔ معکوس'
     )===false,'invalid reporting period is rejected');
     outcome_check(community_law_submit_outcome_report(
+        $db,990000,990001,920,9700,'outcome','2099-01-01','2099-01-31','گزارش با بازهٔ آینده'
+    )===false,'future-dated outcome reports are rejected');
+    outcome_check(community_law_submit_outcome_report(
         $db,990000,990001,920,9700,'outcome','2026-01-01','2026-01-31','JSON نامعتبر',null,'{bad'
     )===false,'invalid metrics JSON is rejected');
     outcome_check(community_law_submit_outcome_report(
