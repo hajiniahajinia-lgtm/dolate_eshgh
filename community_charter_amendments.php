@@ -119,6 +119,12 @@ $dimension_values = [
     'weakened' => 'تضعیف شده','unclear' => 'نامشخص'
 ];
 $verdict_labels = ['supports'=>'موافق','conflict'=>'دارای تعارض','unclear'=>'نامشخص'];
+$appeal_status_labels = [
+    'submitted' => 'ثبت‌شده؛ در انتظار رسیدگی',
+    'under_review' => 'در حال رسیدگی مستقل',
+    'upheld' => 'اعتراض وارد تشخیص داده شد',
+    'dismissed' => 'اعتراض وارد تشخیص داده نشد'
+];
 ?>
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
@@ -405,7 +411,7 @@ if($q){$q->bind_param('ii',$appeal_id,$user_id);$q->execute();$assigned_appeal=(
 if($assigned_appeal){$q=$conn->prepare("SELECT 1 FROM community_charter_amendment_appeal_reviewers WHERE appeal_id=? AND reviewer_user_id=? LIMIT 1");if($q){$q->bind_param('ii',$appeal_id,$user_id);$q->execute();$my_appeal_assessment=(bool)$q->get_result()->fetch_row();$q->close();}}
 ?>
 <div class="item">
-<strong>اعتراض شماره <?= $appeal_id ?> — <?= cam_page_h($appeal['status']) ?></strong>
+<strong>اعتراض شماره <?= $appeal_id ?> — <?= cam_page_h($appeal_status_labels[$appeal['status']] ?? 'وضعیت نامشخص') ?></strong>
 <p><?= nl2br(cam_page_h($appeal['grounds'])) ?></p>
 <?php if($appeal['evidence']): ?><p class="muted"><?= nl2br(cam_page_h($appeal['evidence'])) ?></p><?php endif; ?>
 <?php

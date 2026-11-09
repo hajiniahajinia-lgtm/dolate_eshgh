@@ -132,6 +132,16 @@ check_charter_amendment(
 
 $action_source = file_get_contents(__DIR__ . '/../community_charter_amendment_action.php');
 $helper_source = file_get_contents(__DIR__ . '/../community_law_helpers.php');
+$ui_source = file_get_contents(__DIR__ . '/../community_charter_amendments.php');
+check_charter_amendment(
+    is_string($ui_source) &&
+    strpos($ui_source, "'submitted' => 'ثبت‌شده؛ در انتظار رسیدگی'") !== false &&
+    strpos($ui_source, "'under_review' => 'در حال رسیدگی مستقل'") !== false &&
+    strpos($ui_source, "'upheld' => 'اعتراض وارد تشخیص داده شد'") !== false &&
+    strpos($ui_source, "'dismissed' => 'اعتراض وارد تشخیص داده نشد'") !== false &&
+    strpos($ui_source, "cam_page_h($appeal['status'])") === false,
+    'charter appeal statuses are displayed in Persian instead of raw internal codes'
+);
 check_charter_amendment(
     is_string($action_source) && strpos($action_source, 'review_closes_at>NOW()') !== false &&
     strpos($action_source, 'review_closes_at<=NOW()') !== false,
