@@ -3726,10 +3726,12 @@ if ($schema_ready) {
                 l.effective_at, l.expires_at,
                 v.id AS version_id, v.version_number, v.title, v.law_text,
                 v.implementation_plan, v.approved_at,
-                v.source_topic_id, v.source_idea_id, v.source_decision_id
+                v.source_topic_id, v.source_idea_id, v.source_decision_id,
+                source_topic.title AS source_topic_title
          FROM community_laws l
          JOIN communities origin ON origin.id=l.originating_community_id
          JOIN community_law_versions v ON v.id=l.current_version_id
+         LEFT JOIN topics source_topic ON source_topic.id=v.source_topic_id
          WHERE l.status='approved' AND v.status='approved'
          ORDER BY l.effective_at DESC, l.id DESC"
     );
@@ -4708,6 +4710,16 @@ details>summary{cursor:pointer;font-weight:bold}
                         ? '— مصوب همین جامعه'
                         : '— قانون بالادستی از جامعهٔ «' . community_laws_escape($law['originating_community_name']) . '» (شناسهٔ جامعه: ' . (int)$law['originating_community_id'] . ')' ?>
                 </div>
+                <?php if (!empty($law['source_topic_id'])): ?>
+                <div class="meta" style="margin:6px 0 10px">
+                    منشأ قانون:
+                    <a href="community.php?id=<?= (int)$law['originating_community_id'] ?>#topic-<?= (int)$law['source_topic_id'] ?>">
+                        موضوع شمارهٔ <?= (int)$law['source_topic_id'] ?> — <?= community_laws_escape($law['source_topic_title'] ?? 'مشاهده موضوع مبدأ') ?>
+                    </a>
+                    <?php if (!empty($law['source_idea_id'])): ?> · شناسهٔ ایدهٔ مبدأ: <?= (int)$law['source_idea_id'] ?><?php endif; ?>
+                    <?php if (!empty($law['source_decision_id'])): ?> · شناسهٔ تصمیم مبدأ: <?= (int)$law['source_decision_id'] ?><?php endif; ?>
+                </div>
+                <?php endif; ?>
                 <div class="law-text"><?= community_laws_escape($law['law_text']) ?></div>
                 <details style="margin-top:10px">
                     <summary>سوابق نسخه‌ها و مقایسه با نسخهٔ فعلی (<?= count($previous_versions) ?> نسخهٔ پیشین)</summary>

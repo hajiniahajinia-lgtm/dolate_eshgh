@@ -104,7 +104,11 @@ topic_intent_contract_check(
     str_contains($law, 'id="law-<?= (int)$draft[\'law_id\'] ?>"') &&
     str_contains($law, 'id="law-<?= (int)$proposal[\'law_id\'] ?>"') &&
     str_contains($law, 'id="law-<?= (int)$active_law[\'law_id\'] ?>"') &&
-    str_contains($law, 'id="law-<?= (int)$law[\'law_id\'] ?>"'),
+    str_contains($law, 'id="law-<?= (int)$law[\'law_id\'] ?>"') &&
+    str_contains($law, 'LEFT JOIN topics source_topic ON source_topic.id=v.source_topic_id') &&
+    str_contains($law, 'منشأ قانون:') &&
+    str_contains($law, 'community.php?id=<?= (int)$law[\'originating_community_id\'] ?>#topic-'),
+
     'law records expose stable anchors for source-topic navigation'
 );
 
