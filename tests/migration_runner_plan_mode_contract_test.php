@@ -25,6 +25,7 @@ $checks=[
     "runner must use shared recovery guard" => strpos($runner, "recovery_guard.php")!==false,
     "durable marker table must be created before migrations" => is_string($guard) && strpos($guard, "CREATE TABLE IF NOT EXISTS app_schema_migration_recovery")!==false,
     "durable marker must be persisted before migration SQL" => is_string($guard) && strpos($guard, "INSERT INTO app_schema_migration_recovery")!==false,
+    "marker must include a pre-migration schema and registry snapshot" => is_string($guard) && strpos($guard, "migration_recovery_snapshot")!==false && strpos($guard, "snapshot_json LONGTEXT NOT NULL")!==false,
     "marker must be cleared only by explicit completion helper" => is_string($guard) && strpos($guard, "DELETE FROM app_schema_migration_recovery")!==false,
     "legacy auto-apply must not execute migrations on page requests" => is_string($auto) && strpos($auto, "return;")!==false && strpos($auto, "multi_query")===false
 ];

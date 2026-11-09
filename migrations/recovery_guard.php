@@ -12,6 +12,7 @@ function migration_recovery_ensure_table(mysqli $conn): void
         marker_id TINYINT UNSIGNED NOT NULL PRIMARY KEY,
         migration_name VARCHAR(190) NOT NULL,
         checksum CHAR(64) NOT NULL,
+        snapshot_json LONGTEXT NOT NULL,
         stage VARCHAR(40) NOT NULL DEFAULT 'executing',
         started_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         KEY idx_migration_recovery_started (started_at)
@@ -32,17 +33,45 @@ function migration_recovery_active(mysqli $conn): ?array
     return $row;
 }
 
+function migration_recovery_snapshot(mysqli $conn): string
+{
+    $snapshot = [];
+    $queries = [
+        'tables' => "SELECT TABLE_NAME, ENGINE, TABLE_COLLATION FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() ORDER BY TABLE_NAME",
+        'columns' => "SELECT TABLE_NAME, COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, COLUMN_DEFAULT, EXTRA FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() ORDER BY TABLE_NAME, ORDINAL_POSITION",
+        'indexes' => "SELECT TABLE_NAME, INDEX_NAME, NON_UNIQUE, SEQ_IN_INDEX, COLUMN_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() ORDER BY TABLE_NAME, INDEX_NAME, SEQ_IN_INDEX",
+        'registry' => "SELECT migration_name, checksum, applied_at FROM app_schema_migrations ORDER BY migration_name"
+    ];
+    foreach ($queries as $key => $sql) {
+        $result = $conn->query($sql);
+        if (!$result) {
+            throw new RuntimeException('Could not capture pre-migration ' . $key . ' snapshot: ' . $conn->error);
+        }
+        $snapshot[$key] = [];
+        while ($row = $result->fetch_assoc()) {
+            $snapshot[$key][] = $row;
+        }
+        $result->free();
+    }
+    $encoded = json_encode($snapshot, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if (!is_string($encoded)) {
+        throw new RuntimeException('Could not encode pre-migration schema snapshot');
+    }
+    return $encoded;
+}
+
 function migration_recovery_begin(mysqli $conn, string $name, string $checksum): void
 {
     if (migration_recovery_active($conn) !== null) {
         throw new RuntimeException('A previous interrupted migration requires manual recovery');
     }
     $stage = 'executing';
-    $stmt = $conn->prepare('INSERT INTO app_schema_migration_recovery (marker_id, migration_name, checksum, stage) VALUES (1, ?, ?, ?)');
+    $snapshot = migration_recovery_snapshot($conn);
+    $stmt = $conn->prepare('INSERT INTO app_schema_migration_recovery (marker_id, migration_name, checksum, snapshot_json, stage) VALUES (1, ?, ?, ?, ?)');
     if (!$stmt) {
         throw new RuntimeException('Could not prepare durable migration marker: ' . $conn->error);
     }
-    $stmt->bind_param('sss', $name, $checksum, $stage);
+    $stmt->bind_param('ssss', $name, $checksum, $snapshot, $stage);
     if (!$stmt->execute()) {
         $error = $stmt->error;
         $stmt->close();
