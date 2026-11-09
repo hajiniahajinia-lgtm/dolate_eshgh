@@ -275,6 +275,7 @@ jobs:
           php -l community_charter_amendments.php
           php -l community_law_helpers.php
           php -l community_law_change_helpers.php
+          php -l tests/community_law_change_voter_eligibility_contract_test.php
           php -l community_law_change_action.php
           php -l community_law_change_cases.php
           php -l community_law_conformity_helpers.php
@@ -348,6 +349,8 @@ jobs:
         run: php tests/community_law_corrective_completion_ui_contract_test.php
       - name: Verify parent and child community law access boundaries
         run: php tests/community_law_parent_child_access_contract_test.php
+      - name: Verify active parent membership for law change voters
+        run: php tests/community_law_change_voter_eligibility_contract_test.php
       - name: Run community law hierarchy and charter amendment tests
         run: |
           php tests/community_law_hierarchy_helpers_test.php

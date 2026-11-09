@@ -331,7 +331,11 @@ if (!function_exists('community_law_change_cast_vote')) {
         if ($case_id<=0 || $user_id<=0 || !in_array($vote,['yes','no','abstain'],true) ||
             ($comment!==null && mb_strlen($comment)>5000) || !$conn->begin_transaction()) return false;
         try {
-            $case=$conn->prepare("SELECT status,(vote_closes_at IS NOT NULL AND vote_closes_at>NOW()) AS vote_open FROM community_law_change_cases WHERE id=? FOR UPDATE");
+            $case=$conn->prepare("SELECT c.status,(c.vote_closes_at IS NOT NULL AND c.vote_closes_at>NOW()) AS vote_open,
+                    l.originating_community_id
+             FROM community_law_change_cases c
+             JOIN community_laws l ON l.id=c.law_id
+             WHERE c.id=? FOR UPDATE");
             if (!$case) throw new RuntimeException('vote case lock failed');
             $case->bind_param('i',$case_id);
             if (!$case->execute()) throw new RuntimeException('vote case read failed');
@@ -343,6 +347,19 @@ if (!function_exists('community_law_change_cast_vote')) {
             $eligible->bind_param('ii',$case_id,$user_id);
             if (!$eligible->execute() || !$eligible->get_result()->fetch_row()) throw new RuntimeException('voter is not in the electorate');
             $eligible->close();
+
+            // Snapshot electorate is necessary but not sufficient: a member who has left
+            // the parent community must not retain voting power in a later session.
+            $active_member=$conn->prepare(
+                'SELECT 1 FROM community_members WHERE community_id=? AND user_id=? LIMIT 1 FOR UPDATE'
+            );
+            if (!$active_member) throw new RuntimeException('active voter membership check failed');
+            $origin_id=(int)$row['originating_community_id'];
+            $active_member->bind_param('ii',$origin_id,$user_id);
+            if (!$active_member->execute() || !$active_member->get_result()->fetch_row()) {
+                throw new RuntimeException('voter is no longer a member of the parent community');
+            }
+            $active_member->close();
 
             $save=$conn->prepare(
                 'INSERT INTO community_law_change_votes (case_id,user_id,vote,comment) VALUES (?,?,?,?)
