@@ -75,11 +75,12 @@ if ($schema_ready) {
 
     if ($decision_ledger_ready) {
         $source_decision_stmt = $conn->prepare(
-            "SELECT d.id, d.source_topic_id, t.title, d.decided_at
+            "SELECT d.id, d.source_topic_id, t.title, t.topic_intent, d.decided_at
              FROM community_decision_records d
              JOIN topics t ON t.id=d.source_topic_id
              WHERE d.community_id=? AND d.record_status='recorded'
                AND d.acceptance_status='accepted'
+               AND t.topic_intent IN ('decision','law')
              ORDER BY d.decided_at DESC, d.id DESC
              LIMIT 100"
         );
@@ -131,10 +132,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // اگر پیش‌نویس از یک تصمیم جمعی منشأ گرفته باشد، پیوند باید به تصمیم ثبت‌شدهٔ همین جامعه باشد.
         if ($source_decision_id !== null) {
             $decision_source_stmt = $conn->prepare(
-                "SELECT source_topic_id, source_idea_id
-                 FROM community_decision_records
-                 WHERE id=? AND community_id=? AND record_status='recorded'
-                   AND acceptance_status='accepted'
+                "SELECT d.source_topic_id, d.source_idea_id
+                 FROM community_decision_records d
+                 JOIN topics t ON t.id=d.source_topic_id
+                 WHERE d.id=? AND d.community_id=? AND d.record_status='recorded'
+                   AND d.acceptance_status='accepted'
+                   AND t.topic_intent IN ('decision','law')
                  LIMIT 1"
             );
             if (!$decision_source_stmt) community_laws_redirect($community_id, 'invalid_source');
@@ -5989,7 +5992,7 @@ details>summary{cursor:pointer;font-weight:bold}
         <?php elseif (!$source_decisions): ?>
             <p class="muted">در این جامعه تصمیم پذیرفته‌شده‌ای برای انتخاب وجود ندارد؛ در صورت نیاز، منشأ موضوع را جداگانه مشخص کنید.</p>
         <?php else: ?>
-            <p class="muted">فقط تصمیم‌های پذیرفته‌شده و ثبت‌شدهٔ همین جامعه نمایش داده می‌شوند. با انتخاب تصمیم، موضوع و ایدهٔ مرتبط خودکار پیوند می‌خورند. این پیوند به‌تنهایی قانون را تصویب یا لازم‌الاجرا نمی‌کند.</p>
+            <p class="muted">فقط تصمیم‌های پذیرفته‌شده از موضوعات «تصمیم‌گیری» یا «قانون‌گذاری» نمایش داده می‌شوند. با انتخاب تصمیم، موضوع و ایدهٔ مرتبط خودکار پیوند می‌خورند. این پیوند به‌تنهایی قانون را تصویب یا لازم‌الاجرا نمی‌کند.</p>
         <?php endif; ?>
         <label>شناسه موضوع مرتبط (اختیاری، در صورت نداشتن شناسه تصمیم)</label>
         <input type="number" name="source_topic_id" min="1">

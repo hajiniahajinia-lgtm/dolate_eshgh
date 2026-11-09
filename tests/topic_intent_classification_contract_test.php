@@ -36,4 +36,12 @@ topic_intent_contract_check(
     'legacy knowledge-library purpose remains compatible without treating law as enacted'
 );
 
+topic_intent_contract_check(
+    is_string($law = file_get_contents(__DIR__ . '/../community_laws.php')) &&
+    str_contains($law, "t.topic_intent IN ('decision','law')") &&
+    str_contains($law, "t.topic_intent IN ('decision','law')"),
+    'only decision and lawmaking tracks can supply a formal accepted decision as law provenance'
+);
+
+
 fwrite(STDOUT, "PASS: topic intent classification contract checks passed.\n");

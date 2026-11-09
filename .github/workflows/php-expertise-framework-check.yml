@@ -7,6 +7,7 @@ on:
     paths:
       - 'add_topic.php'
       - 'community.php'
+      - 'community_laws.php'
       - 'migrations/20261109_topic_intent_classification.sql'
       - 'tests/topic_intent_classification_contract_test.php'
       - 'tests/topic_intent_classification_integration_test.php'
@@ -230,6 +231,7 @@ jobs:
       - name: Check PHP syntax
         run: |
           php -l add_topic.php
+          php -l community_laws.php
           php -l tests/topic_intent_classification_contract_test.php
           php -l tests/topic_intent_classification_integration_test.php
           php -l expertise.php
