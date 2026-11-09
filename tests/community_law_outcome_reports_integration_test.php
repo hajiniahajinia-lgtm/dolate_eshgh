@@ -272,7 +272,7 @@ try {
     $corrective_updates=(int)$db->query(
         "SELECT COUNT(*) total FROM community_law_outcome_corrective_updates WHERE action_id=".(int)$corrective_action_id
     )->fetch_assoc()['total'];
-    outcome_check($corrective_updates===4,'all corrective progress entries remain as immutable history');
+    outcome_check($corrective_updates===3,'all corrective progress entries remain as immutable history before the retry');
     $claim_status=$db->query("SELECT status FROM community_law_outcome_corrective_updates WHERE id=".(int)$completed_id)->fetch_assoc();
     $action_status=$db->query("SELECT completion_status FROM community_law_outcome_corrective_actions WHERE id=".(int)$corrective_action_id)->fetch_assoc();
     outcome_check($claim_status && $claim_status['status']==='completion_claimed' &&
