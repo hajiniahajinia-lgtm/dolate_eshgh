@@ -123,6 +123,7 @@ on:
       - 'tests/community_law_multi_appeal_contract_test.php'
       - 'tests/community_law_appeal_ui_contract_test.php'
       - 'tests/community_law_appeal_completion_contract_test.php'
+      - 'tests/community_law_lifecycle_contract_test.php'
       - '.github/workflows/php-expertise-framework-check.yml'
       - 'migrations/20261108_community_law_z3_version_notices.sql'
       - 'community_law_amendment_helpers.php'
@@ -284,6 +285,7 @@ jobs:
           php -l tests/community_law_multi_appeal_contract_test.php
           php -l tests/community_law_appeal_ui_contract_test.php
           php -l tests/community_law_appeal_completion_contract_test.php
+          php -l tests/community_law_lifecycle_contract_test.php
           php -l set_community_parent.php
           php -l profile.php
           php -l create_community.php
@@ -324,6 +326,8 @@ jobs:
         run: php tests/community_law_appeal_ui_contract_test.php
       - name: Verify independent appeal completion
         run: php tests/community_law_appeal_completion_contract_test.php
+      - name: Verify complete community law lifecycle gates
+        run: php tests/community_law_lifecycle_contract_test.php
       - name: Verify member-only hierarchy history access contract
         run: php tests/community_hierarchy_history_access_contract_test.php
       - name: Verify hierarchy changes open conformity reviews
