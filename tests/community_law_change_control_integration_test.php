@@ -495,7 +495,11 @@ try {
     change_case_check($activated && $activated['implementation_status']==='in_progress' && $activated['progress_report']==='پیشرفت ثبت‌شده پیش از اصلاحیه','implementation progress and accountability history are carried into the enacted amendment');
     $notice_rows=$db->query("SELECT community_id,previous_version_id,event_type,details FROM community_law_version_notices WHERE law_version_id=".$second_version." ORDER BY community_id")->fetch_all(MYSQLI_ASSOC);
     $notice_communities=array_map('intval',array_column($notice_rows,'community_id'));
-    $notice_details_ok=count($notice_rows)===2;
+    $expected_notice_communities=array_values(array_unique(array_merge(
+        array_map('intval',$base_scope_ids),[90020]
+    )));
+    sort($expected_notice_communities,SORT_NUMERIC);
+    $notice_details_ok=count($notice_rows)===count($expected_notice_communities);
     foreach($notice_rows as $notice_row) {
         $details=json_decode((string)$notice_row['details'],true);
         if ((int)$notice_row['previous_version_id']!==99002 || $notice_row['event_type']!=='version_activated' ||
@@ -503,10 +507,6 @@ try {
             (int)($details['current_version_id']??0)!==$second_version ||
             ($details['implementation_state_copied']??false)!==true) $notice_details_ok=false;
     }
-    $expected_notice_communities=array_values(array_unique(array_merge(
-        array_map('intval',$base_scope_ids),[90020]
-    )));
-    sort($expected_notice_communities,SORT_NUMERIC);
     change_case_check($notice_communities===$expected_notice_communities && $notice_details_ok,
         'successful enactment sends exactly one version notice to the origin community and every community in the resolved scope with both version identifiers');
     change_case_check(!community_law_enact_amendment($db,9502,$second_version,90020,90201),'an already enacted amendment cannot be activated a second time');
