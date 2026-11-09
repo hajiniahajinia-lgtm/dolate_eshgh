@@ -56,7 +56,7 @@ try {
         created_by INT NOT NULL
     ) ENGINE=InnoDB");
     $db->query("CREATE TEMPORARY TABLE community_members (community_id INT NOT NULL,user_id INT NOT NULL,PRIMARY KEY(community_id,user_id)) ENGINE=InnoDB");
-    $db->query("INSERT INTO community_members VALUES (920,9700),(920,9701),(920,9702),(920,9703),(920,9704),(920,9706),(920,9707),(920,9708)");
+    $db->query("INSERT INTO community_members VALUES (920,9700),(920,9701),(920,9702),(920,9703),(920,9704),(920,9706),(920,9707),(920,9708),(920,9709),(920,9710),(920,9711)");
     $db->query("INSERT INTO collective_knowledge_entries
                 (title,entry_type,summary,content,visibility,community_id,source_topic_id,created_by)
                 VALUES ('دانش منشأ آزمایشی','lesson','خلاصهٔ دانش منشأ','متن دانش منشأ','community',920,990099,9700)");
@@ -285,17 +285,17 @@ try {
         $db,$corrective_action_id,9701,'confirm','ایجادکننده اقدام تعارض منافع دارد'
     )===false,'corrective action creator cannot verify completion');
     $completion_one=community_law_review_corrective_completion(
-        $db,$corrective_action_id,9706,'reject','شواهد تکمیل اقدام کافی نیست'
+        $db,$corrective_action_id,9709,'reject','شواهد تکمیل اقدام کافی نیست'
     );
     outcome_check(is_array($completion_one) && $completion_one['review_count']===1 &&
         $completion_one['completion_status']==='pending','one review cannot finalize completion');
     $completion_two=community_law_review_corrective_completion(
-        $db,$corrective_action_id,9707,'reject','معیار موفقیت هنوز احراز نشده است'
+        $db,$corrective_action_id,9710,'reject','معیار موفقیت هنوز احراز نشده است'
     );
     outcome_check(is_array($completion_two) && $completion_two['review_count']===2 &&
         $completion_two['completion_status']==='pending','two reviews do not bypass the three-review threshold');
     $completion_three=community_law_review_corrective_completion(
-        $db,$corrective_action_id,9708,'confirm','بخشی از معیار موفقیت احراز شده است'
+        $db,$corrective_action_id,9711,'confirm','بخشی از معیار موفقیت احراز شده است'
     );
     outcome_check(is_array($completion_three) && $completion_three['review_count']===3 &&
         $completion_three['completion_status']==='rejected',
@@ -314,17 +314,17 @@ try {
         (int)$retry_state['completion_review_round']===2,
         'resubmission opens a new pending review round');
     $retry_one=community_law_review_corrective_completion(
-        $db,$corrective_action_id,9706,'confirm','شواهد اصلاح‌شده را تأیید می‌کند'
+        $db,$corrective_action_id,9709,'confirm','شواهد اصلاح‌شده را تأیید می‌کند'
     );
     outcome_check(is_array($retry_one) && $retry_one['review_count']===1 &&
         $retry_one['completion_status']==='pending','new review round starts with a fresh tally');
     $retry_two=community_law_review_corrective_completion(
-        $db,$corrective_action_id,9707,'confirm','معیار موفقیت اکنون احراز شده است'
+        $db,$corrective_action_id,9710,'confirm','معیار موفقیت اکنون احراز شده است'
     );
     outcome_check(is_array($retry_two) && $retry_two['review_count']===2 &&
         $retry_two['completion_status']==='pending','second-round tally remains independent');
     $retry_three=community_law_review_corrective_completion(
-        $db,$corrective_action_id,9708,'reject','یک ملاحظهٔ جزئی باقی است'
+        $db,$corrective_action_id,9711,'reject','یک ملاحظهٔ جزئی باقی است'
     );
     outcome_check(is_array($retry_three) && $retry_three['review_count']===3 &&
         $retry_three['completion_status']==='verified',
