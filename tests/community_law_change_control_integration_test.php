@@ -215,8 +215,8 @@ try {
     $second_version=(int)$db->query("SELECT proposed_version_id FROM community_law_amendment_cases WHERE id=".(int)$second_amendment_id)->fetch_assoc()['proposed_version_id'];
     $db->query("UPDATE community_law_versions SET status='voting',vote_deadline=DATE_SUB(NOW(),INTERVAL 1 DAY) WHERE id=".$second_version);
     $db->query("UPDATE community_law_amendment_cases SET status='parent_review' WHERE id=".(int)$second_amendment_id);
-    change_case_check(community_law_submit_amendment_parent_review($db,$second_amendment_id,90010,90106,'compatible',[],'نسخه اصلاح‌شده با مواد لازم‌الاجرای قانون مادر سازگار است.'),'first parent reviewer can confirm compatibility of the revised amendment');
-    change_case_check(community_law_submit_amendment_parent_review($db,$second_amendment_id,90010,90107,'compatible',[],'بررسی مستقل دوم نیز سازگاری نسخه اصلاح‌شده را تأیید می‌کند.'),'second independent parent reviewer can confirm compatibility');
+    change_case_check(community_law_submit_amendment_parent_review($db,$second_amendment_id,90010,90107,'compatible',[],'نسخه اصلاح‌شده با مواد لازم‌الاجرای قانون مادر سازگار است.'),'first parent reviewer can confirm compatibility of the revised amendment');
+    change_case_check(community_law_submit_amendment_parent_review($db,$second_amendment_id,90010,90108,'compatible',[],'بررسی مستقل دوم نیز سازگاری نسخه اصلاح‌شده را تأیید می‌کند.'),'second independent parent reviewer can confirm compatibility');
     $approved_parent_review=$db->query("SELECT a.status,l.status AS law_status,l.current_version_id FROM community_law_amendment_cases a JOIN community_laws l ON l.id=a.law_id WHERE a.id=".(int)$second_amendment_id)->fetch_assoc();
     change_case_check($approved_parent_review && $approved_parent_review['status']==='parent_review_approved' && $approved_parent_review['law_status']==='approved' && (int)$approved_parent_review['current_version_id']===99002,'two compatible parent reviews clear the amendment for independent final review without enacting it');
 
