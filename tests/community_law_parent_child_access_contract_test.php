@@ -28,7 +28,7 @@ $checks['inherited review and appeal records are filtered through the law versio
     strpos($page, 'community_law_scope_matches($conn, (int)$appeal_row[\'law_version_id\'], $community_id)') !== false;
 $checks['parent members see all implementation reports only for laws originating in their own community'] =
     strpos($page, '$show_all_implementations=$is_member &&') !== false &&
-    strpos($page, "(int)$law['originating_community_id']===$community_id") !== false;
+    strpos($page, '(int)$law[\'originating_community_id\']===$community_id') !== false;
 $checks['other community implementation and outcome reports remain limited to the selected community'] =
     strpos($page, 'if (!$show_all_implementations) $implementation_sql.=" AND i.community_id=?"') !== false &&
     strpos($page, 'if (!$show_all_implementations) $reports_sql.=" AND r.community_id=?"') !== false;
@@ -48,8 +48,8 @@ foreach ($functions as $name) {
     $checks[$name . ' exists and enforces resource-community membership'] =
         is_string($parts[$name]) &&
         strpos($parts[$name], 'FROM community_members') !== false;
-}
-$checks['report reviewers are distinct from submitter and assigned executor'] =
+    strpos($parts['community_law_review_outcome_report'] ?? '', 'submitted_by\']===$reviewer_user_id') !== false &&
+    strpos($parts['community_law_review_outcome_report'] ?? '', 'responsible_user_id\']??0)===$reviewer_user_id') !== false;
     strpos($parts['community_law_review_outcome_report'] ?? '', "submitted_by']===$reviewer_user_id") !== false &&
     strpos($parts['community_law_review_outcome_report'] ?? '', "responsible_user_id']??0)===$reviewer_user_id") !== false;
 $checks['follow-up authors cannot impersonate the executor'] =
@@ -59,7 +59,7 @@ $checks['second-stage reviewers are members, independent, and excluded from the 
     strpos($parts['community_law_review_disputed_outcome_followups'] ?? '', '$is_member') !== false &&
     strpos($parts['community_law_review_disputed_outcome_followups'] ?? '', '$was_original_reviewer') !== false;
 $checks['corrective action creator and assigned executor must both belong to the action community'] =
-    strpos($parts['community_law_create_outcome_corrective_action'] ?? '', 'actor_member') !== false &&
+    strpos($parts['community_law_submit_outcome_corrective_update'] ?? '', 'responsible_user_id\']!==$actor_user_id') !== false;
     strpos($parts['community_law_create_outcome_corrective_action'] ?? '', 'executor_member') !== false;
 $checks['only the assigned executor can update corrective progress'] =
     strpos($parts['community_law_submit_outcome_corrective_update'] ?? '', "responsible_user_id']!==$actor_user_id") !== false;
