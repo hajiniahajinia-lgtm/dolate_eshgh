@@ -53,10 +53,10 @@ $outcome_reports_ready=false;
 if ($schema_ready) {
     $outcome_table_check=$conn->query(
         "SELECT COUNT(*) AS total FROM information_schema.tables
-         WHERE table_schema=DATABASE() AND table_name IN ('community_law_outcome_reports','community_law_outcome_reviews','community_law_outcome_followups','community_law_outcome_reassessments','community_law_outcome_reassessment_reviews','community_law_outcome_corrective_actions','community_law_outcome_corrective_updates')"
+         WHERE table_schema=DATABASE() AND table_name IN ('community_law_outcome_reports','community_law_outcome_reviews','community_law_outcome_followups','community_law_outcome_reassessments','community_law_outcome_reassessment_reviews','community_law_outcome_corrective_actions','community_law_outcome_corrective_updates','community_law_outcome_corrective_completion_reviews')"
     );
     $outcome_reports_ready=$outcome_table_check &&
-        (int)$outcome_table_check->fetch_assoc()['total']===7;
+        (int)$outcome_table_check->fetch_assoc()['total']===8;
     if ($outcome_table_check) $outcome_table_check->free();
 }
 
@@ -4393,6 +4393,9 @@ $status_messages = [
     'outcome_corrective_action_failed' => 'اقدام اصلاحی ثبت نشد؛ نتیجهٔ نهایی باید اصلاح برنامهٔ اجرا باشد و مسئول اجرا باید تعیین شده باشد.',
     'outcome_corrective_update_saved' => 'گزارش پیشرفت اقدام اصلاحی ثبت شد.',
     'outcome_corrective_update_failed' => 'گزارش پیشرفت ثبت نشد؛ فقط مسئول تعیین‌شده می‌تواند وضعیت اقدام را به‌روزرسانی کند.',
+    'outcome_completion_review_saved' => 'ارزیابی مستقل تکمیل اقدام ثبت شد؛ نتیجه پس از سه ارزیابی مستقل مشخص می‌شود.',
+    'outcome_completion_verified' => 'تکمیل اقدام اصلاحی با رأی دست‌کم دو ارزیاب از سه ارزیاب مستقل تأیید شد.',
+    'outcome_completion_review_failed' => 'ارزیابی تکمیل اقدام ثبت نشد؛ تعارض منافع، عضویت یا ثبت ارزیابی قبلی را بررسی کنید.',
     'submitted_for_review' => 'پیشنهاد برای غربالگری حقوقی مستقل ارسال شد؛ رأی‌گیری تا تکمیل این مرحله متوقف است.',
     'legal_assessment_saved' => 'ارزیابی مستقل ثبت شد.',
     'legal_assessment_not_allowed' => 'شما برای ارزیابی این پیشنهاد واجد شرایط نیستید یا مرحله بررسی بسته شده است.',
@@ -4740,6 +4743,19 @@ details>summary{cursor:pointer;font-weight:bold}
                             }
                             $updates_result->free();
                         }
+                        $outcome_completion_reviews_by_action=[];
+                        $completion_reviews_result=$conn->query(
+                            "SELECT action_id,review_round,reviewer_user_id,verdict,rationale,evidence,created_at
+                             FROM community_law_outcome_corrective_completion_reviews
+                             WHERE action_id IN ($action_id_list)
+                             ORDER BY action_id,review_round,id"
+                        );
+                        if ($completion_reviews_result) {
+                            while ($completion_review_row=$completion_reviews_result->fetch_assoc()) {
+                                $outcome_completion_reviews_by_action[(int)$completion_review_row['action_id']][]=$completion_review_row;
+                            }
+                            $completion_reviews_result->free();
+                        }
                     }
                 }
             }
@@ -5036,13 +5052,41 @@ details>summary{cursor:pointer;font-weight:bold}
                                             $action_updates=$outcome_corrective_updates_by_action[(int)$corrective_action['id']] ?? [];
                                             $latest_action_update=$action_updates ? $action_updates[count($action_updates)-1] : null;
                                             $action_status=$latest_action_update['status'] ?? 'open';
-                                            $action_status_labels=['open'=>'در انتظار آغاز','in_progress'=>'در حال اجرا','blocked'=>'با مانع روبه‌رو','completed'=>'تکمیل‌شده'];
+                                            $action_status_labels=[
+                                                'open'=>'در انتظار آغاز',
+                                                'in_progress'=>'در حال اجرا',
+                                                'blocked'=>'با مانع روبه‌رو',
+                                                'completed'=>'تکمیل‌شده',
+                                                'completion_claimed'=>'در انتظار تأیید مستقل'
+                                            ];
+                                            $completion_status=(string)($corrective_action['completion_status']??'none');
+                                            $completion_status_labels=[
+                                                'none'=>'هنوز برای تأیید ارسال نشده',
+                                                'pending'=>'در انتظار بررسی مستقل',
+                                                'verified'=>'تکمیل با بررسی مستقل تأیید شد',
+                                                'rejected'=>'تکمیل در بررسی مستقل تأیید نشد؛ امکان ارسال دوباره پس از اصلاح وجود دارد'
+                                            ];
+                                            $completion_round=(int)($corrective_action['completion_review_round']??1);
+                                            $completion_reviews=$outcome_completion_reviews_by_action[(int)$corrective_action['id']]??[];
+                                            $current_completion_reviews=array_values(array_filter(
+                                                $completion_reviews,
+                                                static fn($review)=>(int)$review['review_round']===$completion_round
+                                            ));
+                                            $my_completion_review=false;
+                                            foreach ($current_completion_reviews as $completion_review) {
+                                                if ((int)$completion_review['reviewer_user_id']===$user_id) {
+                                                    $my_completion_review=true;
+                                                    break;
+                                                }
+                                            }
+                                            $completion_verdict_labels=['confirm'=>'تأیید تکمیل','reject'=>'تکمیل تأیید نشد'];
                                             ?>
                                             <div style="border-top:1px solid #e2e8f0;padding-top:8px;margin-top:8px">
                                                 <strong><?= community_laws_escape($corrective_action['title']) ?></strong>
                                                 <p><?= nl2br(community_laws_escape($corrective_action['action_details'])) ?></p>
                                                 <p><strong>معیار موفقیت:</strong> <?= nl2br(community_laws_escape($corrective_action['success_criteria'])) ?></p>
-                                                <p class="meta">مهلت: <?= community_laws_escape($corrective_action['target_date']) ?> — وضعیت: <?= $action_status_labels[$action_status] ?? $action_status ?></p>
+                                                <p class="meta">مهلت: <?= community_laws_escape($corrective_action['target_date']) ?> — وضعیت پیشرفت: <?= $action_status_labels[$action_status] ?? 'نامشخص' ?></p>
+                                                <p class="meta">وضعیت تأیید تکمیل: <?= $completion_status_labels[$completion_status] ?? 'نامشخص' ?> — ارزیابی دور <?= $completion_round ?>: <?= count($current_completion_reviews) ?>/۳</p>
                                                 <?php foreach ($action_updates as $action_update): ?>
                                                     <div class="meta" style="margin-top:6px">
                                                         <?= community_laws_escape($action_update['created_at']) ?> — <?= $action_status_labels[$action_update['status']] ?? $action_update['status'] ?>
@@ -5050,7 +5094,62 @@ details>summary{cursor:pointer;font-weight:bold}
                                                         <?php if (!empty($action_update['evidence'])): ?><p>شواهد: <?= nl2br(community_laws_escape($action_update['evidence'])) ?></p><?php endif; ?>
                                                     </div>
                                                 <?php endforeach; ?>
-                                                <?php if ((int)$corrective_action['responsible_user_id']===$user_id && $action_status!=='completed'): ?>
+                                                <?php foreach ($completion_reviews as $completion_review): ?>
+                                                    <div class="meta" style="margin-top:6px">
+                                                        دور <?= (int)$completion_review['review_round'] ?> — <?= community_laws_escape($completion_verdict_labels[$completion_review['verdict']]??'ارزیابی ثبت‌شده') ?>
+                                                        — <?= community_laws_escape($completion_review['created_at']) ?>
+                                                        <p><?= nl2br(community_laws_escape($completion_review['rationale'])) ?></p>
+                                                        <?php if (!empty($completion_review['evidence'])): ?>
+                                                            <p>شواهد ارزیاب: <?= nl2br(community_laws_escape($completion_review['evidence'])) ?></p>
+                                                        <?php endif; ?>
+                                                    </div>
+                                                <?php endforeach; ?>
+                                                <?php
+                                                $report_original_reviews=$outcome_reviews_by_report[(int)$outcome_report['id']]??[];
+                                                $report_reassessment_reviews=$outcome_reassessment_reviews_by_report[(int)$outcome_report['id']]??[];
+                                                $has_prior_review_conflict=false;
+                                                foreach (array_merge($report_original_reviews,$report_reassessment_reviews) as $prior_review) {
+                                                    if ((int)$prior_review['reviewer_user_id']===$user_id) {
+                                                        $has_prior_review_conflict=true;
+                                                        break;
+                                                    }
+                                                }
+                                                $can_review_completion=(bool)$is_member &&
+                                                    (int)$outcome_report['community_id']===$community_id &&
+                                                    $completion_status==='pending' &&
+                                                    (int)$corrective_action['created_by']!==$user_id &&
+                                                    (int)$corrective_action['responsible_user_id']!==$user_id &&
+                                                    !$has_prior_review_conflict &&
+                                                    !$my_completion_review &&
+                                                    count($current_completion_reviews)<3;
+                                                ?>
+                                                <?php if ($can_review_completion): ?>
+                                                    <details style="margin-top:8px">
+                                                        <summary>ارزیابی مستقل تکمیل این اقدام</summary>
+                                                        <p class="muted">ارزیاب باید عضو همین جامعه باشد و در ارزیابی گزارش یا رسیدگی قبلی این پرونده نقشی نداشته باشد. سه ارزیاب مستقل بررسی می‌کنند و تأیید دست‌کم دو نفر از سه نفر لازم است.</p>
+                                                        <form method="post" action="community_law_outcome_action.php">
+                                                            <input type="hidden" name="action" value="verify_corrective_completion">
+                                                            <input type="hidden" name="csrf_token" value="<?= community_laws_escape($csrf_token) ?>">
+                                                            <input type="hidden" name="community_id" value="<?= $community_id ?>">
+                                                            <input type="hidden" name="corrective_action_id" value="<?= (int)$corrective_action['id'] ?>">
+                                                            <label>نتیجه ارزیابی</label>
+                                                            <select name="completion_verdict" required>
+                                                                <option value="confirm">شواهد، تکمیل اقدام را تأیید می‌کنند</option>
+                                                                <option value="reject">شواهد برای تأیید تکمیل کافی نیست</option>
+                                                            </select>
+                                                            <label>استدلال و بررسی معیار موفقیت (الزامی)</label>
+                                                            <textarea name="completion_rationale" maxlength="12000" required></textarea>
+                                                            <label>شواهد و مستندات (اختیاری)</label>
+                                                            <textarea name="completion_evidence" maxlength="12000"></textarea>
+                                                            <button type="submit">ثبت ارزیابی مستقل تکمیل</button>
+                                                        </form>
+                                                    </details>
+                                                <?php elseif ($my_completion_review): ?>
+                                                    <p class="meta">ارزیابی شما در این دور قبلاً ثبت شده و قابل ویرایش یا حذف نیست.</p>
+                                                <?php endif; ?>
+                                                <?php if ((int)$corrective_action['responsible_user_id']===$user_id &&
+                                                    !in_array($completion_status,['pending','verified'],true) &&
+                                                    $action_status!=='completion_claimed'): ?>
                                                     <form method="post" action="community_law_outcome_action.php">
                                                         <input type="hidden" name="action" value="update_corrective_action">
                                                         <input type="hidden" name="csrf_token" value="<?= community_laws_escape($csrf_token) ?>">
@@ -5058,9 +5157,11 @@ details>summary{cursor:pointer;font-weight:bold}
                                                         <input type="hidden" name="corrective_action_id" value="<?= (int)$corrective_action['id'] ?>">
                                                         <label>وضعیت جدید</label>
                                                         <select name="corrective_status" required>
-                                                            <option value="in_progress">در حال اجرا</option>
-                                                            <option value="blocked">با مانع روبه‌رو</option>
-                                                            <option value="completed">تکمیل‌شده</option>
+                                                            <?php if ($completion_status!=='rejected'): ?>
+                                                                <option value="in_progress">در حال اجرا</option>
+                                                                <option value="blocked">با مانع روبه‌رو</option>
+                                                            <?php endif; ?>
+                                                            <option value="completed"><?= $completion_status==='rejected'?'ارسال دوباره برای بررسی تکمیل':'اعلام تکمیل و درخواست بررسی مستقل' ?></option>
                                                         </select>
                                                         <label>گزارش پیشرفت یا مانع</label>
                                                         <textarea name="corrective_update_text" maxlength="20000" required></textarea>
