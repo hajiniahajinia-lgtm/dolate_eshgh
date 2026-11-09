@@ -181,6 +181,53 @@ try {
         'deep descendant law is checked against both immediate and higher-level applicable parent laws'
     );
     
+    // A split first round must remain inconclusive. Only fresh reviewers from
+    // both communities may complete a second, independently recorded round.
+    $db->query("INSERT INTO community_members (community_id,user_id) VALUES
+        (90030,90300),(90030,90301),(90030,90302),(90030,90303)
+        ON DUPLICATE KEY UPDATE user_id=VALUES(user_id)");
+    $deep_case_id=(int)$db->query("SELECT id FROM community_law_conformity_cases
+        WHERE community_id=90030 AND local_law_version_id=99003 AND parent_law_version_id=99001")->fetch_assoc()['id'];
+    $round_conflict_id=community_law_conformity_add_conflict(
+        $db,$deep_case_id,90300,'ماده ۱۲','ماده ۴','آزمون اختلاف نظر دو جامعه و رسیدگی مستقل در دور دوم','شواهد آزمایشی'
+    );
+    change_case_check(is_int($round_conflict_id) && $round_conflict_id>0,'a deep-subcommunity member can open a conflict for its own law');
+    change_case_check(community_law_conformity_review_conflict(
+        $db,$round_conflict_id,90301,90030,'conflict_confirmed','از دید جامعه زیرشاخه، تعارض با ماده بالادستی وجود دارد.'
+    ),'first-round local reviewer can record a supported conflict finding');
+    change_case_check(community_law_conformity_review_conflict(
+        $db,$round_conflict_id,90102,90010,'no_conflict','از دید جامعه مادر، با توجه به دامنه ماده تعارضی وجود ندارد.'
+    ),'first-round parent reviewer can record a contrary finding');
+    $round_one=$db->query("SELECT f.finding,c.status,
+        (SELECT COUNT(*) FROM community_law_conformity_conflict_reviews r WHERE r.conflict_id=f.id AND r.review_round=1) AS reviews
+        FROM community_law_conformity_conflicts f JOIN community_law_conformity_cases c ON c.id=f.case_id
+        WHERE f.id=".(int)$round_conflict_id)->fetch_assoc();
+    change_case_check($round_one && $round_one['finding']==='needs_more_evidence' &&
+        $round_one['status']==='review_required' && (int)$round_one['reviews']===2,
+        'opposite first-round findings remain inconclusive and keep the case open');
+    change_case_check(community_law_conformity_review_conflict(
+        $db,$round_conflict_id,90302,90030,'conflict_confirmed','ارزیاب تازه جامعه زیرشاخه پس از بررسی دوباره، تعارض را تأیید می‌کند.'
+    ),'a fresh local reviewer can begin the second round after disagreement');
+    $round_two_partial=$db->query("SELECT finding FROM community_law_conformity_conflicts WHERE id=".(int)$round_conflict_id)->fetch_assoc();
+    change_case_check($round_two_partial && $round_two_partial['finding']==='needs_more_evidence',
+        'one second-round opinion cannot finalize the conflict alone');
+    change_case_check(!community_law_conformity_review_conflict(
+        $db,$round_conflict_id,90102,90010,'conflict_confirmed','تکرار نظر ارزیاب دور اول نباید پذیرفته شود.'
+    ),'a reviewer from the first round cannot vote again in the second round');
+    change_case_check(community_law_conformity_review_conflict(
+        $db,$round_conflict_id,90103,90010,'conflict_confirmed','ارزیاب تازه جامعه مادر نیز پس از بررسی مستقل تعارض را تأیید می‌کند.'
+    ),'a fresh parent reviewer can complete the second round with a matching finding');
+    $round_two_final=$db->query("SELECT f.finding,c.status,
+        (SELECT COUNT(*) FROM community_law_conformity_conflict_reviews r WHERE r.conflict_id=f.id AND r.review_round=1) AS round_one_count,
+        (SELECT COUNT(*) FROM community_law_conformity_conflict_reviews r WHERE r.conflict_id=f.id AND r.review_round=2) AS round_two_count,
+        (SELECT COUNT(DISTINCT r.review_round) FROM community_law_conformity_conflict_reviews r WHERE r.conflict_id=f.id) AS rounds
+        FROM community_law_conformity_conflicts f JOIN community_law_conformity_cases c ON c.id=f.case_id
+        WHERE f.id=".(int)$round_conflict_id)->fetch_assoc();
+    change_case_check($round_two_final && $round_two_final['finding']==='conflict_confirmed' &&
+        $round_two_final['status']==='amendment_required' && (int)$round_two_final['round_one_count']===2 &&
+        (int)$round_two_final['round_two_count']===2 && (int)$round_two_final['rounds']===2,
+        'only matching independent findings in the second round confirm the conflict while preserving both rounds');
+
     // شکست ثبت رویداد بررسی سازگاری باید پروندهٔ تازه و تاریخچه را در همان تراکنش برگرداند.
     // از شاخه‌ای مستقل استفاده می‌کنیم تا fixture آزمون با گردش اصلاحیهٔ جامعهٔ دیگر تداخل نکند.
     $db->query("INSERT INTO communities (id,parent_community_id) VALUES (90040,90010) ON DUPLICATE KEY UPDATE parent_community_id=VALUES(parent_community_id)");
