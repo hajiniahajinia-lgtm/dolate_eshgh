@@ -730,6 +730,40 @@ if (!function_exists('community_law_applies_to_community')) {
     }
 }
 
+if (!function_exists('community_hierarchy_record_parent_change')) {
+    /**
+     * ثبت سابقهٔ عمومی تغییر والد؛ باید در همان transaction تغییر ساختار فراخوانی شود.
+     * round_id یکتا مانع ثبت دوبارهٔ یک تغییر در اثر retry می‌شود.
+     */
+    function community_hierarchy_record_parent_change(
+        mysqli $conn,
+        int $community_id,
+        int $vote_round_id,
+        ?int $old_parent_id,
+        ?int $new_parent_id,
+        ?int $actor_user_id
+    ): bool {
+        if ($community_id <= 0 || $vote_round_id <= 0 || $old_parent_id === $new_parent_id) return false;
+        $stmt = $conn->prepare(
+            "INSERT INTO community_hierarchy_change_history
+                (community_id,vote_round_id,old_parent_community_id,new_parent_community_id,actor_user_id,event_type)
+             VALUES (?,?,?,?,?,'parent_changed')"
+        );
+        if (!$stmt) return false;
+        $stmt->bind_param(
+            'iiiii',
+            $community_id,
+            $vote_round_id,
+            $old_parent_id,
+            $new_parent_id,
+            $actor_user_id
+        );
+        $ok = $stmt->execute();
+        $stmt->close();
+        return $ok;
+    }
+}
+
 if (!function_exists('community_law_record_history')) {
     function community_law_record_history(
         mysqli $conn,
