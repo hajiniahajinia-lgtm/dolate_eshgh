@@ -122,6 +122,8 @@ on:
       - 'tests/community_law_parent_enactment_notice_contract_test.php'
       - 'tests/community_law_multi_appeal_contract_test.php'
       - 'tests/community_law_appeal_ui_contract_test.php'
+      - 'tests/community_law_ui_labels_contract_test.php'
+      - 'tests/community_law_ui_labels_contract_test.php'
       - 'tests/community_law_appeal_completion_contract_test.php'
       - 'tests/community_law_lifecycle_contract_test.php'
       - '.github/workflows/php-expertise-framework-check.yml'
@@ -284,6 +286,7 @@ jobs:
           php -l tests/community_law_parent_enactment_notice_contract_test.php
           php -l tests/community_law_multi_appeal_contract_test.php
           php -l tests/community_law_appeal_ui_contract_test.php
+          php -l tests/community_law_ui_labels_contract_test.php
           php -l tests/community_law_appeal_completion_contract_test.php
           php -l tests/community_law_lifecycle_contract_test.php
           php -l set_community_parent.php
@@ -324,6 +327,8 @@ jobs:
         run: php tests/community_law_multi_appeal_contract_test.php
       - name: Verify Persian appeal tracking interface
         run: php tests/community_law_appeal_ui_contract_test.php
+      - name: Verify Persian community law UI labels
+        run: php tests/community_law_ui_labels_contract_test.php
       - name: Verify independent appeal completion
         run: php tests/community_law_appeal_completion_contract_test.php
       - name: Verify complete community law lifecycle gates

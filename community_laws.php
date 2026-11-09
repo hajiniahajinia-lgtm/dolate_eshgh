@@ -5733,6 +5733,16 @@ details>summary{cursor:pointer;font-weight:bold}
                                 'conflict_found' => 'تعارض با قانون یا صلاحیت شناسایی شده؛ رأی‌گیری متوقف است',
                                 'needs_revision' => 'ابهام یا اطلاعات ناکافی؛ نیازمند بازنگری'
                             ];
+                            $authority_verdict_labels = [
+                                'confirm' => 'با صلاحیت و دامنه اختیار سازگار است',
+                                'dispute' => 'از حدود صلاحیت فراتر می‌رود',
+                                'unclear' => 'اطلاعات برای تشخیص کافی نیست'
+                            ];
+                            $precedent_verdict_labels = [
+                                'compatible' => 'با قانون مرجع تعارض ندارد',
+                                'conflict' => 'با قانون مرجع تعارض دارد',
+                                'unclear' => 'اطلاعات برای تشخیص تعارض کافی نیست'
+                            ];
                             ?>
                             <p>سطح صلاحیت تشخیص‌داده‌شده: <strong><?= community_laws_escape($authority_labels[$proposal['derived_jurisdiction_level'] ?? ''] ?? 'نامشخص') ?></strong></p>
                             <p>وضعیت: <?= community_laws_escape($authority_status_labels[$proposal['authority_status'] ?? ''] ?? 'پرونده بررسی صلاحیت موجود نیست') ?></p>
@@ -5765,7 +5775,7 @@ details>summary{cursor:pointer;font-weight:bold}
                                         <?php if (!empty($precedent_assessments_by_reference[(int)$reference['id']])): ?>
                                             <?php foreach ($precedent_assessments_by_reference[(int)$reference['id']] as $precedent_assessment): ?>
                                                 <p class="muted">ارزیاب #<?= (int)$precedent_assessment['reviewer_user_id'] ?>:
-                                                    <?= community_laws_escape($precedent_assessment['compatibility_verdict']) ?> —
+                                                    <?= community_laws_escape($precedent_verdict_labels[$precedent_assessment['compatibility_verdict']] ?? 'نتیجه بررسی نامشخص') ?> —
                                                     <?= nl2br(community_laws_escape($precedent_assessment['reasoning'])) ?></p>
                                             <?php endforeach; ?>
                                         <?php endif; ?>
@@ -5824,7 +5834,7 @@ details>summary{cursor:pointer;font-weight:bold}
                                     <summary>مشاهده استدلال‌های ارزیابی صلاحیت</summary>
                                     <?php foreach ($authority_assessments_by_version[(int)$proposal['version_id']] as $authority_assessment): ?>
                                         <div class="notice">
-                                            <div class="meta">ارزیاب #<?= (int)$authority_assessment['reviewer_user_id'] ?> — <?= community_laws_escape($authority_assessment['authority_verdict']) ?> — <?= community_laws_escape($authority_assessment['submitted_at']) ?></div>
+                                            <div class="meta">ارزیاب #<?= (int)$authority_assessment['reviewer_user_id'] ?> — <?= community_laws_escape($authority_verdict_labels[$authority_assessment['authority_verdict']] ?? 'نتیجه بررسی نامشخص') ?> — <?= community_laws_escape($authority_assessment['submitted_at']) ?></div>
                                             <p><?= nl2br(community_laws_escape($authority_assessment['reasoning'])) ?></p>
                                             <?php if (!empty($authority_assessment['evidence'])): ?>
                                                 <p class="muted">شواهد: <?= nl2br(community_laws_escape($authority_assessment['evidence'])) ?></p>
@@ -6117,10 +6127,18 @@ details>summary{cursor:pointer;font-weight:bold}
     <?php if (!$recent_objections): ?>
         <p class="muted">اعتراضی ثبت نشده است.</p>
     <?php else: ?>
-        <?php foreach ($recent_objections as $objection): ?>
+        <?php
+        $objection_status_labels = [
+            'pending' => 'ثبت‌شده؛ در انتظار بررسی',
+            'under_review' => 'در حال رسیدگی',
+            'upheld' => 'اعتراض وارد تشخیص داده شد',
+            'dismissed' => 'اعتراض وارد تشخیص داده نشد',
+            'withdrawn' => 'اعتراض پس گرفته شد'
+        ];
+        foreach ($recent_objections as $objection): ?>
             <div class="notice">
                 <strong><?= community_laws_escape($objection['title']) ?></strong>
-                <div class="meta"><?= community_laws_escape($objection['law_code']) ?> — وضعیت: <?= community_laws_escape($objection['status']) ?></div>
+                <div class="meta"><?= community_laws_escape($objection['law_code']) ?> — وضعیت: <?= community_laws_escape($objection_status_labels[$objection['status']] ?? 'وضعیت نامشخص') ?></div>
                 <p><?= nl2br(community_laws_escape($objection['description'])) ?></p>
             </div>
         <?php endforeach; ?>
