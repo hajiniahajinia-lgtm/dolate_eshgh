@@ -931,6 +931,16 @@ document.addEventListener('DOMContentLoaded',function(){
 
   
   <h1>📦 آرشیو موضوعات (نهایی‌شده)</h1>
+  <form method="get" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 14px;padding:10px;background:#fff;border:1px solid #d8e0e9;border-radius:9px;">
+    <input type="hidden" name="community_id" value="<?= (int)$community_id ?>">
+    <label for="archive-topic-intent" style="font-weight:bold;">نمایش مسیر:</label>
+    <select id="archive-topic-intent" name="topic_intent" onchange="this.form.submit()" style="min-width:180px;padding:8px;border:1px solid #b8c4d2;border-radius:7px;">
+      <option value=""<?= $archive_intent_filter === '' ? ' selected' : '' ?>>همهٔ مسیرها</option>
+      <option value="knowledge"<?= $archive_intent_filter === 'knowledge' ? ' selected' : '' ?>>دانش‌محور</option>
+      <option value="decision"<?= $archive_intent_filter === 'decision' ? ' selected' : '' ?>>تصمیم‌گیری</option>
+      <option value="law"<?= $archive_intent_filter === 'law' ? ' selected' : '' ?>>قانون‌گذاری</option>
+    </select>
+  </form>
   <?php if($election_message!==''): ?><div style="margin:0 0 14px;padding:10px;border-radius:8px;background:#fff3cd;color:#664d03;text-align:center"><?= htmlspecialchars($election_message,ENT_QUOTES,'UTF-8') ?></div><?php endif; ?>
   <?php if(!$candidate_tables_ready||!$candidate_plans_ready): ?><div style="margin:0 0 14px;padding:10px;border-radius:8px;background:#fff3cd;color:#664d03;text-align:center">برای فعال‌شدن برنامهٔ اولیه و نظارت بر اجرا، فایل <strong>migrations/20261027_topic_execution_monitoring.sql</strong> باید طبق روش امن پروژه در پایگاه داده اجرا شود.</div><?php elseif(!$election_tables_ready): ?><div style="margin:0 0 14px;padding:10px;border-radius:8px;background:#fff3cd;color:#664d03;text-align:center">برای فعال‌شدن فوریت و نهایی‌شدن انتخابات مجری، فایل <strong>migration_execution_election_urgency.sql</strong> را یک‌بار و به‌صورت کنترل‌شده در پایگاه داده اجرا کنید.</div><?php endif; ?>
   <div class="columns">
