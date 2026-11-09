@@ -566,7 +566,11 @@ try {
     foreach ($reviewers as $reviewer) change_case_check(!in_array((int)$reviewer['reviewer_user_id'],[90100,90200],true),'proposer and requester are excluded from review');
     $notice_communities=$db->query('SELECT community_id FROM community_law_community_notices WHERE case_id='.(int)$case_id.' ORDER BY community_id')->fetch_all(MYSQLI_ASSOC);
     $notice_community_ids=array_map(static fn(array $row): int => (int)$row['community_id'],$notice_communities);
-    change_case_check($notice_community_ids===[90010,90020,90030,90050],'the parent, direct child, deep descendant and newly adopted child each receive a pending-request notice');
+    $expected_change_notice_ids=array_values(array_unique(array_merge(
+        array_map('intval',community_law_scope_community_ids($db,99001)),[90010]
+    )));
+    sort($expected_change_notice_ids,SORT_NUMERIC);
+    change_case_check($notice_community_ids===$expected_change_notice_ids,'the parent and every current community in the law scope, including newly adopted descendants, receive a pending-request notice');
     foreach ($reviewers as $index=>$reviewer) {
         $verdict=$index<4?'uphold':'dismiss';
         $review_status=community_law_submit_change_assessment($db,$case_id,(int)$reviewer['reviewer_user_id'],$verdict,'بررسی مستند و مستقل انجام شد و دلایل کافی ثبت گردید.');
