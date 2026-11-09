@@ -38,8 +38,7 @@ topic_intent_contract_check(
 
 topic_intent_contract_check(
     is_string($law = file_get_contents(__DIR__ . '/../community_laws.php')) &&
-    str_contains($law, "t.topic_intent IN ('decision','law')") &&
-    str_contains($law, "t.topic_intent IN ('decision','law')"),
+    substr_count($law, "t.topic_intent IN ('decision','law')") >= 2,
     'only decision and lawmaking tracks can supply a formal accepted decision as law provenance'
 );
 
