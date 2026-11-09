@@ -105,6 +105,7 @@ on:
       - 'tests/migration_order_test.php'
       - 'tests/community_law_amendment_vote_contract_test.php'
       - 'tests/community_law_amendment_notice_contract_test.php'
+      - 'tests/community_law_multi_appeal_contract_test.php'
       - '.github/workflows/php-expertise-framework-check.yml'
       - 'migrations/20261108_community_law_z3_version_notices.sql'
       - 'community_law_amendment_helpers.php'
@@ -241,6 +242,7 @@ jobs:
           php -l tests/migration_order_test.php
           php -l tests/community_law_amendment_vote_contract_test.php
           php -l tests/community_law_amendment_notice_contract_test.php
+          php -l tests/community_law_multi_appeal_contract_test.php
           php -l set_community_parent.php
           php -l profile.php
           php -l create_community.php
@@ -270,6 +272,8 @@ jobs:
         run: php tests/community_law_amendment_vote_contract_test.php
       - name: Verify atomic amendment notice contract
         run: php tests/community_law_amendment_notice_contract_test.php
+      - name: Verify multi-community appeal window
+        run: php tests/community_law_multi_appeal_contract_test.php
       - name: Verify member-only hierarchy history access contract
         run: php tests/community_hierarchy_history_access_contract_test.php
       - name: Verify hierarchy changes open conformity reviews

@@ -2804,7 +2804,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (
                 (!$standard_appeal_state && !$amendment_appeal_state) ||
                 $law['version_status']!=='appeal_period' ||
-                $law['final_status']!=='appeal_period' ||
+                !in_array($law['final_status'],['appeal_period','appeal_hold'],true) ||
                 empty($law['appeal_deadline']) || strtotime($law['appeal_deadline']) < time()
             ) throw new RuntimeException('appeal_period_closed');
 
@@ -2866,11 +2866,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $hold = $conn->prepare(
                 "UPDATE community_law_final_review_cases SET status='appeal_hold'
-                 WHERE law_version_id=? AND status='appeal_period'"
+                 WHERE law_version_id=? AND status IN ('appeal_period','appeal_hold')"
             );
             if (!$hold) throw new Exception('appeal hold prepare failed');
             $hold->bind_param('i', $version_id);
-            if (!$hold->execute() || $hold->affected_rows !== 1) throw new Exception('appeal hold update failed');
+            if (!$hold->execute()) throw new Exception('appeal hold update failed');
             $hold->close();
 
             $version_law_stmt = $conn->prepare("SELECT law_id FROM community_law_versions WHERE id=?");
