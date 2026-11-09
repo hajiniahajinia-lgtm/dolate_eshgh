@@ -136,13 +136,56 @@ if (!function_exists('community_law_conformity_review_conflict')) {
                 (int)$row['identified_by'] === $user_id) {
                 throw new RuntimeException('reviewer is not eligible');
             }
+            $round_stmt = $conn->prepare(
+                "SELECT COALESCE(MAX(review_round),0) AS latest_round
+                 FROM community_law_conformity_conflict_reviews WHERE conflict_id=? AND review_round=?"
+            );
+            if (!$round_stmt) throw new RuntimeException('review round lookup prepare failed');
+            $round_stmt->bind_param('i', $conflict_id);
+            if (!$round_stmt->execute()) throw new RuntimeException('review round lookup failed');
+            $latest_round = (int)$round_stmt->get_result()->fetch_assoc()['latest_round'];
+            $round_stmt->close();
+            $review_round = max(1, $latest_round);
+            if ($latest_round > 0) {
+                $prior = $conn->prepare(
+                    "SELECT SUM(reviewer_community_id=?) AS local_count,
+                            SUM(reviewer_community_id=?) AS parent_count,
+                            SUM(finding='conflict_confirmed') AS conflict_count,
+                            SUM(finding='no_conflict') AS no_conflict_count
+                     FROM community_law_conformity_conflict_reviews
+                     WHERE conflict_id=? AND review_round=?"
+                );
+                if (!$prior) throw new RuntimeException('prior review round prepare failed');
+                $local_id_for_round = (int)$row['community_id'];
+                $parent_id_for_round = (int)$row['parent_community_id'];
+                $prior->bind_param('iiii', $local_id_for_round, $parent_id_for_round, $conflict_id, $latest_round);
+                if (!$prior->execute()) throw new RuntimeException('prior review round read failed');
+                $prior_tally = $prior->get_result()->fetch_assoc();
+                $prior->close();
+                $prior_complete = (int)$prior_tally['local_count'] > 0 && (int)$prior_tally['parent_count'] > 0;
+                $prior_disagreed = (int)$prior_tally['conflict_count'] > 0 && (int)$prior_tally['no_conflict_count'] > 0;
+                if ($prior_complete && !$prior_disagreed) {
+                    throw new RuntimeException('this conflict already has a conclusive independent review');
+                }
+                if ($prior_complete && $prior_disagreed) $review_round = $latest_round + 1;
+            }
+            // A reviewer may contribute only once to this conflict, including across reconsideration rounds.
+            $repeat = $conn->prepare(
+                'SELECT 1 FROM community_law_conformity_conflict_reviews WHERE conflict_id=? AND reviewer_user_id=? LIMIT 1'
+            );
+            if (!$repeat) throw new RuntimeException('reviewer repeat check prepare failed');
+            $repeat->bind_param('ii', $conflict_id, $user_id);
+            if (!$repeat->execute()) throw new RuntimeException('reviewer repeat check failed');
+            $has_reviewed_before = (bool)$repeat->get_result()->fetch_row();
+            $repeat->close();
+            if ($has_reviewed_before) throw new RuntimeException('reviewer cannot repeat a prior review');
             $save = $conn->prepare(
                 "INSERT INTO community_law_conformity_conflict_reviews
-                 (conflict_id,reviewer_user_id,reviewer_community_id,finding,reasoning,evidence)
-                 VALUES (?,?,?,?,?,?)"
+                 (conflict_id,review_round,reviewer_user_id,reviewer_community_id,finding,reasoning,evidence)
+                 VALUES (?,?,?,?,?,?,?)"
             );
             if (!$save) throw new RuntimeException('review insert prepare failed');
-            $save->bind_param('iiisss', $conflict_id, $user_id, $reviewer_community_id, $finding, $reasoning, $evidence);
+            $save->bind_param('iiiisss', $conflict_id, $review_round, $user_id, $reviewer_community_id, $finding, $reasoning, $evidence);
             if (!$save->execute()) throw new RuntimeException('review insert failed');
             $save->close();
 
@@ -157,7 +200,7 @@ if (!function_exists('community_law_conformity_review_conflict')) {
             if (!$reviews) throw new RuntimeException('review tally prepare failed');
             $local_id = (int)$row['community_id'];
             $parent_id = (int)$row['parent_community_id'];
-            $reviews->bind_param('iii', $local_id, $parent_id, $conflict_id);
+            $reviews->bind_param('iiii', $local_id, $parent_id, $conflict_id, $review_round);
             if (!$reviews->execute()) throw new RuntimeException('review tally failed');
             $tally = $reviews->get_result()->fetch_assoc();
             $reviews->close();

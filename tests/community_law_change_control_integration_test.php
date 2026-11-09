@@ -34,6 +34,7 @@ try {
     change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_change_voting.sql');
     change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_change_effects.sql');
     change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_conformity_workflow.sql');
+    change_case_apply_sql($db,__DIR__.'/../migrations/20261109_community_law_conformity_review_rounds.sql');
     change_case_apply_sql($db,__DIR__.'/../migrations/20261109_community_hierarchy_change_history.sql');
     change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_z1_amendment_00_workflow.sql');
     change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_z1_amendment_10_submission.sql');
@@ -351,6 +352,11 @@ try {
     change_case_check(community_law_conformity_review_conflict($db,$disagreement_id,90103,90010,'no_conflict','از دید جامعه مادر، دو ماده با یکدیگر تعارض حقوقی ندارند.'),'parent reviewer can independently disagree with the local finding');
     $disagreement=$db->query("SELECT f.finding,c.status,c.resolved_at FROM community_law_conformity_conflicts f JOIN community_law_conformity_cases c ON c.id=f.case_id WHERE f.id=".$disagreement_id)->fetch_assoc();
     change_case_check($disagreement && $disagreement['finding']==='needs_more_evidence' && $disagreement['status']==='review_required' && $disagreement['resolved_at']===null,'opposing local and parent findings require further review and never auto-resolve or force an amendment');
+    change_case_check(community_law_conformity_review_conflict($db,$disagreement_id,90202,90020,'conflict_confirmed','پس از بررسی دوبارهٔ شواهد و متن کامل ماده، دیدگاه جامعهٔ محلی همچنان تعارض را تأیید می‌کند.'),'a fresh local reviewer can start a second review round after disagreement');
+    change_case_check(community_law_conformity_review_conflict($db,$disagreement_id,90104,90010,'conflict_confirmed','پس از بررسی تکمیلی و مقایسهٔ دامنهٔ دو ماده، جامعهٔ مادر نیز تعارض را تأیید می‌کند.'),'a fresh parent reviewer can independently complete the second review round');
+    $reconsidered=$db->query("SELECT f.finding,c.status,c.resolved_at,(SELECT COUNT(DISTINCT review_round) FROM community_law_conformity_conflict_reviews WHERE conflict_id=f.id) AS rounds FROM community_law_conformity_conflicts f JOIN community_law_conformity_cases c ON c.id=f.case_id WHERE f.id=".$disagreement_id)->fetch_assoc();
+    change_case_check($reconsidered && $reconsidered['finding']==='conflict_confirmed' && $reconsidered['status']==='amendment_required' && $reconsidered['resolved_at']===null && (int)$reconsidered['rounds']===2,'a second unanimous independent round can resolve the disagreement without erasing the first round');
+
 
     $db->query("INSERT INTO community_law_implementations (law_version_id,community_id,responsible_user_id,local_plan,status,started_at,target_date,progress_report) VALUES (99001,90010,90101,'برنامهٔ جامعهٔ مادر','in_progress',NOW(),DATE_ADD(CURDATE(),INTERVAL 5 DAY),'گزارش پیشرفت مادر'),(99001,90020,90102,'برنامهٔ زیرجامعه','completed',NOW(),DATE_ADD(CURDATE(),INTERVAL 1 DAY),'گزارش تکمیل زیرجامعه')");
 
