@@ -12,6 +12,8 @@ on:
       - 'archived_topics.php'
       - 'knowledge_library.php'
       - 'community.php'
+      - 'community_hierarchy_history.php'
+      - 'tests/community_hierarchy_history_access_contract_test.php'
       - 'collective_knowledge_finalizer.php'
       - 'community_charter_amendment_action.php'
       - 'community_charter_amendments.php'
@@ -214,6 +216,8 @@ jobs:
           php -l archived_topics.php
           php -l knowledge_library.php
           php -l community.php
+          php -l community_hierarchy_history.php
+          php -l tests/community_hierarchy_history_access_contract_test.php
           php -l collective_knowledge_finalizer.php
           php -l community_charter_amendment_action.php
           php -l community_charter_amendments.php
@@ -256,10 +260,13 @@ jobs:
         run: php tests/community_law_amendment_vote_contract_test.php
       - name: Verify atomic amendment notice contract
         run: php tests/community_law_amendment_notice_contract_test.php
+      - name: Verify member-only hierarchy history access contract
+        run: php tests/community_hierarchy_history_access_contract_test.php
       - name: Run community law hierarchy and charter amendment tests
         run: |
           php tests/community_law_hierarchy_helpers_test.php
           php tests/community_charter_amendments_test.php
+          php tests/community_hierarchy_history_access_contract_test.php
 
   charter-mysql-integration:
     runs-on: ubuntu-latest
