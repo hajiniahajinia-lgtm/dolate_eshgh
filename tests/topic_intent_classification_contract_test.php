@@ -185,6 +185,7 @@ topic_intent_contract_check(
     str_contains($law, 'l.originating_community_id=?') &&
     str_contains($law, 'h.community_id=?') &&
     str_contains($law, 'history_scope.include_descendants=1') &&
+    str_contains($law, "$history_types = 'iii' . str_repeat('i', count($history_ancestor_ids))") &&
     str_contains($law, 'community_law_hierarchy_path($history_parent_map, $community_id)') &&
     str_contains($law, 'community_law_scope_matches(') &&
     str_contains($law, 'if (!$is_local_history && !$version_scope_matches)') &&

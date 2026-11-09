@@ -4324,7 +4324,7 @@ if ($schema_ready && $is_member) {
         LIMIT 300";
     $history_stmt = $conn->prepare($history_sql);
     if ($history_stmt) {
-        $history_types = 'ii' . str_repeat('i', count($history_ancestor_ids));
+        $history_types = 'iii' . str_repeat('i', count($history_ancestor_ids));
         $history_params = [$history_types, $community_id, $community_id];
         if ($history_ancestor_ids) {
             foreach ($history_ancestor_ids as $history_ancestor_id) {
