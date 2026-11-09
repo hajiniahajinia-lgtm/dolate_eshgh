@@ -165,6 +165,13 @@ try {
                         if ($winner !== $parents[$community_id]) {
                             $new_parents = $parents;
                             $new_parents[$community_id] = $winner;
+                            $old_parent_id = $parents[$community_id] > 0 ? (int)$parents[$community_id] : null;
+                            $new_parent_id = $winner > 0 ? $winner : null;
+                            if (!community_hierarchy_record_parent_change(
+                                $conn, $community_id, $round_id, $old_parent_id, $new_parent_id, $user_id
+                            )) {
+                                throw new Exception('record hierarchy change history failed');
+                            }
                             if (!community_law_record_hierarchy_scope_changes(
                                 $conn, $parents, $new_parents, $community_id, $user_id
                             )) {
