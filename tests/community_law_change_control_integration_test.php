@@ -125,7 +125,13 @@ try {
     $db->query("CREATE TRIGGER test_fail_conformity_event BEFORE INSERT ON community_law_conformity_events
         FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='forced conformity event failure'");
     $db->begin_transaction();
-    $conformity_event_failed = !community_law_register_hierarchy_conformity_reviews($db,[90010=>0,90020=>90010,90030=>90020],90020,90100);
+    $conformity_event_failed = false;
+    try {
+        $conformity_event_failed = !community_law_register_hierarchy_conformity_reviews($db,[90010=>0,90020=>90010,90030=>90020],90020,90100);
+    } catch (Throwable $e) {
+        // mysqli strict mode throws on the trigger; the caller must still rollback.
+        $conformity_event_failed = true;
+    }
     $db->rollback();
     $db->query("DROP TRIGGER test_fail_conformity_event");
     $conformity_after_failure = (int)$db->query("SELECT COUNT(*) AS n FROM community_law_conformity_cases WHERE local_law_version_id=99004")->fetch_assoc()['n'];
