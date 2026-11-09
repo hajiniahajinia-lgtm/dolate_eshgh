@@ -138,7 +138,7 @@ if (!function_exists('community_law_conformity_review_conflict')) {
             }
             $round_stmt = $conn->prepare(
                 "SELECT COALESCE(MAX(review_round),0) AS latest_round
-                 FROM community_law_conformity_conflict_reviews WHERE conflict_id=? AND review_round=?"
+                 FROM community_law_conformity_conflict_reviews WHERE conflict_id=?"
             );
             if (!$round_stmt) throw new RuntimeException('review round lookup prepare failed');
             $round_stmt->bind_param('i', $conflict_id);
@@ -195,7 +195,7 @@ if (!function_exists('community_law_conformity_review_conflict')) {
                         SUM(reviewer_community_id=?) AS parent_count,
                         SUM(finding='conflict_confirmed') AS conflict_count,
                         SUM(finding='no_conflict') AS no_conflict_count
-                 FROM community_law_conformity_conflict_reviews WHERE conflict_id=?"
+                 FROM community_law_conformity_conflict_reviews WHERE conflict_id=? AND review_round=?"
             );
             if (!$reviews) throw new RuntimeException('review tally prepare failed');
             $local_id = (int)$row['community_id'];
