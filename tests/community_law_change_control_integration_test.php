@@ -149,7 +149,7 @@ try {
     )->fetch_assoc()['n'];
     change_case_check($dual_member_review_count===1,'dual membership leaves exactly one independent review record');
     $review_history=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_history WHERE law_id=9502 AND event_type='conformity_conflict_reviewed'")->fetch_assoc()['n'];
-    change_case_check($review_history===2,'both independent reviews are preserved in the local law history');
+    change_case_check($review_history===3,'both independent reviews and the additional dual-membership review are preserved in the local law history');
 
     // پیشنهاد اصلاح فقط مواد مشخص را تغییر می‌دهد و نسخه مصوب را دست‌نخورده نگه می‌دارد.
     $amendment_id=community_law_create_amendment_draft(
