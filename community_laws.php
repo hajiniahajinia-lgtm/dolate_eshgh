@@ -5148,8 +5148,7 @@ details>summary{cursor:pointer;font-weight:bold}
                                                     <p class="meta">ارزیابی شما در این دور قبلاً ثبت شده و قابل ویرایش یا حذف نیست.</p>
                                                 <?php endif; ?>
                                                 <?php if ((int)$corrective_action['responsible_user_id']===$user_id &&
-                                                    !in_array($completion_status,['pending','verified'],true) &&
-                                                    $action_status!=='completion_claimed'): ?>
+                                                    !in_array($completion_status,['pending','verified'],true)): ?>
                                                     <form method="post" action="community_law_outcome_action.php">
                                                         <input type="hidden" name="action" value="update_corrective_action">
                                                         <input type="hidden" name="csrf_token" value="<?= community_laws_escape($csrf_token) ?>">
