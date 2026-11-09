@@ -123,9 +123,9 @@ topic_intent_contract_check(
 );
 
 topic_intent_contract_check(
-    str_contains($law, '$source_decision_id === null && $source_topic_id === null && $source_idea_id === null') &&
-    str_contains($law, "community_laws_redirect(\$community_id, 'invalid_source')"),
-    'a formal law draft cannot be created without traceable lawmaking provenance'
+    str_contains($law, '$source_decision_id <= 0') &&
+    str_contains($law, 'if (!$source_origin) community_laws_redirect($community_id, \'invalid_source\')'),
+    'a formal law draft cannot be created without a valid accepted decision origin'
 );
 
 
