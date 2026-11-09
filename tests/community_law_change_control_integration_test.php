@@ -706,8 +706,11 @@ try {
     change_case_check($repealed && $repealed['status']==='repealed' && $repealed['repealed_at']!==null && (int)$repealed['last_status_change_case_id']===$repeal_case,'repeal is recorded as the authoritative law status transition');
     $repealed_impl=$db->query('SELECT community_id,status,progress_report FROM community_law_implementations WHERE law_version_id=99001 ORDER BY community_id')->fetch_all(MYSQLI_ASSOC);
     change_case_check(count($repealed_impl)===3 && $repealed_impl[0]['status']==='not_applicable' && $repealed_impl[1]['status']==='not_applicable' && $repealed_impl[0]['progress_report']==='گزارش پیشرفت مادر' && $repealed_impl[1]['progress_report']==='گزارش تکمیل زیرجامعه' && (int)$repealed_impl[2]['community_id']===90050 && $repealed_impl[2]['status']==='not_applicable','repeal ends obligations across the scoped implementations while retaining prior progress reports');
-    $repeal_notice_count=(int)$db->query('SELECT COUNT(*) AS n FROM community_law_community_notices WHERE case_id='.(int)$repeal_case." AND event_type='repealed'")->fetch_assoc()['n'];
-    change_case_check($repeal_notice_count===4,'parent, direct child and deep descendant receive repeal notices');
+    $repeal_notice_rows=$db->query("SELECT community_id FROM community_law_community_notices WHERE case_id=".(int)$repeal_case." AND event_type='repealed' ORDER BY community_id")->fetch_all(MYSQLI_ASSOC);
+    $repeal_notice_ids=array_map('intval',array_column($repeal_notice_rows,'community_id'));
+    $expected_repeal_notice_ids=community_law_scope_community_ids($db,99001);
+    $repeal_notice_count=count($repeal_notice_ids);
+    change_case_check(is_array($expected_repeal_notice_ids) && $repeal_notice_ids===$expected_repeal_notice_ids,'parent, direct child and every deep descendant in the current law scope receive repeal notices');
     $repeal_snapshot_count=(int)$db->query('SELECT COUNT(*) AS n FROM community_law_change_implementation_snapshots WHERE case_id='.(int)$repeal_case)->fetch_assoc()['n'];
     change_case_check($repeal_snapshot_count===3,'repeal preserves a complete pre-repeal implementation snapshot');
     $repeal_history_before=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_history WHERE law_id=9501 AND event_type='law_repealed'")->fetch_assoc()['n'];
