@@ -840,7 +840,8 @@ textarea{resize:vertical}button,.button{display:inline-block;border:0;border-rad
 <?php if ($entry_decision_link): ?>
 <p class="muted">📋 تصمیم جمعی مرتبط: شمارهٔ <?= (int)$entry_decision_link['decision_id'] ?> ·
 پذیرش: <?= $entry_decision_link['acceptance_status']==='accepted'?'پذیرفته‌شده':($entry_decision_link['acceptance_status']==='not_accepted'?'پذیرفته‌نشده':'بدون رأی') ?> ·
-وضعیت الزام: <?= $entry_decision_link['enforceability_status']==='enforceable'?'لازم‌الاجرا':($entry_decision_link['enforceability_status']==='not_enforceable'?'غیرلازم‌الاجرا':'تعیین‌نشده') ?></p>
+وضعیت الزام: <?= $entry_decision_link['enforceability_status']==='enforceable'?'لازم‌الاجرا':($entry_decision_link['enforceability_status']==='not_enforceable'?'غیرلازم‌الاجرا':'تعیین‌نشده') ?> ·
+<a href="archived_topics.php?community_id=<?= (int)$entry_decision_link['community_id'] ?>#decision-<?= (int)$entry_decision_link['decision_id'] ?>">مشاهدهٔ تصمیم در آرشیو جامعه</a></p>
 <?php endif; ?>
 <?php if (!empty($entry['source_idea_id']) && $can_view_source_idea): ?><p>ایدهٔ مرتبط: <a href="community.php?id=<?= (int)($entry['source_idea_community_id'] ?? 0) ?>#topic-<?= (int)($entry['source_idea_topic_id'] ?? 0) ?>">مشاهدهٔ موضوع و ایدهٔ مرتبط</a> — <?= kl_h(mb_substr(strip_tags((string)($entry['source_idea_content'] ?? '')),0,180,'UTF-8')) ?></p><?php elseif (!empty($entry['source_idea_id'])): ?><p class="muted">ایدهٔ مرجع در جامعهٔ دیگری است؛ برای مشاهده باید عضو آن جامعه باشید.</p><?php endif; ?>
 

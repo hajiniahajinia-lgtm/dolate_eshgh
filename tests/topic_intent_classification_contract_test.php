@@ -66,6 +66,7 @@ topic_intent_contract_check(
 
 topic_intent_contract_check(
     is_string($library) &&
+    str_contains($library, 'archived_topics.php?community_id=<?= (int)$entry_decision_link[\'community_id\'] ?>#decision-') &&
     str_contains($library, 'source_topic_intent') &&
     str_contains($library, 'مسیر مبدأ:') &&
     str_contains($library, "['knowledge'=>'دانش‌محور','decision'=>'تصمیم‌گیری','law'=>'قانون‌گذاری']"),
@@ -85,6 +86,7 @@ topic_intent_contract_check(
     str_contains($archive, "v.id AS version_id, v.status AS version_status") &&
     str_contains($archive, 'مشاهدهٔ پروندهٔ رسمی قانون و مراحل آن') &&
     str_contains($archive, 'community_laws.php?community_id=') &&
+    str_contains($archive, 'id="decision-<?= (int)$row[\'decision_link\'][\'decision_id\'] ?>"') &&
     str_contains($archive, 'intent_progress') &&
     str_contains($archive, 'community_law_versions') &&
     str_contains($archive, 'رأی موضوع فقط منشأ پیشنهاد است'),
@@ -107,9 +109,10 @@ topic_intent_contract_check(
     str_contains($law, 'id="law-<?= (int)$law[\'law_id\'] ?>"') &&
     str_contains($law, 'LEFT JOIN topics source_topic ON source_topic.id=v.source_topic_id') &&
     str_contains($law, 'منشأ قانون:') &&
-    str_contains($law, 'community.php?id=<?= (int)$law[\'originating_community_id\'] ?>#topic-'),
+    str_contains($law, 'archived_topics.php?community_id=<?= (int)$law[\'originating_community_id\'] ?>#topic-card-') &&
+    str_contains($law, 'archived_topics.php?community_id=<?= (int)$law[\'originating_community_id\'] ?>#decision-'),
 
-    'law records expose stable anchors for source-topic navigation'
+    'law records link to the archived source topic and its accepted decision'
 );
 
 topic_intent_contract_check(

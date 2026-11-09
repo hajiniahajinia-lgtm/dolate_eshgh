@@ -4713,11 +4713,13 @@ details>summary{cursor:pointer;font-weight:bold}
                 <?php if (!empty($law['source_topic_id'])): ?>
                 <div class="meta" style="margin:6px 0 10px">
                     منشأ قانون:
-                    <a href="community.php?id=<?= (int)$law['originating_community_id'] ?>#topic-<?= (int)$law['source_topic_id'] ?>">
+                    <a href="archived_topics.php?community_id=<?= (int)$law['originating_community_id'] ?>#topic-card-<?= (int)$law['source_topic_id'] ?>">
                         موضوع شمارهٔ <?= (int)$law['source_topic_id'] ?> — <?= community_laws_escape($law['source_topic_title'] ?? 'مشاهده موضوع مبدأ') ?>
                     </a>
                     <?php if (!empty($law['source_idea_id'])): ?> · شناسهٔ ایدهٔ مبدأ: <?= (int)$law['source_idea_id'] ?><?php endif; ?>
-                    <?php if (!empty($law['source_decision_id'])): ?> · شناسهٔ تصمیم مبدأ: <?= (int)$law['source_decision_id'] ?><?php endif; ?>
+                    <?php if (!empty($law['source_decision_id'])): ?>
+                        · <a href="archived_topics.php?community_id=<?= (int)$law['originating_community_id'] ?>#decision-<?= (int)$law['source_decision_id'] ?>">مشاهدهٔ تصمیم مبدأ شمارهٔ <?= (int)$law['source_decision_id'] ?></a>
+                    <?php endif; ?>
                 </div>
                 <?php endif; ?>
                 <div class="law-text"><?= community_laws_escape($law['law_text']) ?></div>

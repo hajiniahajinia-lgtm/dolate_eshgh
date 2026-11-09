@@ -1055,7 +1055,7 @@ document.addEventListener('DOMContentLoaded',function(){
             <?php endif; ?>
 
             <?php if(!empty($row['decision_link'])): ?>
-            <div style="margin-top:9px;padding:9px 11px;border:1px solid #cbd5e1;border-radius:8px;background:#f8fafc;font-size:12px;line-height:1.9">
+            <div id="decision-<?= (int)$row['decision_link']['decision_id'] ?>" style="margin-top:9px;padding:9px 11px;border:1px solid #cbd5e1;border-radius:8px;background:#f8fafc;font-size:12px;line-height:1.9">
               <strong>📋 پروندهٔ تصمیم جامعه</strong>
               <div>شناسهٔ تصمیم: <?= (int)$row['decision_link']['decision_id'] ?> · پذیرش جمعی: <?= $row['decision_link']['acceptance_status']==='accepted'?'پذیرفته‌شده':($row['decision_link']['acceptance_status']==='not_accepted'?'پذیرفته‌نشده':'بدون رأی') ?></div>
               <div>وضعیت الزام: <?= $row['decision_link']['enforceability_status']==='enforceable'?'لازم‌الاجرا':($row['decision_link']['enforceability_status']==='not_enforceable'?'غیرلازم‌الاجرا':'تعیین‌نشده') ?></div>
