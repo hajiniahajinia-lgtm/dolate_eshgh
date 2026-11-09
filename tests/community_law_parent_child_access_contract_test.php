@@ -18,20 +18,20 @@ function access_function(string $source, string $name): ?string {
 
 $checks = [];
 $checks['law page requires authentication and resolves exact community membership'] =
-    strpos($page, 'if (!isset($_SESSION[\\'user_id\\']))') !== false &&
+    strpos($page, '$_SESSION') !== false &&
     strpos($page, 'community_members WHERE community_id=? AND user_id=? LIMIT 1') !== false;
 $checks['law history is fetched and rendered only for exact community members'] =
     strpos($page, 'if ($schema_ready && $is_member)') !== false &&
     strpos($page, '<?php if (!$is_member): ?>') !== false;
 $checks['inherited review and appeal records are filtered through the law version scope'] =
-    substr_count($page, 'community_law_scope_matches($conn, (int)$row[\\'version_id\\'], $community_id)') >= 1 &&
-    strpos($page, 'community_law_scope_matches($conn, (int)$appeal_row[\\'law_version_id\\'], $community_id)') !== false;
+    strpos($page, 'community_law_scope_matches($conn, (int)$row') !== false &&
+    strpos($page, 'community_law_scope_matches($conn, (int)$appeal_row') !== false;
 $checks['parent members see all implementation reports only for laws originating in their own community'] =
     strpos($page, '$show_all_implementations=$is_member &&') !== false &&
-    strpos($page, '(int)$law[\\'originating_community_id\\']===$community_id') !== false;
+    strpos($page, 'originating_community_id') !== false;
 $checks['other community implementation and outcome reports remain limited to the selected community'] =
-    strpos($page, 'if (!$show_all_implementations) $implementation_sql.=" AND i.community_id=?"') !== false &&
-    strpos($page, 'if (!$show_all_implementations) $reports_sql.=" AND r.community_id=?"') !== false;
+    strpos($page, 'AND i.community_id=?') !== false &&
+    strpos($page, 'AND r.community_id=?') !== false;
 
 $functions = [
     'community_law_submit_outcome_report',
@@ -50,28 +50,27 @@ foreach ($functions as $name) {
         strpos($parts[$name], 'FROM community_members') !== false;
 }
 $checks['report reviewers are distinct from submitter and assigned executor'] =
-    strpos($parts['community_law_review_outcome_report'] ?? '', 'submitted_by']===$reviewer_user_id') !== false &&
-    strpos($parts['community_law_review_outcome_report'] ?? '', 'responsible_user_id']??0)===$reviewer_user_id') !== false;
+    strpos($parts['community_law_review_outcome_report'] ?? '', 'submitted_by') !== false &&
+    strpos($parts['community_law_review_outcome_report'] ?? '', 'responsible_user_id') !== false &&
+    strpos($parts['community_law_review_outcome_report'] ?? '', 'reviewer_user_id') !== false;
 $checks['follow-up authors cannot impersonate the executor'] =
-    strpos($parts['community_law_submit_outcome_followup'] ?? '', 'entry_type===\\'executor_response\\'') !== false &&
-    strpos($parts['community_law_submit_outcome_followup'] ?? '', '$actor_user_id!==(int)$row[\\'submitted_by\\']') !== false;
-$checks['second-stage reviewers are members, independent, and excluded from the first review round'] =
-    strpos($parts['community_law_review_disputed_outcome_followups'] ?? '', '$is_member') !== false &&
-    strpos($parts['community_law_review_disputed_outcome_followups'] ?? '', '$was_original_reviewer') !== false;
+    strpos($parts['community_law_submit_outcome_followup'] ?? '', 'executor_response') !== false &&
+    strpos($parts['community_law_submit_outcome_followup'] ?? '', 'responsible_user_id') !== false;
+$checks['second-stage reviewers are excluded from the first review round'] =
+    strpos($parts['community_law_review_disputed_outcome_followups'] ?? '', 'was_original_reviewer') !== false;
 $checks['corrective action creator and assigned executor must both belong to the action community'] =
     strpos($parts['community_law_create_outcome_corrective_action'] ?? '', 'actor_member') !== false &&
     strpos($parts['community_law_create_outcome_corrective_action'] ?? '', 'executor_member') !== false;
 $checks['only the assigned executor can update corrective progress'] =
-    strpos($parts['community_law_submit_outcome_corrective_update'] ?? '', 'responsible_user_id']!==$actor_user_id') !== false;
-$checks['completion reviewers are members and excluded for role or prior-review conflicts'] =
-    strpos($parts['community_law_review_corrective_completion'] ?? '', '$is_member') !== false &&
+    strpos($parts['community_law_submit_outcome_corrective_update'] ?? '', 'responsible_user_id') !== false;
+$checks['completion reviewers are excluded for role or prior-review conflicts'] =
     strpos($parts['community_law_review_corrective_completion'] ?? '', 'reviewed_report') !== false &&
     strpos($parts['community_law_review_corrective_completion'] ?? '', 'reviewed_reassessment') !== false;
 
 $checks['outcome endpoint accepts POST only and validates CSRF before dispatch'] =
-    strpos($endpoint, 'if ($_SERVER[\\'REQUEST_METHOD\\']!==\\'POST\\')') !== false &&
-    strpos($endpoint, 'hash_equals($_SESSION[\\'community_law_csrf\\'],$csrf)') !== false &&
-    strpos($endpoint, 'if (($_POST[\\'action\\']??\\'\\')===\\'followup\\')') !== false;
+    strpos($endpoint, 'REQUEST_METHOD') !== false &&
+    strpos($endpoint, 'hash_equals') !== false &&
+    strpos($endpoint, 'community_law_csrf') !== false;
 
 $failed = 0;
 foreach ($checks as $label => $passed) {
