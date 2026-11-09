@@ -39,6 +39,21 @@ if (!function_exists('community_law_conformity_is_member')) {
     }
 }
 
+if (!function_exists('community_law_conformity_lock_member')) {
+    // Membership is locked until the surrounding transaction commits, preventing
+    // a concurrent leave/removal from racing a conflict submission or review.
+    function community_law_conformity_lock_member(mysqli $conn, int $community_id, int $user_id): bool {
+        $stmt = $conn->prepare(
+            'SELECT 1 FROM community_members WHERE community_id=? AND user_id=? LIMIT 1 FOR UPDATE'
+        );
+        if (!$stmt) return false;
+        $stmt->bind_param('ii', $community_id, $user_id);
+        $ok = $stmt->execute() && (bool)$stmt->get_result()->fetch_row();
+        $stmt->close();
+        return $ok;
+    }
+}
+
 if (!function_exists('community_law_conformity_add_conflict')) {
     function community_law_conformity_add_conflict(
         mysqli $conn, int $case_id, int $user_id, string $local_reference,
@@ -63,7 +78,7 @@ if (!function_exists('community_law_conformity_add_conflict')) {
             $case = $lock->get_result()->fetch_assoc();
             $lock->close();
             if (!$case || !in_array($case['status'], ['review_required','amendment_required'], true) ||
-                !community_law_conformity_is_member($conn, (int)$case['community_id'], $user_id)) {
+                !community_law_conformity_lock_member($conn, (int)$case['community_id'], $user_id)) {
                 throw new RuntimeException('not authorized to identify conflict');
             }
             $insert = $conn->prepare(
@@ -132,7 +147,7 @@ if (!function_exists('community_law_conformity_review_conflict')) {
             $lock->close();
             if (!$row || !in_array($row['status'], ['review_required','amendment_required'], true) ||
                 !in_array($reviewer_community_id, [(int)$row['community_id'],(int)$row['parent_community_id']], true) ||
-                !community_law_conformity_is_member($conn, $reviewer_community_id, $user_id) ||
+                !community_law_conformity_lock_member($conn, $reviewer_community_id, $user_id) ||
                 (int)$row['identified_by'] === $user_id) {
                 throw new RuntimeException('reviewer is not eligible');
             }
