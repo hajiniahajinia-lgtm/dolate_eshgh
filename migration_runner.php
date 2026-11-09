@@ -52,6 +52,45 @@ try {
     $files = is_dir($directory) ? (glob($directory . '/*.sql') ?: []) : [];
     sort($files, SORT_STRING);
 
+    // Respect explicit schema prerequisites where filename order is insufficient.
+    $migration_dependencies = [
+        '20261108_community_decision_ledger.sql' => [
+            '20261108_community_decision_knowledge_link.sql'
+        ],
+        '20261109_community_law_corrective_completion_reviews.sql' => [
+            '20261109_community_law_corrective_completion_retries.sql'
+        ],
+        '20261031_topic_expertise_proposals.sql' => [
+            '20261031_topic_expertise_proposal_voting.sql'
+        ]
+    ];
+    foreach ($migration_dependencies as $prerequisite => $dependents) {
+        $prerequisite_path = null;
+        foreach ($files as $candidate_path) {
+            if (basename($candidate_path) === $prerequisite) {
+                $prerequisite_path = $candidate_path;
+                break;
+            }
+        }
+        if ($prerequisite_path === null) continue;
+        foreach ($dependents as $dependent) {
+            $dependent_index = null;
+            foreach ($files as $index => $candidate_path) {
+                if (basename($candidate_path) === $dependent) {
+                    $dependent_index = $index;
+                    break;
+                }
+            }
+            if ($dependent_index === null) continue;
+            $dependent_path = $files[$dependent_index];
+            array_splice($files, $dependent_index, 1);
+            $prerequisite_index = array_search($prerequisite_path, $files, true);
+            if ($prerequisite_index !== false) {
+                array_splice($files, $prerequisite_index + 1, 0, [$dependent_path]);
+            }
+        }
+    }
+
     $applied = [];
     $skipped = [];
 

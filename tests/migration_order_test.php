@@ -7,7 +7,9 @@ $names=array_map('basename',$files);
 sort($names,SORT_STRING);
 
 $runner=file_get_contents($migrationsDir.'/auto_apply.php');
-if(!is_string($runner) || strpos($runner,'$migration_dependencies')===false) {
+$protectedRunner=file_get_contents(__DIR__.'/../migration_runner.php');
+if(!is_string($runner) || strpos($runner,'$migration_dependencies')===false ||
+   !is_string($protectedRunner) || strpos($protectedRunner,'$migration_dependencies')===false) {
     fwrite(STDERR,"FAIL: automatic migration runner must declare explicit prerequisite ordering\\n");
     exit(1);
 }
@@ -27,7 +29,9 @@ $proposalSchema='20261031_topic_expertise_proposals.sql';
 $proposalVoting='20261031_topic_expertise_proposal_voting.sql';
 if(!in_array($proposalSchema,$names,true) || !in_array($proposalVoting,$names,true) ||
    strpos($runner, "'{$proposalSchema}' => [")===false ||
-   strpos($runner, "'{$proposalVoting}'")===false) {
+   strpos($runner, "'{$proposalVoting}'")===false ||
+   strpos($protectedRunner, "'{$proposalSchema}' => [")===false ||
+   strpos($protectedRunner, "'{$proposalVoting}'")===false) {
     fwrite(STDERR,"FAIL: expertise proposal voting dependency is missing\\n");
     exit(1);
 }
@@ -52,7 +56,9 @@ $completionReviews='20261109_community_law_corrective_completion_reviews.sql';
 $completionRetries='20261109_community_law_corrective_completion_retries.sql';
 if(!in_array($completionReviews,$names,true) || !in_array($completionRetries,$names,true) ||
    strpos($runner, "'{$completionReviews}' => [")===false ||
-   strpos($runner, "'{$completionRetries}'")===false) {
+   strpos($runner, "'{$completionRetries}'")===false ||
+   strpos($protectedRunner, "'{$completionReviews}' => [")===false ||
+   strpos($protectedRunner, "'{$completionRetries}'")===false) {
     fwrite(STDERR,"FAIL: corrective completion retry dependency is missing\\n");
     exit(1);
 }
