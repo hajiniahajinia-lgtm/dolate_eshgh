@@ -65,6 +65,7 @@ if ($ready) {
  $stmt->close();
 }
 $labels=['review_required'=>'در انتظار بررسی','amendment_required'=>'اصلاحیه لازم است','amendment_in_progress'=>'اصلاحیه در حال پیگیری','resolved'=>'سازگاری تأیید شده','closed'=>'بسته‌شده'];
+$finding_labels=['unreviewed'=>'در انتظار دو بررسی','conflict_confirmed'=>'تعارض تأیید شده','no_conflict'=>'تعارض تأیید نشد','needs_more_evidence'=>'اختلاف نظر؛ بررسی بیشتر لازم است'];
 ?>
 <!doctype html>
 <html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -106,7 +107,7 @@ body{font-family:Tahoma,Arial,sans-serif;background:#f5f6f8;color:#20242a;margin
 <?php if(!$conflicts): ?><p class="muted">هنوز مادهٔ مورد اختلافی ثبت نشده است.</p><?php endif; ?>
 <?php foreach($conflicts as $f): ?>
 <details><summary>مورد #<?=(int)$f['id']?> — <?=clcc_h($f['local_article_reference'])?> ↔ <?=clcc_h($f['parent_article_reference'])?></summary>
-<p><?=nl2br(clcc_h($f['conflict_description']))?></p><p class="muted">وضعیت بررسی: <?=clcc_h($f['finding'])?> | بررسی‌ها: <?=(int)$f['review_count']?> از ۲</p>
+<p><?=nl2br(clcc_h($f['conflict_description']))?></p><p class="muted">وضعیت بررسی: <?=clcc_h($finding_labels[$f['finding']]??$f['finding'])?> | بررسی‌ها: <?=(int)$f['review_count']?> از ۲</p>
 <?php if($f['evidence']): ?><pre><?=clcc_h($f['evidence'])?></pre><?php endif; ?>
 <?php if((int)$f['identified_by']!==$user_id && (int)$f['my_review']===0 && (int)$f['side_review']===0 && in_array($case['status'],['review_required','amendment_required'],true)): ?>
 <form method="post" action="community_law_conformity_action.php">
@@ -122,7 +123,7 @@ $reviews->bind_param('i',$f['id']);
 if(!$reviews->execute()){$reviews->close();http_response_code(503);exit('امکان دریافت سوابق بررسی وجود ندارد.');}
 $res=$reviews->get_result();
 while($rv=$res->fetch_assoc()):
-?><div class="notice"><strong><?= (int)$rv['reviewer_community_id']===(int)$case['community_id']?'دیدگاه جامعهٔ محلی':'دیدگاه جامعهٔ مادر' ?> — <?=clcc_h($rv['finding'])?></strong><p><?=nl2br(clcc_h($rv['reasoning']))?></p><?php if($rv['evidence']): ?><pre><?=clcc_h($rv['evidence'])?></pre><?php endif; ?></div><?php endwhile;$reviews->close(); ?>
+?><div class="notice"><strong><?= (int)$rv['reviewer_community_id']===(int)$case['community_id']?'دیدگاه جامعهٔ محلی':'دیدگاه جامعهٔ مادر' ?> — <?=clcc_h($finding_labels[$rv['finding']]??$rv['finding'])?></strong><p><?=nl2br(clcc_h($rv['reasoning']))?></p><?php if($rv['evidence']): ?><pre><?=clcc_h($rv['evidence'])?></pre><?php endif; ?></div><?php endwhile;$reviews->close(); ?>
 </details>
 <?php endforeach; ?>
 </div>
