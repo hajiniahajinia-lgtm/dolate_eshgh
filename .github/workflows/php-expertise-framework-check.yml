@@ -74,6 +74,7 @@ on:
       - 'migrations/20261108_community_law_z1_amendment_10_submission.sql'
       - 'migrations/20261108_community_law_z1_amendment_20_voting.sql'
       - 'migrations/20261108_community_law_z1_amendment_30_parent_review.sql'
+      - 'migrations/20261109_community_law_amendment_parent_review_rounds.sql'
       - 'migrations/20261108_community_law_z2_scope_notices.sql'
       - 'community_law_helpers.php'
       - 'community_law_change_action.php'

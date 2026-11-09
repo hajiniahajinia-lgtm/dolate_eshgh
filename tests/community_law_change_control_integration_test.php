@@ -40,6 +40,7 @@ try {
     change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_z1_amendment_10_submission.sql');
     change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_z1_amendment_20_voting.sql');
     change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_z1_amendment_30_parent_review.sql');
+    change_case_apply_sql($db,__DIR__.'/../migrations/20261109_community_law_amendment_parent_review_rounds.sql');
     change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_z2_scope_notices.sql');
     change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_z3_version_notices.sql');
     require_once __DIR__.'/../community_law_helpers.php';
@@ -88,7 +89,7 @@ try {
 
 
     $db->query("INSERT INTO communities (id,parent_community_id) VALUES (90010,NULL),(90020,90010) ON DUPLICATE KEY UPDATE parent_community_id=VALUES(parent_community_id)");
-    $db->query("INSERT INTO community_members (community_id,user_id) VALUES (90010,90100),(90020,90200),(90010,90101),(90010,90102),(90010,90103),(90010,90104),(90010,90105),(90010,90106),(90010,90107),(90010,90108),(90020,90201),(90020,90202),(90020,90203),(90020,90204),(90020,90205),(90020,90206),(90020,90207),(90020,90106) ON DUPLICATE KEY UPDATE user_id=VALUES(user_id)");
+    $db->query("INSERT INTO community_members (community_id,user_id) VALUES (90010,90100),(90020,90200),(90010,90101),(90010,90102),(90010,90103),(90010,90104),(90010,90105),(90010,90106),(90010,90107),(90010,90108),(90010,90109),(90010,90110),(90020,90201),(90020,90202),(90020,90203),(90020,90204),(90020,90205),(90020,90206),(90020,90207),(90020,90106) ON DUPLICATE KEY UPDATE user_id=VALUES(user_id)");
     $db->query("INSERT INTO community_laws (id,law_code,originating_community_id,created_by,status,current_version_id,effective_at) VALUES (9501,'LAW-CHANGE-TEST',90010,90100,'approved',99001,NOW())");
     $db->query("INSERT INTO community_law_versions (id,law_id,version_number,title,law_text,proposed_by,status,approved_at) VALUES (99001,9501,1,'قانون آزمایشی','متن قانون',90100,'approved',NOW())");
     $db->query("INSERT INTO community_law_scopes (law_version_id,scope_community_id,include_descendants) VALUES (99001,90010,1)");
@@ -231,8 +232,13 @@ try {
     $one_parent_review=$db->query("SELECT status FROM community_law_amendment_cases WHERE id=".(int)$amendment_id)->fetch_assoc();
     change_case_check($one_parent_review && $one_parent_review['status']==='parent_review','one parent reviewer cannot finalize compatibility alone');
     change_case_check(community_law_submit_amendment_parent_review($db,$amendment_id,90010,90105,'compatible',[],'از نظر این ارزیاب، سایر مواد اصلاح‌شده سازگارند.'),'a second independent parent reviewer can submit a separate compatibility finding');
-    $parent_result=$db->query("SELECT a.status,c.status AS conformity_status,l.status AS law_status,l.current_version_id,v.law_text FROM community_law_amendment_cases a JOIN community_law_conformity_cases c ON c.id=a.conformity_case_id JOIN community_laws l ON l.id=a.law_id JOIN community_law_versions v ON v.id=a.proposed_version_id WHERE a.id=".(int)$amendment_id)->fetch_assoc();
-    change_case_check($parent_result && $parent_result['status']==='revision_required' && $parent_result['conformity_status']==='amendment_required','any independently documented remaining conflict returns only the amendment to the local community');
+    $split_parent_result=$db->query("SELECT a.status,c.status AS conformity_status,(SELECT COUNT(DISTINCT review_round) FROM community_law_amendment_parent_reviews WHERE case_id=a.id) AS rounds FROM community_law_amendment_cases a JOIN community_law_conformity_cases c ON c.id=a.conformity_case_id WHERE a.id=".(int)$amendment_id)->fetch_assoc();
+    change_case_check($split_parent_result && $split_parent_result['status']==='parent_review' && $split_parent_result['conformity_status']==='amendment_in_progress' && (int)$split_parent_result['rounds']===1,'disagreement between parent reviewers remains open instead of forcing local revision');
+    change_case_check(!community_law_submit_amendment_parent_review($db,$amendment_id,90010,90104,'compatible',[],'ارزیاب قبلی حق تکرار بررسی را ندارد.'),'a parent reviewer cannot repeat their opinion in a later round');
+    change_case_check(community_law_submit_amendment_parent_review($db,$amendment_id,90010,90109,'conflict_remains',['ماده ۳'],'ارزیاب مستقل تازه پس از بررسی دوباره، تعارض باقی‌مانده را تأیید می‌کند.'),'a fresh parent reviewer can begin a second review round after disagreement');
+    change_case_check(community_law_submit_amendment_parent_review($db,$amendment_id,90010,90110,'conflict_remains',['ماده ۳'],'بررسی مستقل دوم در دور تازه نیز باقی‌ماندن تعارض را تأیید می‌کند.'),'a second fresh parent reviewer can complete the unanimous second round');
+    $parent_result=$db->query("SELECT a.status,c.status AS conformity_status,l.status AS law_status,l.current_version_id,v.law_text,(SELECT COUNT(DISTINCT review_round) FROM community_law_amendment_parent_reviews WHERE case_id=a.id) AS rounds FROM community_law_amendment_cases a JOIN community_law_conformity_cases c ON c.id=a.conformity_case_id JOIN community_laws l ON l.id=a.law_id JOIN community_law_versions v ON v.id=a.proposed_version_id WHERE a.id=".(int)$amendment_id)->fetch_assoc();
+    change_case_check($parent_result && $parent_result['status']==='revision_required' && $parent_result['conformity_status']==='amendment_required' && (int)$parent_result['rounds']===2,'only unanimous independent parent findings in a single round can return the amendment for revision');
     change_case_check($parent_result && $parent_result['law_status']==='approved' && (int)$parent_result['current_version_id']===99002 && $parent_result['law_text']==='متن اصلاح‌شدهٔ قانون محلی','parent review cannot replace local text or change the active approved law');
     $parent_history=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_amendment_parent_reviews WHERE case_id=".(int)$amendment_id)->fetch_assoc()['n'];
     change_case_check($parent_history===2,'both independent parent compatibility reviews are preserved');

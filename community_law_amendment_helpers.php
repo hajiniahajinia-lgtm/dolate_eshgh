@@ -703,23 +703,65 @@ if (!function_exists('community_law_submit_amendment_parent_review')) {
                 if (!isset($allowed[$reference])) throw new RuntimeException('parent review reference must identify an amended article');
             }
 
+            $round_stmt=$conn->prepare(
+                'SELECT COALESCE(MAX(review_round),0) AS latest_round
+                 FROM community_law_amendment_parent_reviews WHERE case_id=?'
+            );
+            if (!$round_stmt) throw new RuntimeException('parent review round lookup prepare failed');
+            $round_stmt->bind_param('i',$amendment_id);
+            if (!$round_stmt->execute()) throw new RuntimeException('parent review round lookup failed');
+            $latest_round=(int)$round_stmt->get_result()->fetch_assoc()['latest_round'];
+            $round_stmt->close();
+            $review_round=max(1,$latest_round);
+            if ($latest_round>0) {
+                $prior_round=$conn->prepare(
+                    "SELECT COUNT(*) AS total,
+                            SUM(finding='conflict_remains') AS conflicts,
+                            SUM(finding='compatible') AS compatible
+                     FROM community_law_amendment_parent_reviews
+                     WHERE case_id=? AND review_round=?"
+                );
+                if (!$prior_round) throw new RuntimeException('prior parent review round prepare failed');
+                $prior_round->bind_param('ii',$amendment_id,$latest_round);
+                if (!$prior_round->execute()) throw new RuntimeException('prior parent review round read failed');
+                $prior_totals=$prior_round->get_result()->fetch_assoc();
+                $prior_round->close();
+                if ((int)$prior_totals['total']>=2) {
+                    $prior_disagreed=(int)$prior_totals['conflicts']>0 && (int)$prior_totals['compatible']>0;
+                    if (!$prior_disagreed) throw new RuntimeException('parent review already reached a conclusive result');
+                    $review_round=$latest_round+1;
+                }
+            }
+            $repeat=$conn->prepare(
+                'SELECT 1 FROM community_law_amendment_parent_reviews WHERE case_id=? AND reviewer_user_id=? LIMIT 1'
+            );
+            if (!$repeat) throw new RuntimeException('parent reviewer repeat check prepare failed');
+            $repeat->bind_param('ii',$amendment_id,$user_id);
+            if (!$repeat->execute()) throw new RuntimeException('parent reviewer repeat check failed');
+            $has_reviewed_before=(bool)$repeat->get_result()->fetch_row();
+            $repeat->close();
+            if ($has_reviewed_before) throw new RuntimeException('parent reviewer cannot repeat across rounds');
+
             $references_json=json_encode(array_keys($refs),JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
             $review=$conn->prepare(
                 'INSERT INTO community_law_amendment_parent_reviews
-                    (case_id,reviewer_user_id,parent_community_id,finding,conflicting_article_references,reasoning,evidence)
-                 VALUES (?,?,?,?,?,?,?)'
+                    (case_id,review_round,reviewer_user_id,parent_community_id,finding,conflicting_article_references,reasoning,evidence)
+                 VALUES (?,?,?,?,?,?,?,?)'
             );
             if (!$review) throw new RuntimeException('parent review insert prepare failed');
-            $review->bind_param('iiissss',$amendment_id,$user_id,$parent_community_id,$finding,$references_json,$reasoning,$evidence);
+            $review->bind_param('iiiissss',$amendment_id,$review_round,$user_id,$parent_community_id,$finding,$references_json,$reasoning,$evidence);
             if (!$review->execute()) throw new RuntimeException('parent review insert failed');
             $review->close();
 
             $count_stmt=$conn->prepare(
-                'SELECT COUNT(*) AS total,SUM(CASE WHEN finding=\'conflict_remains\' THEN 1 ELSE 0 END) AS conflicts
-                 FROM community_law_amendment_parent_reviews WHERE case_id=? AND parent_community_id=?'
+                "SELECT COUNT(*) AS total,
+                        SUM(finding='conflict_remains') AS conflicts,
+                        SUM(finding='compatible') AS compatible
+                 FROM community_law_amendment_parent_reviews
+                 WHERE case_id=? AND parent_community_id=? AND review_round=?"
             );
             if (!$count_stmt) throw new RuntimeException('parent review count prepare failed');
-            $count_stmt->bind_param('ii',$amendment_id,$parent_community_id);
+            $count_stmt->bind_param('iii',$amendment_id,$parent_community_id,$review_round);
             if (!$count_stmt->execute()) throw new RuntimeException('parent review count failed');
             $totals=$count_stmt->get_result()->fetch_assoc();
             $count_stmt->close();
@@ -727,20 +769,26 @@ if (!function_exists('community_law_submit_amendment_parent_review')) {
             $next_status='parent_review';
             $conformity_next='amendment_in_progress';
             if ((int)$totals['total']>=2) {
-                if ((int)$totals['conflicts']>0) {
+                $round_disagreed=(int)$totals['conflicts']>0 && (int)$totals['compatible']>0;
+                if ($round_disagreed) {
+                    // اختلاف دو ارزیاب مادر نتیجهٔ قطعی نیست؛ دور تازه با ارزیابان جدید لازم است.
+                    $next_status='parent_review';
+                    $decision_note='دو ارزیاب جامعهٔ مادر به نتایج متفاوت رسیده‌اند؛ پرونده باز می‌ماند و دور تازه‌ای با ارزیابان مستقل دیگر لازم است.';
+                } elseif ((int)$totals['conflicts']===2) {
                     $next_status='revision_required';
                     $conformity_next='amendment_required';
+                    $decision_note='دو بررسی مستقل در این دور، باقی‌ماندن تعارض را تأیید کردند؛ جامعهٔ محلی می‌تواند نسخهٔ اصلاحی تازه تهیه کند.';
                 } else {
                     $next_status='parent_review_approved';
+                    $decision_note='دو بررسی مستقل در این دور، سازگاری مواد اصلاح‌شده را تأیید کردند؛ پرونده برای بررسی نهایی مستقل آماده است.';
                 }
-                $decision_note=$next_status==='revision_required'
-                    ? 'دو بررسی مستقل جامعهٔ مادر نشان دادند که دست‌کم یک مادهٔ اصلاح‌شده هنوز نیازمند رفع تعارض است؛ جامعهٔ محلی متن اصلاحی تازه را خود تهیه می‌کند.'
-                    : 'دو بررسی مستقل جامعهٔ مادر سازگاری مواد اصلاح‌شده را تأیید کردند؛ پرونده برای بررسی نهایی مستقل آماده است.';
-                $case_update=$conn->prepare("UPDATE community_law_amendment_cases SET status=?,decided_at=NOW(),decision_note=? WHERE id=? AND status='parent_review'");
-                if (!$case_update) throw new RuntimeException('parent review case update prepare failed');
-                $case_update->bind_param('ssi',$next_status,$decision_note,$amendment_id);
-                if (!$case_update->execute() || $case_update->affected_rows!==1) throw new RuntimeException('parent review case update failed');
-                $case_update->close();
+                if ($next_status!=='parent_review') {
+                    $case_update=$conn->prepare("UPDATE community_law_amendment_cases SET status=?,decided_at=NOW(),decision_note=? WHERE id=? AND status='parent_review'");
+                    if (!$case_update) throw new RuntimeException('parent review case update prepare failed');
+                    $case_update->bind_param('ssi',$next_status,$decision_note,$amendment_id);
+                    if (!$case_update->execute() || $case_update->affected_rows!==1) throw new RuntimeException('parent review case update failed');
+                    $case_update->close();
+                }
                 if ($conformity_next==='amendment_required') {
                     $proposed_version_id=(int)$row['proposed_version_id'];
                     $close_version=$conn->prepare("UPDATE community_law_versions SET status='rejected' WHERE id=? AND status='voting'");
@@ -759,9 +807,9 @@ if (!function_exists('community_law_submit_amendment_parent_review')) {
 
             $details=json_encode([
                 'finding'=>$finding,'conflicting_article_references'=>array_keys($refs),
-                'review_count'=>(int)$totals['total'],'conflict_reviews'=>(int)$totals['conflicts'],
+                'review_round'=>$review_round,'review_count'=>(int)$totals['total'],'conflict_reviews'=>(int)$totals['conflicts'],
                 'resulting_amendment_status'=>$next_status,
-                'parent_can_edit_local_text'=>false
+                'parent_can_edit_local_text'=>false,'disagreement_requires_new_review_round'=>true
             ],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
             $event=$conn->prepare(
                 "INSERT INTO community_law_amendment_events (case_id,actor_user_id,event_type,details)

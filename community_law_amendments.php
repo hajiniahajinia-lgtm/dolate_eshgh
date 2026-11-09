@@ -162,7 +162,7 @@ a{color:#1d4ed8}@media(max-width:600px){body{padding:5px}.card{padding:11px}inpu
 <p class="muted">این بخش فقط برای پرونده‌هایی فعال است که تعارض ماده‌ای آن‌ها با قانون مادر مستند و تأیید شده باشد. متن مصوب قبلی تغییر نمی‌کند؛ پیشنهاد، نسخهٔ تازه و مستقل می‌سازد.</p>
 <p><a href="community_laws.php?community_id=<?=$community_id?>">بازگشت به قوانین جامعه</a> — <a href="community_law_conformity_cases.php?community_id=<?=$community_id?>">پرونده‌های هم‌ترازی</a></p>
 </section>
-<?php if($status==='parent_review_saved'):?><section class="card notice">بررسی انطباق جامعهٔ مادر ثبت شد؛ نتیجه پس از دو بررسی مستقل مشخص می‌شود.</section><?php elseif($status==='parent_review_failed'):?><section class="card notice warning">بررسی ثبت نشد؛ عضویت در جامعهٔ مادر، استقلال ارزیاب و ارجاع دقیق مواد اصلاح‌شده را بررسی کنید.</section><?php elseif($status==='amendment_voting_started'):?><section class="card notice">رأی‌گیری اصلاحیه آغاز شد؛ قانون مصوب قبلی همچنان جاری است.</section><?php elseif($status==='amendment_vote_saved'):?><section class="card notice">رأی شما در پروندهٔ اصلاحیه ثبت شد.</section><?php elseif($status==='amendment_tally_saved'):?><section class="card notice">نتیجهٔ رأی محلی ثبت شد. مرحلهٔ بعد، در صورت پذیرش، بررسی انطباق با قانون مادر است.</section><?php elseif($status==='submitted_for_vote'):?><section class="card notice">اصلاحیه برای رأی محلی ارسال شد. قانون مصوب جاری بدون تغییر باقی مانده است.</section><?php elseif($status==='submission_failed'):?><section class="card notice warning">ارسال انجام نشد؛ عضویت، وضعیت نسخهٔ مبنا و وجود قواعد رأی‌گیریِ مصوب را بررسی کنید.</section><?php elseif($status==='draft_created'):?><section class="card notice">پیش‌نویس اصلاحیه و نسخهٔ تازه ساخته شد. هنوز هیچ رأی‌گیری یا تغییر قانونی انجام نشده است.</section><?php elseif($status==='save_failed'):?><section class="card notice warning">پیش‌نویس ساخته نشد. عضویت، پروندهٔ تعارض، متن دقیق ماده و نبود اصلاحیهٔ باز را بررسی کنید.</section><?php endif;?>
+<?php if($status==='parent_review_saved'):?><section class="card notice">بررسی انطباق جامعهٔ مادر ثبت شد؛ نتیجه پس از دو بررسی مستقل در یک دور مشخص می‌شود.</section><?php elseif($status==='parent_review_failed'):?><section class="card notice warning">بررسی ثبت نشد؛ عضویت در جامعهٔ مادر، استقلال ارزیاب و ارجاع دقیق مواد اصلاح‌شده را بررسی کنید.</section><?php elseif($status==='amendment_voting_started'):?><section class="card notice">رأی‌گیری اصلاحیه آغاز شد؛ قانون مصوب قبلی همچنان جاری است.</section><?php elseif($status==='amendment_vote_saved'):?><section class="card notice">رأی شما در پروندهٔ اصلاحیه ثبت شد.</section><?php elseif($status==='amendment_tally_saved'):?><section class="card notice">نتیجهٔ رأی محلی ثبت شد. مرحلهٔ بعد، در صورت پذیرش، بررسی انطباق با قانون مادر است.</section><?php elseif($status==='submitted_for_vote'):?><section class="card notice">اصلاحیه برای رأی محلی ارسال شد. قانون مصوب جاری بدون تغییر باقی مانده است.</section><?php elseif($status==='submission_failed'):?><section class="card notice warning">ارسال انجام نشد؛ عضویت، وضعیت نسخهٔ مبنا و وجود قواعد رأی‌گیریِ مصوب را بررسی کنید.</section><?php elseif($status==='draft_created'):?><section class="card notice">پیش‌نویس اصلاحیه و نسخهٔ تازه ساخته شد. هنوز هیچ رأی‌گیری یا تغییر قانونی انجام نشده است.</section><?php elseif($status==='save_failed'):?><section class="card notice warning">پیش‌نویس ساخته نشد. عضویت، پروندهٔ تعارض، متن دقیق ماده و نبود اصلاحیهٔ باز را بررسی کنید.</section><?php endif;?>
 <?php if(!$schema_ready):?>
 <section class="card notice warning">ساختار اصلاحیه هنوز نصب نشده است؛ این صفحه هیچ تغییری در داده‌ها ایجاد نمی‌کند.</section>
 <?php elseif(!$is_member):?>
@@ -271,7 +271,7 @@ if($is_member && $draft['status']==='local_voting' && !empty($draft['vote_deadli
 <p><?=clamp_h($draft['rationale'])?></p><pre><?=clamp_h($draft['law_text'])?></pre>
 <?php
 $review_rows=[];
-$review_list=$conn->prepare('SELECT finding,conflicting_article_references,reasoning,evidence,created_at FROM community_law_amendment_parent_reviews WHERE case_id=? ORDER BY id');
+$review_list=$conn->prepare('SELECT review_round,finding,conflicting_article_references,reasoning,evidence,created_at FROM community_law_amendment_parent_reviews WHERE case_id=? ORDER BY review_round,id');
 if($review_list) {
     $review_list->bind_param('i',$draft['id']);
     if($review_list->execute()) { $review_result=$review_list->get_result(); while($review_row=$review_result->fetch_assoc()) $review_rows[]=$review_row; }
@@ -281,7 +281,7 @@ if($review_list) {
 <?php if($review_rows):?>
 <div class="article"><strong>گزارش بررسی‌های مستقل جامعهٔ مادر</strong>
 <?php foreach($review_rows as $review_row):?>
-<p><strong><?= $review_row['finding']==='compatible'?'سازگار':'تعارض باقی‌مانده'?></strong> — <?=clamp_h($review_row['created_at'])?></p>
+<p><strong>دور <?= (int)$review_row['review_round']?> — <?= $review_row['finding']==='compatible'?'سازگار':'تعارض باقی‌مانده'?></strong> — <?=clamp_h($review_row['created_at'])?></p>
 <?php $review_refs=json_decode((string)$review_row['conflicting_article_references'],true); if(is_array($review_refs) && $review_refs):?>
 <p>مواد مورد اشاره: <?=clamp_h(implode('، ',$review_refs))?></p>
 <?php endif;?>
@@ -405,12 +405,20 @@ if($authority_ref_stmt) {
 <p class="notice">رأی محلی اصلاحیه پذیرفته شده است. دو عضو مستقل جامعهٔ مادر باید فقط سازگاری مواد اصلاح‌شده با قانون مادر را بررسی کنند. جامعهٔ مادر حق بازنویسی متن قانون محلی را ندارد.</p>
 <?php if($is_member && (int)$draft['parent_community_id']===$community_id):?>
 <?php
-$parent_review_stmt=$conn->prepare('SELECT COUNT(*) AS total FROM community_law_amendment_parent_reviews WHERE case_id=?');
-$parent_review_stmt->bind_param('i',$draft['id']);$parent_review_stmt->execute();
-$parent_review_count=(int)$parent_review_stmt->get_result()->fetch_assoc()['total'];$parent_review_stmt->close();
+$parent_review_stmt=$conn->prepare(
+    'SELECT COALESCE(MAX(review_round),0) AS latest_round,
+            SUM(review_round=(SELECT COALESCE(MAX(r2.review_round),0) FROM community_law_amendment_parent_reviews r2 WHERE r2.case_id=?)) AS current_count,
+            SUM(reviewer_user_id=?) AS my_review
+     FROM community_law_amendment_parent_reviews WHERE case_id=?'
+);
+$parent_review_stmt->bind_param('iii',$draft['id'],$user_id,$draft['id']);$parent_review_stmt->execute();
+$parent_review_state=$parent_review_stmt->get_result()->fetch_assoc();$parent_review_stmt->close();
+$parent_review_round=(int)($parent_review_state['latest_round']??0);
+$parent_review_count=(int)($parent_review_state['current_count']??0);
+$parent_my_review=(int)($parent_review_state['my_review']??0);
 ?>
-<p class="muted">بررسی‌های مستقل ثبت‌شده: <?=$parent_review_count?> از ۲</p>
-<?php if($parent_review_count<2):?>
+<p class="muted">دور بررسی: <?=$parent_review_round?> — بررسی‌های این دور: <?=$parent_review_count?> از ۲</p>
+<?php if($parent_review_count<2 && $parent_my_review===0):?>
 <form method="post">
 <input type="hidden" name="csrf_token" value="<?=clamp_h($csrf)?>">
 <input type="hidden" name="community_id" value="<?=$community_id?>">
