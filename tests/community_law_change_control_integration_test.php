@@ -503,8 +503,12 @@ try {
             (int)($details['current_version_id']??0)!==$second_version ||
             ($details['implementation_state_copied']??false)!==true) $notice_details_ok=false;
     }
-    change_case_check($notice_communities===[90020,90030] && $notice_details_ok,
-        'successful enactment sends exactly one version notice to the origin community and every descendant in scope with both version identifiers');
+    $expected_notice_communities=array_values(array_unique(array_merge(
+        array_map('intval',$base_scope_ids),[90020]
+    )));
+    sort($expected_notice_communities,SORT_NUMERIC);
+    change_case_check($notice_communities===$expected_notice_communities && $notice_details_ok,
+        'successful enactment sends exactly one version notice to the origin community and every community in the resolved scope with both version identifiers');
     change_case_check(!community_law_enact_amendment($db,9502,$second_version,90020,90201),'an already enacted amendment cannot be activated a second time');
 
 
