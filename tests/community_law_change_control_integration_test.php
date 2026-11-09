@@ -128,6 +128,26 @@ try {
     change_case_check(community_law_conformity_review_conflict($db,$conflict_id,90102,90010,'conflict_confirmed','از منظر جامعهٔ مادر، تعارض با مادهٔ لازم‌الاجرا تأیید می‌شود.'),'a separate parent-community member can submit the parent review');
     $confirmed=$db->query("SELECT f.finding,c.status FROM community_law_conformity_conflicts f JOIN community_law_conformity_cases c ON c.id=f.case_id WHERE f.id=".$conflict_id)->fetch_assoc();
     change_case_check($confirmed && $confirmed['finding']==='conflict_confirmed' && $confirmed['status']==='amendment_required','two-sided confirmed conflict requires a local amendment and records the finding');
+
+    // A person who belongs to both communities must still provide only one
+    // perspective; two community memberships cannot simulate two independent reviewers.
+    $dual_member_conflict_id=community_law_conformity_add_conflict(
+        $db,$conformity_case_id,90200,'ماده ۴','ماده ۸',
+        'آزمون جلوگیری از دو بار بررسی توسط یک شخص','مستندات دو ماده'
+    );
+    change_case_check(is_int($dual_member_conflict_id) && $dual_member_conflict_id>0,'dual-membership independence fixture conflict is created');
+    change_case_check(
+        community_law_conformity_review_conflict($db,$dual_member_conflict_id,90106,90020,'no_conflict','بررسی مستقل از منظر جامعهٔ محلی با استناد به متن مواد انجام شد.'),
+        'a dual member can submit one review from the local community'
+    );
+    change_case_check(
+        !community_law_conformity_review_conflict($db,$dual_member_conflict_id,90106,90010,'no_conflict','همان شخص نمی‌تواند بررسی دوم را از منظر جامعهٔ مادر ثبت کند.'),
+        'the same person cannot submit both sides even when they belong to both communities'
+    );
+    $dual_member_review_count=(int)$db->query(
+        'SELECT COUNT(*) AS n FROM community_law_conformity_conflict_reviews WHERE conflict_id='.(int)$dual_member_conflict_id
+    )->fetch_assoc()['n'];
+    change_case_check($dual_member_review_count===1,'dual membership leaves exactly one independent review record');
     $review_history=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_history WHERE law_id=9502 AND event_type='conformity_conflict_reviewed'")->fetch_assoc()['n'];
     change_case_check($review_history===2,'both independent reviews are preserved in the local law history');
 

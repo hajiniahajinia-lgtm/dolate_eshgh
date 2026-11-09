@@ -9,7 +9,7 @@ if (!is_string($source)) {
 
 $checks = [];
 $membershipQuery = strpos($source, 'INNER JOIN community_members cm ON cm.community_id=c.id AND cm.user_id=?');
-$membershipBind = strpos($source, '$community_stmt->bind_param(\'ii\',$user_id,$community_id)');
+$membershipBind = strpos($source, "$community_stmt->bind_param('ii',$user_id,$community_id)");
 $checks['community details and membership are checked atomically'] =
     $membershipQuery !== false && $membershipBind !== false &&
     strpos($source, 'SELECT c.id,c.name') !== false;
