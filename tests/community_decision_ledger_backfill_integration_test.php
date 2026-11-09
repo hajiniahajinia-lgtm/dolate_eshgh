@@ -40,7 +40,8 @@ try {
 
     $db->query("CREATE TABLE topics (
         id INT NOT NULL PRIMARY KEY,
-        community_id INT NOT NULL
+        community_id INT NOT NULL,
+        topic_intent ENUM('knowledge','decision','law') NOT NULL DEFAULT 'decision'
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     $db->query("CREATE TABLE collective_knowledge_decisions (
         topic_id INT NOT NULL PRIMARY KEY,
@@ -61,7 +62,7 @@ try {
         finalized_at DATETIME NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-    $db->query("INSERT INTO topics (id, community_id) VALUES (990020, 77)");
+    $db->query("INSERT INTO topics (id, community_id, topic_intent) VALUES (990020, 77, 'knowledge')");
     $db->query("INSERT INTO collective_knowledge_decisions
         (topic_id, entry_id, selected_idea_id, selected_idea_content, topic_purpose_snapshot,
          yes_count, no_count, yes_weight, no_weight, yes_percent, weighted_yes_percent,
@@ -73,9 +74,10 @@ try {
 
     $backfillPath = __DIR__ . '/../migrations/20261108_community_decision_ledger_backfill.sql';
     apply_decision_backfill_sql($db, $backfillPath);
+    apply_decision_backfill_sql($db, __DIR__ . '/../migrations/20261109_z_community_decision_topic_intent.sql');
 
     $stored = $db->query(
-        'SELECT community_id, source_idea_id, topic_purpose_snapshot, acceptance_status,
+        'SELECT community_id, source_idea_id, topic_purpose_snapshot, topic_intent_snapshot, acceptance_status,
                 enforceability_status, yes_count, weighted_yes_percent, decided_at
          FROM community_decision_records WHERE source_topic_id=990020'
     )->fetch_assoc();
@@ -84,6 +86,7 @@ try {
         (int)$stored['community_id'] === 77 &&
         (int)$stored['source_idea_id'] === 880020 &&
         $stored['topic_purpose_snapshot'] === 'knowledge' &&
+        $stored['topic_intent_snapshot'] === 'knowledge' &&
         $stored['acceptance_status'] === 'accepted' &&
         $stored['enforceability_status'] === 'not_enforceable' &&
         (int)$stored['yes_count'] === 7 &&

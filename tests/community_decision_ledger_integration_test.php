@@ -38,6 +38,7 @@ try {
         $db,
         __DIR__ . '/../migrations/20261108_community_decision_ledger.sql'
     );
+    apply_decision_ledger_sql($db, __DIR__ . '/../migrations/20261109_z_community_decision_topic_intent.sql');
     require_once __DIR__ . '/../community_decision_ledger.php';
 
     $db->query('DELETE FROM community_decision_records WHERE source_topic_id IN (990001, 990002, 990003)');
@@ -60,6 +61,7 @@ try {
         'source_topic_id' => 990001,
         'source_idea_id' => 880001,
         'topic_purpose_snapshot' => 'knowledge',
+        'topic_intent' => 'knowledge',
         'selected_idea_content' => 'نمونهٔ ایدهٔ منتخب',
         'acceptance_status' => 'accepted',
         'enforceability_status' => 'not_enforceable',
@@ -85,6 +87,7 @@ try {
     decision_ledger_check(
         $stored && (int)$stored['community_id'] === 77 &&
         $stored['topic_purpose_snapshot'] === 'knowledge' &&
+        $stored['topic_intent_snapshot'] === 'knowledge' &&
         $stored['acceptance_status'] === 'accepted' &&
         $stored['enforceability_status'] === 'not_enforceable',
         'the decision outcome and topic-purpose snapshot are persisted'

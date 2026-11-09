@@ -15,6 +15,7 @@ function community_decision_record_snapshot(mysqli $conn, array $decision): bool
         ? (int)$decision['source_idea_id']
         : null;
     $purpose = (string)($decision['topic_purpose_snapshot'] ?? 'mixed');
+    $topicIntent = (string)($decision['topic_intent'] ?? 'decision');
     $ideaContent = array_key_exists('selected_idea_content', $decision) && $decision['selected_idea_content'] !== null
         ? (string)$decision['selected_idea_content']
         : null;
@@ -35,6 +36,7 @@ function community_decision_record_snapshot(mysqli $conn, array $decision): bool
         $topicId <= 0 ||
         ($ideaId !== null && $ideaId <= 0) ||
         !in_array($purpose, ['knowledge', 'execution', 'mixed'], true) ||
+        !in_array($topicIntent, ['knowledge', 'decision', 'law'], true) ||
         !in_array($acceptance, ['accepted', 'not_accepted', 'no_votes'], true) ||
         !in_array($enforceability, ['enforceable', 'not_enforceable', 'undecided'], true) ||
         $yesCount < 0 || $noCount < 0 || $enforceYes < 0 || $enforceNo < 0 ||
@@ -50,11 +52,11 @@ function community_decision_record_snapshot(mysqli $conn, array $decision): bool
 
     $stmt = $conn->prepare(
         "INSERT INTO community_decision_records
-            (community_id, source_topic_id, source_idea_id, topic_purpose_snapshot,
+            (community_id, source_topic_id, source_idea_id, topic_purpose_snapshot, topic_intent_snapshot,
              selected_idea_content, acceptance_status, enforceability_status,
              yes_count, no_count, yes_weight, no_weight, yes_percent,
              weighted_yes_percent, enforce_yes_count, enforce_no_count, decided_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON DUPLICATE KEY UPDATE id = id"
     );
     if (!$stmt) {
@@ -63,11 +65,12 @@ function community_decision_record_snapshot(mysqli $conn, array $decision): bool
     }
 
     $stmt->bind_param(
-        'iiissssiiddddiis',
+        'iiisssssiiddddiis',
         $communityId,
         $topicId,
         $ideaId,
         $purpose,
+        $topicIntent,
         $ideaContent,
         $acceptance,
         $enforceability,

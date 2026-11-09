@@ -42,7 +42,8 @@ function create_collective_knowledge_decision($conn, $topic_id, $fallback_user_i
             if ($existing) {
                 // مهاجرت تدریجی: snapshotهای قدیمی هنگام مراجعه به دفتر مستقل منتقل می‌شوند.
                 $legacy_snapshot_stmt = $conn->prepare(
-                    "SELECT t.community_id, d.selected_idea_id, d.selected_idea_content,
+                    "SELECT t.community_id, COALESCE(t.topic_intent, 'decision') AS topic_intent,
+                            d.selected_idea_id, d.selected_idea_content,
                             d.topic_purpose_snapshot, d.acceptance_status, d.enforceability_status,
                             d.yes_count, d.no_count, d.yes_weight, d.no_weight,
                             d.yes_percent, d.weighted_yes_percent,
@@ -66,6 +67,7 @@ function create_collective_knowledge_decision($conn, $topic_id, $fallback_user_i
                     'source_topic_id' => (int)$topic_id,
                     'source_idea_id' => $legacy_idea_id,
                     'topic_purpose_snapshot' => (string)$legacy_row['topic_purpose_snapshot'],
+                    'topic_intent' => in_array($legacy_row['topic_intent'], ['knowledge', 'decision', 'law'], true) ? (string)$legacy_row['topic_intent'] : 'decision',
                     'selected_idea_content' => $legacy_row['selected_idea_content'],
                     'acceptance_status' => (string)$legacy_row['acceptance_status'],
                     'enforceability_status' => (string)$legacy_row['enforceability_status'],
@@ -90,6 +92,7 @@ function create_collective_knowledge_decision($conn, $topic_id, $fallback_user_i
         $topic_stmt = $conn->prepare("
             SELECT t.title, t.description, t.user_id, t.community_id,
                    COALESCE(t.topic_purpose, 'mixed') AS topic_purpose,
+                   COALESCE(t.topic_intent, 'decision') AS topic_intent,
                    w.idea_id, i.content AS idea_content
             FROM topics t
             LEFT JOIN topic_winners w ON w.topic_id=t.id
@@ -147,13 +150,16 @@ function create_collective_knowledge_decision($conn, $topic_id, $fallback_user_i
         $enforceability_status = $enforce_yes > $enforce_no ? 'enforceable' : ($enforce_no > $enforce_yes ? 'not_enforceable' : 'undecided');
 
         $purpose = in_array($topic['topic_purpose'], ['knowledge', 'execution', 'mixed'], true) ? $topic['topic_purpose'] : 'mixed';
+        $topic_intent = in_array($topic['topic_intent'], ['knowledge', 'decision', 'law'], true) ? $topic['topic_intent'] : 'decision';
+        $intent_label = $topic_intent === 'knowledge' ? 'دانش‌محور' : ($topic_intent === 'law' ? 'قانون‌گذاری' : 'تصمیم‌گیری');
         $entry_type = $purpose === 'knowledge' ? 'research' : ($purpose === 'execution' ? 'solution' : 'lesson');
         $purpose_label = $purpose === 'knowledge' ? 'شناختی' : ($purpose === 'execution' ? 'اجرایی' : 'ترکیبی');
         $topic_title = trim((string)$topic['title']);
         $entry_title = mb_substr('پروندهٔ دانش: ' . $topic_title, 0, 180, 'UTF-8');
-        $summary = mb_substr('پروندهٔ دانش جمعی برای موضوع «' . $topic_title . '». ماهیت موضوع: ' . $purpose_label . '. ایدهٔ منتخب فقط موضوع بررسی است و شواهد و ارزیابی دانش باید جداگانه سنجیده شوند.', 0, 1000, 'UTF-8');
+        $summary = mb_substr('پروندهٔ دانش جمعی برای موضوع «' . $topic_title . '». مسیر موضوع: ' . $intent_label . '. ماهیت موضوع: ' . $purpose_label . '. ایدهٔ منتخب فقط موضوع بررسی است و شواهد و ارزیابی دانش باید جداگانه سنجیده شوند.', 0, 1000, 'UTF-8');
         $idea_content = $topic['idea_content'] !== null ? (string)$topic['idea_content'] : null;
         $content = "موضوع: " . $topic_title . "\n\n";
+        $content .= "مسیر موضوع: " . $intent_label . "\n\n";
         $content .= "ماهیت موضوع: " . $purpose_label . "\n\n";
         $content .= "شرح موضوع:\n" . trim((string)$topic['description']) . "\n\n";
         $content .= "ایدهٔ منتخب در فرآیند جمعی (برای بررسی، نه اثبات صحت):\n" . ($idea_content !== null && trim($idea_content) !== '' ? $idea_content : 'برای این موضوع ایده‌ای به‌عنوان منتخب ثبت نشده است.') . "\n\n";
@@ -180,6 +186,7 @@ function create_collective_knowledge_decision($conn, $topic_id, $fallback_user_i
             'source_topic_id' => (int)$topic_id,
             'source_idea_id' => $source_idea_id,
             'topic_purpose_snapshot' => $purpose,
+            'topic_intent' => $topic_intent,
             'selected_idea_content' => $idea_content,
             'acceptance_status' => $acceptance_status,
             'enforceability_status' => $enforceability_status,
@@ -520,7 +527,7 @@ function ensure_collective_knowledge_drafts_for_community($conn, $community_id, 
     foreach ($topic_ids as $topic_id) {
         if (!$conn->begin_transaction()) continue;
         try {
-            $lock = $conn->prepare("SELECT id, title, description, topic_purpose, user_id, community_id FROM topics WHERE id=? AND community_id=? AND closed=0 LIMIT 1 FOR UPDATE");
+            $lock = $conn->prepare("SELECT id, title, description, topic_purpose, topic_intent, user_id, community_id FROM topics WHERE id=? AND community_id=? AND closed=0 LIMIT 1 FOR UPDATE");
             if (!$lock) throw new Exception("topic lock prepare: " . $conn->error);
             $lock->bind_param("ii", $topic_id, $community_id);
             if (!$lock->execute()) throw new Exception("topic lock execute: " . $lock->error);
@@ -543,12 +550,15 @@ function ensure_collective_knowledge_drafts_for_community($conn, $community_id, 
             }
 
             $purpose = in_array($topic['topic_purpose'], ['knowledge', 'execution', 'mixed'], true) ? $topic['topic_purpose'] : 'mixed';
+            $topic_intent = in_array($topic['topic_intent'], ['knowledge', 'decision', 'law'], true) ? $topic['topic_intent'] : 'decision';
+            $intent_label = $topic_intent === 'knowledge' ? 'دانش‌محور' : ($topic_intent === 'law' ? 'قانون‌گذاری' : 'تصمیم‌گیری');
             $entry_type = $purpose === 'knowledge' ? 'research' : ($purpose === 'execution' ? 'solution' : 'lesson');
             $purpose_label = $purpose === 'knowledge' ? 'شناختی' : ($purpose === 'execution' ? 'اجرایی' : 'ترکیبی');
             $topic_title = trim((string)$topic['title']);
             $entry_title = mb_substr('پروندهٔ در حال شکل‌گیری: ' . $topic_title, 0, 180, 'UTF-8');
-            $summary = mb_substr('پروندهٔ دانشِ در حال شکل‌گیری برای موضوع «' . $topic_title . '». این پرونده تا پایان بررسی و رأی موضوع تکمیل می‌شود.', 0, 1000, 'UTF-8');
+            $summary = mb_substr('پروندهٔ دانشِ در حال شکل‌گیری برای موضوع «' . $topic_title . '». مسیر موضوع: ' . $intent_label . '. این پرونده تا پایان بررسی و رأی موضوع تکمیل می‌شود.', 0, 1000, 'UTF-8');
             $content = "موضوع: " . $topic_title . "\n\n";
+            $content .= "مسیر موضوع: " . $intent_label . "\n\n";
             $content .= "ماهیت موضوع: " . $purpose_label . "\n\n";
             $content .= "شرح موضوع:\n" . trim((string)$topic['description']) . "\n\n";
             $content .= "وضعیت: در حال شکل‌گیری؛ هنوز هیچ ایده‌ای به‌عنوان منتخب نهایی و هیچ نتیجه‌ای به‌عنوان رأی جمعی ثبت نشده است.\n\n";

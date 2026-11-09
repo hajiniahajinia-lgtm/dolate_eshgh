@@ -47,6 +47,10 @@ try {
         $db,
         __DIR__ . '/../migrations/20261108_community_decision_ledger.sql'
     );
+    apply_decision_separation_sql(
+        $db,
+        __DIR__ . '/../migrations/20261109_z_community_decision_topic_intent.sql'
+    );
 
     // حداقل شِمای لازم برای اجرای مسیر واقعی نهایی‌سازی؛ جدول‌های قدیمی تصمیم و کتابخانهٔ دانش عمداً ساخته نمی‌شوند.
     $db->query("CREATE TABLE topics (
@@ -55,7 +59,8 @@ try {
         description TEXT NOT NULL,
         user_id INT NULL,
         community_id INT NOT NULL,
-        topic_purpose VARCHAR(20) NOT NULL DEFAULT 'mixed'
+        topic_purpose VARCHAR(20) NOT NULL DEFAULT 'mixed',
+        topic_intent ENUM('knowledge','decision','law') NOT NULL DEFAULT 'decision'
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     $db->query("CREATE TABLE ideas (
         id INT NOT NULL PRIMARY KEY,
@@ -83,8 +88,8 @@ try {
         idea_id INT NOT NULL,
         enforceable TINYINT(1) NOT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-    $db->query("INSERT INTO topics (id,title,description,user_id,community_id,topic_purpose)
-                VALUES (990010,'موضوع آزمایشی تصمیم مستقل','شرح آزمایشی',5,77,'knowledge')");
+    $db->query("INSERT INTO topics (id,title,description,user_id,community_id,topic_purpose,topic_intent)
+                VALUES (990010,'موضوع آزمایشی تصمیم مستقل','شرح آزمایشی',5,77,'knowledge','knowledge')");
     $db->query("INSERT INTO ideas (id,topic_id,content) VALUES (880010,990010,'ایدهٔ منتخب آزمایشی')");
     $db->query("INSERT INTO topic_voting_meta (topic_id,finalized) VALUES (990010,1)");
     $db->query("INSERT INTO topic_winners (topic_id,idea_id) VALUES (990010,880010)");
@@ -104,13 +109,14 @@ try {
     );
 
     $stored = $db->query(
-        'SELECT community_id, source_topic_id, source_idea_id, acceptance_status, enforceability_status
+        'SELECT community_id, source_topic_id, source_idea_id, topic_intent_snapshot, acceptance_status, enforceability_status
          FROM community_decision_records WHERE source_topic_id=990010'
     )->fetch_assoc();
     decision_separation_check(
         $stored &&
         (int)$stored['community_id'] === 77 &&
         (int)$stored['source_idea_id'] === 880010 &&
+        $stored['topic_intent_snapshot'] === 'knowledge' &&
         $stored['acceptance_status'] === 'accepted' &&
         $stored['enforceability_status'] === 'not_enforceable',
         'the collective decision remains committed even when the knowledge library write fails'

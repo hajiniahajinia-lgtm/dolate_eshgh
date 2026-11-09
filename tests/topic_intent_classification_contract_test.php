@@ -11,6 +11,8 @@ function topic_intent_contract_check(bool $condition, string $message): void
 
 $community = file_get_contents(__DIR__ . '/../community.php');
 $handler = file_get_contents(__DIR__ . '/../add_topic.php');
+$finalizer = file_get_contents(__DIR__ . '/../collective_knowledge_finalizer.php');
+$ledger = file_get_contents(__DIR__ . '/../community_decision_ledger.php');
 
 topic_intent_contract_check(
     is_string($community) &&
@@ -34,6 +36,21 @@ topic_intent_contract_check(
 topic_intent_contract_check(
     str_contains($handler, '$topic_purpose = $topic_intent === \'knowledge\' ? \'knowledge\' : \'execution\';'),
     'legacy knowledge-library purpose remains compatible without treating law as enacted'
+);
+
+topic_intent_contract_check(
+    is_string($finalizer) &&
+    str_contains($finalizer, "COALESCE(t.topic_intent, 'decision') AS topic_intent") &&
+    str_contains($finalizer, "'topic_intent' => $topic_intent") &&
+    str_contains($finalizer, 'مسیر موضوع: ' . "' . $intent_label . '") &&
+    'topic intent is carried into final knowledge dossiers and decision snapshots'
+);
+
+topic_intent_contract_check(
+    is_string($ledger) &&
+    str_contains($ledger, 'topic_intent_snapshot') &&
+    str_contains($ledger, "['knowledge', 'decision', 'law']"),
+    'the independent decision ledger preserves the original topic track'
 );
 
 topic_intent_contract_check(
