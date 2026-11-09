@@ -24,7 +24,11 @@ $checks=[
     strpos($source,"$"."corrective_action['responsible_user_id']!==$user_id")!==false,
  'completion claims are not presented as independently verified' =>
     strpos($source,"'completion_claimed'=>'در انتظار تأیید مستقل'")!==false &&
-    strpos($source,"'completion_status'=>'pending'")===false
+    strpos($source,"'completion_status'=>'pending'")===false,
+ 'a rejected completion can be resubmitted without reopening ordinary progress' =>
+    strpos($source,"$"."completion_status==='rejected'")!==false &&
+    strpos($source,"ارسال دوباره برای بررسی تکمیل")!==false &&
+    strpos($source,"$"."action_status!=='completion_claimed'")===false
 ];
 $failed=0;
 foreach($checks as $label=>$passed){echo ($passed?'PASS: ':'FAIL: ').$label.PHP_EOL;if(!$passed)$failed++;}
