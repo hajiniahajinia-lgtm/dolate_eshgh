@@ -956,6 +956,8 @@ document.addEventListener('DOMContentLoaded',function(){
         <div class="card" id="topic-card-<?= (int)$row['id'] ?>">
             <div class="title-wrap">
               <div class="title" tabindex="0"><?= htmlspecialchars($row['title'], ENT_QUOTES, 'UTF-8') ?></div>
+              <?php $archive_intent_labels = ['knowledge'=>'دانش‌محور','decision'=>'تصمیم‌گیری','law'=>'قانون‌گذاری']; ?>
+              <span class="meta" style="display:inline-block;margin-top:5px;padding:3px 8px;border-radius:12px;background:#eee8ff;color:#563b86;"><?= $archive_intent_labels[$row['topic_intent']] ?></span>
               <?php if (trim((string)($row['description'] ?? '')) !== ''): ?>
               <div class="desc-tooltip"><?= nl2br(htmlspecialchars($row['description'], ENT_QUOTES, 'UTF-8')) ?></div>
               <?php endif; ?>
@@ -1064,6 +1066,8 @@ document.addEventListener('DOMContentLoaded',function(){
         <div class="card" id="topic-card-<?= (int)$row['id'] ?>">
             <div class="title-wrap">
               <div class="title" tabindex="0"><?= htmlspecialchars($row['title'], ENT_QUOTES, 'UTF-8') ?></div>
+              <?php $archive_intent_labels = ['knowledge'=>'دانش‌محور','decision'=>'تصمیم‌گیری','law'=>'قانون‌گذاری']; ?>
+              <span class="meta" style="display:inline-block;margin-top:5px;padding:3px 8px;border-radius:12px;background:#eee8ff;color:#563b86;"><?= $archive_intent_labels[$row['topic_intent']] ?></span>
               <?php if (trim((string)($row['description'] ?? '')) !== ''): ?>
               <div class="desc-tooltip"><?= nl2br(htmlspecialchars($row['description'], ENT_QUOTES, 'UTF-8')) ?></div>
               <?php endif; ?>
