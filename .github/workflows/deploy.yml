@@ -1,9 +1,6 @@
 name: Deploy to InfinityFree (upload only, never delete)
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
     inputs:
       deploy_all:
