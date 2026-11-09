@@ -935,6 +935,11 @@ document.addEventListener('DOMContentLoaded', function () {
         <p style="font-size:13px;color:#667085;">درخت جایگاه جامعه فعلاً در دسترس نیست.</p>
       <?php endif; ?>
     <?php endif; ?>
+    <?php if ($is_community_member): ?>
+      <p style="margin:10px 0 0;font-size:13px;">
+        <a href="community_hierarchy_history.php?community_id=<?= (int)$community['id'] ?>" style="display:inline-block;background:#eef4ff;color:#1d4ed8;padding:8px 12px;border-radius:7px;">📜 مشاهده تاریخچه تغییرات جایگاه این جامعه</a>
+      </p>
+    <?php endif; ?>
   </section>
   </details>
 
