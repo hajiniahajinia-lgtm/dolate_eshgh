@@ -8,8 +8,9 @@ declare(strict_types=1);
  */
 $source = file_get_contents(__DIR__ . '/../community_law_amendment_helpers.php');
 $migration = file_get_contents(__DIR__ . '/../migrations/20261108_community_law_z3_version_notices.sql');
+$cases_page = file_get_contents(__DIR__ . '/../community_law_change_cases.php');
 
-if ($source === false || $migration === false) {
+if ($source === false || $migration === false || $cases_page === false) {
     fwrite(STDERR, "FAIL: unable to read amendment enactment sources\n");
     exit(1);
 }
