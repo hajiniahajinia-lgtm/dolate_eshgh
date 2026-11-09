@@ -34,6 +34,7 @@ try {
     change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_change_voting.sql');
     change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_change_effects.sql');
     change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_conformity_workflow.sql');
+    change_case_apply_sql($db,__DIR__.'/../migrations/20261109_community_hierarchy_change_history.sql');
     change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_z1_amendment_00_workflow.sql');
     change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_z1_amendment_10_submission.sql');
     change_case_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_z1_amendment_20_voting.sql');
@@ -47,6 +48,31 @@ try {
 
     $db->query("CREATE TABLE IF NOT EXISTS communities (id INT PRIMARY KEY, parent_community_id INT NULL)");
     $db->query("CREATE TABLE IF NOT EXISTS community_members (community_id INT NOT NULL, user_id INT NOT NULL, PRIMARY KEY(community_id,user_id))");
+    // تغییر والد حتی بدون قانون فعال باید تاریخچهٔ مستقل داشته باشد و با شکست ثبت، کل تغییر rollback شود.
+    $db->query("INSERT INTO communities (id,parent_community_id) VALUES (92010,NULL),(92020,NULL) ON DUPLICATE KEY UPDATE parent_community_id=VALUES(parent_community_id)");
+    $db->query("CREATE TRIGGER test_fail_hierarchy_history BEFORE INSERT ON community_hierarchy_change_history
+        FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='forced hierarchy history failure'");
+    $db->begin_transaction();
+    $history_failed=false;
+    try {
+        community_hierarchy_record_parent_change($db,92020,920001,null,92010,90100);
+        $db->query("UPDATE communities SET parent_community_id=92010 WHERE id=92020");
+    } catch (Throwable $e) {
+        $history_failed=true;
+        $db->rollback();
+    }
+    $db->query("DROP TRIGGER test_fail_hierarchy_history");
+    $history_after_failure=(int)$db->query("SELECT COUNT(*) AS n FROM community_hierarchy_change_history WHERE vote_round_id=920001")->fetch_assoc()['n'];
+    $parent_after_failure=$db->query("SELECT parent_community_id FROM communities WHERE id=92020")->fetch_assoc()['parent_community_id'];
+    change_case_check($history_failed && $history_after_failure===0 && $parent_after_failure===null,'failed hierarchy history insert rolls back the parent change without leaving a partial record');
+    $db->begin_transaction();
+    change_case_check(community_hierarchy_record_parent_change($db,92020,920001,null,92010,90100),'hierarchy change history can be retried after the failure is removed');
+    $db->query("UPDATE communities SET parent_community_id=92010 WHERE id=92020");
+    $db->commit();
+    $history_success=$db->query("SELECT community_id,old_parent_community_id,new_parent_community_id,actor_user_id,event_type FROM community_hierarchy_change_history WHERE vote_round_id=920001")->fetch_assoc();
+    change_case_check($history_success && (int)$history_success['community_id']===92020 && $history_success['old_parent_community_id']===null && (int)$history_success['new_parent_community_id']===92010 && (int)$history_success['actor_user_id']===90100 && $history_success['event_type']==='parent_changed','successful hierarchy change permanently records community, old/new parent, actor and event type');
+
+
     $db->query("INSERT INTO communities (id,parent_community_id) VALUES (90010,NULL),(90020,90010) ON DUPLICATE KEY UPDATE parent_community_id=VALUES(parent_community_id)");
     $db->query("INSERT INTO community_members (community_id,user_id) VALUES (90010,90100),(90020,90200),(90010,90101),(90010,90102),(90010,90103),(90010,90104),(90010,90105),(90010,90106),(90010,90107),(90010,90108),(90020,90201),(90020,90202),(90020,90203),(90020,90204),(90020,90205),(90020,90206),(90020,90207),(90020,90106) ON DUPLICATE KEY UPDATE user_id=VALUES(user_id)");
     $db->query("INSERT INTO community_laws (id,law_code,originating_community_id,created_by,status,current_version_id,effective_at) VALUES (9501,'LAW-CHANGE-TEST',90010,90100,'approved',99001,NOW())");
