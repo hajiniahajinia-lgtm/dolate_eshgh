@@ -103,6 +103,66 @@ try {
     $conflict_count=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_conformity_conflicts WHERE case_id=(SELECT id FROM community_law_conformity_cases WHERE community_id=90020 AND local_law_version_id=99002 AND parent_law_version_id=99001)")->fetch_assoc()['n'];
     change_case_check($conflict_count===0,'opening a conformity review does not falsely declare a semantic conflict');
 
+
+    // End-to-end parent adoption: an independent community enters an active
+    // parent-law scope. Scope state, notice, hierarchy history and conformity
+    // review must succeed or roll back together.
+    $db->query("INSERT INTO communities (id,parent_community_id) VALUES (90050,NULL) ON DUPLICATE KEY UPDATE parent_community_id=NULL");
+    $db->query("INSERT INTO community_laws (id,law_code,originating_community_id,created_by,status,current_version_id,effective_at) VALUES (9504,'LAW-ADOPTED-LOCAL-TEST',90050,90200,'approved',99004,NOW())");
+    $db->query("INSERT INTO community_law_versions (id,law_id,version_number,title,law_text,proposed_by,status,approved_at) VALUES (99004,9504,1,'قانون جامعهٔ مستقل','متن قانون جامعهٔ مستقل',90200,'approved',NOW())");
+    $db->query("INSERT INTO community_law_scopes (law_version_id,scope_community_id,include_descendants) VALUES (99004,90050,1)");
+    $old_map=[90010=>0,90020=>90010,90030=>90020,90040=>0,90050=>0];
+    $new_map=$old_map;
+    $new_map[90050]=90010;
+    $db->query("CREATE TRIGGER test_fail_adoption_scope_notice BEFORE INSERT ON community_law_scope_notices
+        FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='forced adoption scope notice failure'");
+    $adoption_failed=false;
+    $db->begin_transaction();
+    try {
+        if (!community_hierarchy_record_parent_change($db,90050,920050,null,90010,90100) ||
+            !community_law_record_hierarchy_scope_changes($db,$old_map,$new_map,90050,90100)) {
+            throw new RuntimeException('adoption scope transition failed');
+        }
+        $db->query("UPDATE communities SET parent_community_id=90010 WHERE id=90050");
+        if (!community_law_register_hierarchy_conformity_reviews($db,$new_map,90050,90100)) {
+            throw new RuntimeException('adoption conformity registration failed');
+        }
+        $db->commit();
+    } catch (Throwable $e) {
+        $adoption_failed=true;
+        $db->rollback();
+    }
+    $db->query("DROP TRIGGER test_fail_adoption_scope_notice");
+    $adoption_parent_after_failure=$db->query("SELECT parent_community_id FROM communities WHERE id=90050")->fetch_assoc()['parent_community_id'];
+    $adoption_history_after_failure=(int)$db->query("SELECT COUNT(*) n FROM community_hierarchy_change_history WHERE vote_round_id=920050")->fetch_assoc()['n'];
+    $adoption_implementation_after_failure=(int)$db->query("SELECT COUNT(*) n FROM community_law_implementations WHERE law_version_id=99001 AND community_id=90050")->fetch_assoc()['n'];
+    $adoption_scope_history_after_failure=(int)$db->query("SELECT COUNT(*) n FROM community_law_history WHERE law_id=9501 AND community_id=90050 AND event_type='scope_entered'")->fetch_assoc()['n'];
+    change_case_check($adoption_failed && $adoption_parent_after_failure===null &&
+        $adoption_history_after_failure===0 && $adoption_implementation_after_failure===0 &&
+        $adoption_scope_history_after_failure===0,
+        'failed parent-law scope notice rolls back the parent move, hierarchy history, implementation and scope history together');
+
+    $db->begin_transaction();
+    change_case_check(community_hierarchy_record_parent_change($db,90050,920050,null,90010,90100),
+        'parent adoption history can be retried after notice failure');
+    change_case_check(community_law_record_hierarchy_scope_changes($db,$old_map,$new_map,90050,90100),
+        'parent adoption enters the active parent-law scope');
+    $db->query("UPDATE communities SET parent_community_id=90010 WHERE id=90050");
+    change_case_check(community_law_register_hierarchy_conformity_reviews($db,$new_map,90050,90100),
+        'parent adoption opens local-law conformity review after the new parent is applied');
+    $db->commit();
+    $adoption_implementation=$db->query("SELECT status FROM community_law_implementations WHERE law_version_id=99001 AND community_id=90050")->fetch_assoc();
+    $adoption_notice=$db->query("SELECT transition FROM community_law_scope_notices WHERE law_version_id=99001 AND community_id=90050")->fetch_assoc();
+    $adoption_history=$db->query("SELECT old_parent_community_id,new_parent_community_id FROM community_hierarchy_change_history WHERE vote_round_id=920050")->fetch_assoc();
+    $adoption_case=$db->query("SELECT parent_community_id,status FROM community_law_conformity_cases WHERE community_id=90050 AND local_law_version_id=99004 AND parent_law_version_id=99001")->fetch_assoc();
+    change_case_check($adoption_implementation && $adoption_implementation['status']==='pending' &&
+        $adoption_notice && $adoption_notice['transition']==='scope_entered' &&
+        $adoption_history && $adoption_history['old_parent_community_id']===null &&
+        (int)$adoption_history['new_parent_community_id']===90010 &&
+        $adoption_case && (int)$adoption_case['parent_community_id']===90010 &&
+        $adoption_case['status']==='review_required',
+        'successful parent adoption activates scope tracking, announces recognition, records hierarchy and opens human conformity review');
+
     // Deep hierarchy regression: a moved parent must trigger reviews for every
     // descendant law against every applicable ancestor law, not only one level.
     $db->query("INSERT INTO communities (id,parent_community_id) VALUES (90030,90020) ON DUPLICATE KEY UPDATE parent_community_id=VALUES(parent_community_id)");
