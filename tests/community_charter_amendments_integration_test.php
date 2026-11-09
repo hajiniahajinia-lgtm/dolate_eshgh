@@ -353,6 +353,47 @@ try {
     );
 
     $db->query(
+        "DELETE FROM community_charter_articles
+         WHERE charter_version_id=" . $proposedVersionId . " AND article_code='C-01' AND is_core=1"
+    );
+    integration_check(!try_activate_amendment($db, $amendmentId),
+        'final activation independently refuses a missing core charter article');
+    integration_check(
+        (string)$db->query("SELECT status FROM community_charter_versions WHERE id=1")->fetch_assoc()['status'] === 'effective',
+        'a missing core article cannot replace the effective charter'
+    );
+    $db->query(
+        "INSERT INTO community_charter_articles
+         (charter_version_id,article_code,title,article_text,principle_group,is_core,display_order)
+         SELECT " . $proposedVersionId . ",article_code,title,article_text,principle_group,is_core,display_order
+         FROM community_charter_articles WHERE charter_version_id=1 AND article_code='C-01'"
+    );
+
+    $db->query(
+        "UPDATE community_charter_amendment_assessments
+         SET rights_protection='weakened'
+         WHERE amendment_id=" . $amendmentId . " AND reviewer_user_id=2"
+    );
+    integration_check(!try_activate_amendment($db, $amendmentId),
+        'final activation rechecks all five independent safeguards and rejects weakened rights');
+    $db->query(
+        "UPDATE community_charter_amendment_assessments
+         SET rights_protection='maintained'
+         WHERE amendment_id=" . $amendmentId . " AND reviewer_user_id=2"
+    );
+
+    $db->query(
+        "UPDATE community_charter_amendment_votes SET vote='no'
+         WHERE amendment_id=" . $amendmentId . " AND user_id=7"
+    );
+    integration_check(!try_activate_amendment($db, $amendmentId),
+        'final activation rechecks the two-thirds turnout and three-quarters approval thresholds');
+    $db->query(
+        "UPDATE community_charter_amendment_votes SET vote='yes'
+         WHERE amendment_id=" . $amendmentId . " AND user_id=7"
+    );
+
+    $db->query(
         "UPDATE community_charter_versions SET status='draft' WHERE id=" . $proposedVersionId
     );
     integration_check(try_activate_amendment($db, $amendmentId),

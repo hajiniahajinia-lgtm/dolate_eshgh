@@ -1916,6 +1916,121 @@ if (!function_exists('community_charter_amendment_activate')) {
             $open_count = (int)$open_appeals->get_result()->fetch_assoc()['total'];
             $open_appeals->close();
             if ($open_count > 0) throw new RuntimeException('تا رسیدگی نهایی به همه اعتراض‌های ثبت‌شده، منشور فعال نمی‌شود.');
+            $appeal_states = $conn->prepare(
+                "SELECT COUNT(*) AS total,
+                        SUM(status='dismissed') AS dismissed
+                 FROM community_charter_amendment_appeals WHERE amendment_id=?"
+            );
+            if (!$appeal_states) throw new RuntimeException('بررسی وضعیت نهایی اعتراض‌ها ممکن نیست.');
+            $appeal_states->bind_param('i', $amendment_id);
+            if (!$appeal_states->execute()) throw new RuntimeException('خواندن وضعیت نهایی اعتراض‌ها انجام نشد.');
+            $appeal_summary = $appeal_states->get_result()->fetch_assoc();
+            $appeal_states->close();
+            if ((int)$appeal_summary['total'] !== (int)$appeal_summary['dismissed']) {
+                throw new RuntimeException('همه اعتراض‌ها باید با نتیجه نهایی رد شده باشند؛ اعتراض پذیرفته‌شده یا نامشخص مانع فعال‌سازی است.');
+            }
+
+            // فعال‌سازی، دروازه نهایی است؛ صرف تغییر status به appeal_period کافی نیست.
+            $reviewers = $conn->prepare(
+                "SELECT r.reviewer_user_id,a.verdict,a.rights_protection,
+                        a.equality_and_non_discrimination,a.living_beings_and_environment,
+                        a.power_and_accountability,a.future_generations
+                 FROM community_charter_amendment_reviewers r
+                 LEFT JOIN community_charter_amendment_assessments a
+                   ON a.amendment_id=r.amendment_id AND a.reviewer_user_id=r.reviewer_user_id
+                 WHERE r.amendment_id=? ORDER BY r.reviewer_user_id"
+            );
+            if (!$reviewers) throw new RuntimeException('بازبینی هیئت مستقل منشور ممکن نیست.');
+            $reviewers->bind_param('i', $amendment_id);
+            if (!$reviewers->execute()) throw new RuntimeException('خواندن ارزیابی‌های هیئت مستقل انجام نشد.');
+            $review_rows = [];
+            $review_result = $reviewers->get_result();
+            while ($review_row = $review_result->fetch_assoc()) $review_rows[] = $review_row;
+            $reviewers->close();
+            if (count($review_rows) !== 5 ||
+                community_charter_amendment_reviewer_result($review_rows) !== 'approved') {
+                throw new RuntimeException('پنج ارزیابی مستقل با دست‌کم چهار موافقت و حفاظت کامل از اصول بنیادین الزامی است.');
+            }
+
+            $electorate_stmt = $conn->prepare(
+                'SELECT COUNT(*) AS total FROM community_charter_amendment_electorate WHERE amendment_id=?'
+            );
+            if (!$electorate_stmt) throw new RuntimeException('خواندن فهرست رأی‌دهندگان منشور ممکن نیست.');
+            $electorate_stmt->bind_param('i', $amendment_id);
+            if (!$electorate_stmt->execute()) throw new RuntimeException('شمارش واجدان رأی انجام نشد.');
+            $electorate_count = (int)$electorate_stmt->get_result()->fetch_assoc()['total'];
+            $electorate_stmt->close();
+
+            $votes_stmt = $conn->prepare(
+                "SELECT COALESCE(SUM(vote='yes'),0) AS yes_count,
+                        COALESCE(SUM(vote='no'),0) AS no_count,
+                        COALESCE(SUM(vote='abstain'),0) AS abstain_count
+                 FROM community_charter_amendment_votes WHERE amendment_id=?"
+            );
+            if (!$votes_stmt) throw new RuntimeException('خواندن آرای منشور ممکن نیست.');
+            $votes_stmt->bind_param('i', $amendment_id);
+            if (!$votes_stmt->execute()) throw new RuntimeException('جمع‌بندی آرای منشور انجام نشد.');
+            $vote_summary = $votes_stmt->get_result()->fetch_assoc();
+            $votes_stmt->close();
+            if (community_charter_amendment_vote_result(
+                $electorate_count,
+                (int)$vote_summary['yes_count'],
+                (int)$vote_summary['no_count'],
+                (int)$vote_summary['abstain_count']
+            ) !== 'approved') {
+                throw new RuntimeException('حدنصاب مشارکت دوسوم و موافقت سه‌چهارم آرای معتبر باید دوباره تأیید شود.');
+            }
+
+            $items_stmt = $conn->prepare(
+                "SELECT i.action,i.target_article_id,i.article_code,i.proposed_title,
+                        i.proposed_text,i.principle_group,COALESCE(base.is_core,0) AS is_core,
+                        base.article_code AS base_article_code
+                 FROM community_charter_amendment_items i
+                 LEFT JOIN community_charter_articles base
+                   ON base.id=i.target_article_id
+                  AND base.charter_version_id=?
+                 WHERE i.amendment_id=? ORDER BY i.id"
+            );
+            if (!$items_stmt) throw new RuntimeException('بازبینی مواد اصلاح‌شده منشور ممکن نیست.');
+            $base_version_id = (int)$amendment['base_charter_version_id'];
+            $items_stmt->bind_param('ii', $base_version_id, $amendment_id);
+            if (!$items_stmt->execute()) throw new RuntimeException('خواندن مواد اصلاح‌شده انجام نشد.');
+            $items = [];
+            $item_result = $items_stmt->get_result();
+            while ($item = $item_result->fetch_assoc()) {
+                if (in_array($item['action'], ['replace','remove'], true) &&
+                    ($item['base_article_code'] === null ||
+                     $item['base_article_code'] !== $item['article_code'])) {
+                    $items_stmt->close();
+                    throw new RuntimeException('ماده هدف اصلاحیه با نسخه پایه منشور منطبق نیست.');
+                }
+                $items[] = $item;
+            }
+            $items_stmt->close();
+            if (!community_charter_amendment_items_are_valid($items)) {
+                throw new RuntimeException('مواد اصلاح‌شده معتبر نیستند یا حذف ماده بنیادین را شامل می‌شوند.');
+            }
+
+            $core_check = $conn->prepare(
+                "SELECT COUNT(*) AS missing
+                 FROM community_charter_articles base
+                 WHERE base.charter_version_id=? AND base.is_core=1
+                   AND NOT EXISTS (
+                       SELECT 1 FROM community_charter_articles proposed
+                       WHERE proposed.charter_version_id=?
+                         AND proposed.article_code=base.article_code
+                         AND proposed.is_core=1
+                   )"
+            );
+            if (!$core_check) throw new RuntimeException('بررسی حفظ مواد بنیادین ممکن نیست.');
+            $proposed_version_id = (int)$amendment['proposed_charter_version_id'];
+            $core_check->bind_param('ii', $base_version_id, $proposed_version_id);
+            if (!$core_check->execute()) throw new RuntimeException('بررسی حفظ مواد بنیادین انجام نشد.');
+            $missing_core = (int)$core_check->get_result()->fetch_assoc()['missing'];
+            $core_check->close();
+            if ($missing_core !== 0) {
+                throw new RuntimeException('هیچ ماده بنیادینی در نسخه پیشنهادی قابل حذف یا تنزل به ماده غیربنیادین نیست.');
+            }
 
             $pending = $conn->prepare(
                 "UPDATE community_charter_amendments SET status='approved_pending_activation'
