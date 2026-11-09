@@ -25,6 +25,11 @@ $checks['case query failure cannot be presented as an empty case list'] =
 $checks['conflict and review query failures cannot silently hide records'] =
     strpos($source, 'امکان دریافت موارد اختلاف وجود ندارد.') !== false &&
     strpos($source, 'امکان دریافت سوابق بررسی وجود ندارد.') !== false;
+$checks['latest review round is displayed and governs current-side eligibility'] =
+    strpos($source, 'AS latest_review_round') !== false &&
+    strpos($source, 'r.review_round=(SELECT COALESCE(MAX(r2.review_round),0)') !== false;
+$checks['reviewers cannot submit a second opinion in later rounds'] =
+    strpos($source, 'r.reviewer_user_id=?') !== false;
 $checks['all case data remains scoped to the requested local or parent community'] =
     strpos($source, 'WHERE c.community_id=? OR c.parent_community_id=?') !== false;
 

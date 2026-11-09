@@ -81,9 +81,14 @@ body{font-family:Tahoma,Arial,sans-serif;background:#f5f6f8;color:#20242a;margin
 <?php elseif(!$cases): ?><div class="card">پرونده‌ای برای این جامعه ثبت نشده است.</div>
 <?php else: foreach($cases as $case):
  $case_id=(int)$case['id']; $is_local=(int)$case['community_id']===$community_id; $conflicts=[];
- $q=$conn->prepare("SELECT f.*, (SELECT COUNT(*) FROM community_law_conformity_conflict_reviews r WHERE r.conflict_id=f.id) AS review_count,
+ $q=$conn->prepare("SELECT f.*,
+   (SELECT COALESCE(MAX(r.review_round),0) FROM community_law_conformity_conflict_reviews r WHERE r.conflict_id=f.id) AS latest_review_round,
+   (SELECT COUNT(*) FROM community_law_conformity_conflict_reviews r WHERE r.conflict_id=f.id
+     AND r.review_round=(SELECT COALESCE(MAX(r2.review_round),0) FROM community_law_conformity_conflict_reviews r2 WHERE r2.conflict_id=f.id)) AS review_count,
    (SELECT COUNT(*) FROM community_law_conformity_conflict_reviews r WHERE r.conflict_id=f.id AND r.reviewer_user_id=?) AS my_review,
-   (SELECT COUNT(*) FROM community_law_conformity_conflict_reviews r WHERE r.conflict_id=f.id AND r.reviewer_community_id=?) AS side_review
+   (SELECT COUNT(*) FROM community_law_conformity_conflict_reviews r WHERE r.conflict_id=f.id
+     AND r.review_round=(SELECT COALESCE(MAX(r2.review_round),0) FROM community_law_conformity_conflict_reviews r2 WHERE r2.conflict_id=f.id)
+     AND r.reviewer_community_id=?) AS side_review
    FROM community_law_conformity_conflicts f WHERE f.case_id=? ORDER BY f.id");
  if(!$q){http_response_code(503);exit('امکان دریافت موارد اختلاف وجود ندارد.');}
  $q->bind_param('iii',$user_id,$community_id,$case_id);
