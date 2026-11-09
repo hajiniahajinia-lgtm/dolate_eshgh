@@ -15,6 +15,7 @@ on:
       - 'migration_runner.php'
       - 'migrations/auto_apply.php'
       - 'tests/migration_order_test.php'
+      - 'tests/migration_runner_plan_mode_contract_test.php'
       - '.github/workflows/migration-order-check.yml'
 
 jobs:
