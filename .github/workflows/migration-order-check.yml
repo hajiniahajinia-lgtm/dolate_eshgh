@@ -1,0 +1,33 @@
+name: Migration dependency order check
+
+on:
+  push:
+    branches:
+      - fix/corrective-completion-migration-order
+    paths:
+      - 'migration_runner.php'
+      - 'migrations/auto_apply.php'
+      - 'tests/migration_order_test.php'
+      - '.github/workflows/migration-order-check.yml'
+  pull_request:
+    paths:
+      - 'migration_runner.php'
+      - 'migrations/auto_apply.php'
+      - 'tests/migration_order_test.php'
+      - '.github/workflows/migration-order-check.yml'
+
+jobs:
+  migration-order:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+      - name: Lint migration runner and contract test
+        run: |
+          php -l migration_runner.php
+          php -l migrations/auto_apply.php
+          php -l tests/migration_order_test.php
+      - name: Verify migration prerequisite order
+        run: php tests/migration_order_test.php
