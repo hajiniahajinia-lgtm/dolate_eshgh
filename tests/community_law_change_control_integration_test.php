@@ -174,8 +174,20 @@ try {
         'SELECT COUNT(*) AS n FROM community_law_conformity_conflict_reviews WHERE conflict_id='.(int)$dual_member_conflict_id
     )->fetch_assoc()['n'];
     change_case_check($dual_member_review_count===1,'dual membership leaves exactly one independent review record');
+    change_case_check(
+        community_law_create_amendment_draft($db,$conformity_case_id,90020,90201,'پیش از تکمیل بررسی همه موارد.',[[
+            'reference'=>'ماده ۳','previous_text'=>'متن قانون محلی','proposed_text'=>'نسخه موقت','reason'=>'آزمون جلوگیری از اصلاح ناقص'
+        ]])===false,
+        'amendment draft is blocked while another identified conflict still awaits its independent review'
+    );
+    change_case_check(
+        community_law_conformity_review_conflict($db,$dual_member_conflict_id,90103,90010,'no_conflict','از دید جامعه مادر نیز پس از بررسی مستند، تعارضی در این ماده احراز نمی‌شود.'),
+        'a different parent reviewer completes the independent review of the second conflict'
+    );
+    $dual_member_final=$db->query("SELECT f.finding,c.status FROM community_law_conformity_conflicts f JOIN community_law_conformity_cases c ON c.id=f.case_id WHERE f.id=".$dual_member_conflict_id)->fetch_assoc();
+    change_case_check($dual_member_final && $dual_member_final['finding']==='no_conflict' && $dual_member_final['status']==='amendment_required','a resolved non-conflict item does not erase a separate confirmed conflict');
     $review_history=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_history WHERE law_id=9502 AND event_type='conformity_conflict_reviewed'")->fetch_assoc()['n'];
-    change_case_check($review_history===3,'both independent reviews and the additional dual-membership review are preserved in the local law history');
+    change_case_check($review_history===4,'all independent conflict reviews remain in permanent local law history');
 
     // پیشنهاد اصلاح فقط مواد مشخص را تغییر می‌دهد و نسخه مصوب را دست‌نخورده نگه می‌دارد.
     $amendment_id=community_law_create_amendment_draft(

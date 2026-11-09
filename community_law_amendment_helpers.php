@@ -169,10 +169,27 @@ if (!function_exists('community_law_create_amendment_draft')) {
             }
             $conflict_refs->close();
             if (!$confirmed_refs) throw new RuntimeException('no independently confirmed conflict articles');
+
+            // A conformity case cannot be amended or later resolved while any
+            // identified conflict is still unreviewed or disputed.
+            $open_conflicts=$conn->prepare(
+                "SELECT COUNT(*) AS total FROM community_law_conformity_conflicts
+                 WHERE case_id=? AND finding NOT IN ('conflict_confirmed','no_conflict')"
+            );
+            if (!$open_conflicts) throw new RuntimeException('unresolved conflict check prepare failed');
+            $open_conflicts->bind_param('i',$conformity_case_id);
+            if (!$open_conflicts->execute()) throw new RuntimeException('unresolved conflict check failed');
+            $unresolved_count=(int)$open_conflicts->get_result()->fetch_assoc()['total'];
+            $open_conflicts->close();
+            if ($unresolved_count>0) throw new RuntimeException('all identified conflicts must receive a conclusive independent review');
+
             foreach ($normalized as $article) {
                 if (!isset($confirmed_refs[$article['reference']])) {
                     throw new RuntimeException('amendment may only change articles with a confirmed conflict');
                 }
+            }
+            if (count($normalized)!==count($confirmed_refs)) {
+                throw new RuntimeException('amendment must address every independently confirmed conflict article');
             }
 
             $base_text=(string)$record['law_text'];
