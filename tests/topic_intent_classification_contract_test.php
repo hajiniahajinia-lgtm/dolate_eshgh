@@ -182,7 +182,12 @@ topic_intent_contract_check(
     is_string($law = file_get_contents(__DIR__ . '/../community_laws.php')) &&
     str_contains($law, 'community_law_history h') &&
     str_contains($law, 'ORDER BY h.created_at DESC, h.id DESC') &&
-    str_contains($law, 'WHERE l.originating_community_id=?') &&
+    str_contains($law, 'l.originating_community_id=?') &&
+    str_contains($law, 'h.community_id=?') &&
+    str_contains($law, 'history_scope.include_descendants=1') &&
+    str_contains($law, 'community_law_hierarchy_path($history_parent_map, $community_id)') &&
+    str_contains($law, 'community_law_scope_matches(') &&
+    str_contains($law, 'if (!$is_local_history && !$version_scope_matches)') &&
     str_contains($law, 'تاریخچهٔ قوانین این جامعه') &&
     str_contains($law, 'نمایش حداکثر ۳۰۰ رویداد اخیر') &&
     str_contains($law, 'برای مشاهدهٔ تاریخچه باید عضو این جامعه باشید'),

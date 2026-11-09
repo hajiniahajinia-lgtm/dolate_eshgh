@@ -4278,25 +4278,88 @@ if ($schema_ready) {
 
 $law_history_by_law = [];
 if ($schema_ready && $is_member) {
-    $history_stmt = $conn->prepare(
-        "SELECT h.id, h.law_id, l.law_code, current_version.title AS current_title,
-                h.law_version_id, v.version_number, h.community_id,
-                c.name AS event_community_name, h.actor_user_id,
-                h.event_type, h.details, h.created_at
-         FROM community_law_history h
-         JOIN community_laws l ON l.id=h.law_id
-         LEFT JOIN community_law_versions current_version ON current_version.id=l.current_version_id
-         LEFT JOIN community_law_versions v ON v.id=h.law_version_id
-         LEFT JOIN communities c ON c.id=h.community_id
-         WHERE l.originating_community_id=?
-         ORDER BY h.created_at DESC, h.id DESC
-         LIMIT 300"
-    );
+    // تاریخچهٔ قانون مادر فقط در صورت شمول نسخهٔ همان رویداد در این جامعه قابل مشاهده است.
+    // نقشهٔ سلسله‌مراتب نامعتبر، مسیر قوانین موروثی را می‌بندد؛ تاریخچهٔ محلی همچنان قابل مشاهده است.
+    $history_parent_map = community_law_load_parent_map($conn);
+    $history_ancestor_ids = [];
+    if (
+        $history_parent_map !== null &&
+        community_law_parent_map_is_valid($history_parent_map)
+    ) {
+        $history_ancestor_ids = community_law_hierarchy_path($history_parent_map, $community_id) ?? [];
+    }
+
+    $history_scope_clause = '';
+    if ($history_ancestor_ids) {
+        $history_scope_placeholders = implode(',', array_fill(0, count($history_ancestor_ids), '?'));
+        $history_scope_clause = "
+            OR EXISTS (
+                SELECT 1 FROM community_law_scopes history_scope
+                WHERE history_scope.law_version_id=h.law_version_id
+                  AND history_scope.scope_community_id IN ($history_scope_placeholders)
+                  AND (
+                      history_scope.scope_community_id=?
+                      OR history_scope.include_descendants=1
+                  )
+            )";
+    }
+
+    $history_sql = "
+        SELECT h.id, h.law_id, l.law_code, COALESCE(current_version.title, v.title) AS current_title,
+               l.originating_community_id,
+               h.law_version_id, v.version_number, h.community_id,
+               c.name AS event_community_name, h.actor_user_id,
+               h.event_type, h.details, h.created_at
+        FROM community_law_history h
+        JOIN community_laws l ON l.id=h.law_id
+        LEFT JOIN community_law_versions current_version ON current_version.id=l.current_version_id
+        LEFT JOIN community_law_versions v ON v.id=h.law_version_id
+        LEFT JOIN communities c ON c.id=h.community_id
+        WHERE (
+            l.originating_community_id=?
+            OR h.community_id=?
+            $history_scope_clause
+        )
+        ORDER BY h.created_at DESC, h.id DESC
+        LIMIT 300";
+    $history_stmt = $conn->prepare($history_sql);
     if ($history_stmt) {
-        $history_stmt->bind_param('i', $community_id);
+        $history_types = 'ii' . str_repeat('i', count($history_ancestor_ids));
+        $history_params = [$history_types, $community_id, $community_id];
+        if ($history_ancestor_ids) {
+            foreach ($history_ancestor_ids as $history_ancestor_id) {
+                $history_params[] = (int)$history_ancestor_id;
+            }
+            $history_params[] = $community_id;
+        }
+        $history_bind_refs = [];
+        foreach ($history_params as $history_param_index => &$history_param_value) {
+            $history_bind_refs[$history_param_index] = &$history_param_value;
+        }
+        unset($history_param_value);
+        call_user_func_array([$history_stmt, 'bind_param'], $history_bind_refs);
+
         if ($history_stmt->execute()) {
             $history_result = $history_stmt->get_result();
             while ($history_row = $history_result->fetch_assoc()) {
+                $history_origin_id = (int)$history_row['originating_community_id'];
+                $history_event_community_id = (int)($history_row['community_id'] ?? 0);
+                $is_local_history = $history_origin_id === $community_id ||
+                    $history_event_community_id === $community_id;
+                $history_version_id = (int)($history_row['law_version_id'] ?? 0);
+                $version_scope_matches = false;
+
+                if (!$is_local_history && $history_version_id > 0 && $history_ancestor_ids) {
+                    $version_scope_matches = community_law_scope_matches(
+                        $conn,
+                        $history_version_id,
+                        $community_id
+                    );
+                }
+                if (!$is_local_history && !$version_scope_matches) {
+                    continue;
+                }
+
                 $history_law_id = (int)$history_row['law_id'];
                 if (!isset($law_history_by_law[$history_law_id])) {
                     $law_history_by_law[$history_law_id] = [
