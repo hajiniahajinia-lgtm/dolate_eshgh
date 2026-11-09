@@ -4,7 +4,8 @@ declare(strict_types=1);
 $page = file_get_contents(__DIR__ . '/../community_laws.php');
 $helpers = file_get_contents(__DIR__ . '/../community_law_helpers.php');
 $endpoint = file_get_contents(__DIR__ . '/../community_law_outcome_action.php');
-if (!is_string($page) || !is_string($helpers) || !is_string($endpoint)) {
+$change_endpoint = file_get_contents(__DIR__ . '/../community_law_change_action.php');
+if (!is_string($page) || !is_string($helpers) || !is_string($endpoint) || !is_string($change_endpoint)) {
     fwrite(STDERR, "FAIL: unable to read community law access sources\n");
     exit(1);
 }
@@ -71,6 +72,12 @@ $checks['outcome endpoint accepts POST only and validates CSRF before dispatch']
     strpos($endpoint, 'REQUEST_METHOD') !== false &&
     strpos($endpoint, 'hash_equals') !== false &&
     strpos($endpoint, 'community_law_csrf') !== false;
+
+$checks['law change vote finalization is restricted to members of the originating parent community'] =
+    strpos($change_endpoint, 'INNER JOIN community_members cm') !== false &&
+    strpos($change_endpoint, 'cm.community_id=l.originating_community_id AND cm.user_id=?') !== false &&
+    strpos($change_endpoint, 'WHERE c.id=? AND l.originating_community_id=?') !== false &&
+    strpos($change_endpoint, 'if (!$can_finalize)') !== false;
 
 $failed = 0;
 foreach ($checks as $label => $passed) {

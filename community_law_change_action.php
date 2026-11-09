@@ -65,7 +65,22 @@ try {
     }
 
     if ($action==='finalize_vote') {
-        $result=community_law_change_finalize_vote($conn,(int)($_POST['case_id']??0));
+        $case_id=(int)($_POST['case_id']??0);
+        $authorized=$conn->prepare(
+            "SELECT 1
+             FROM community_law_change_cases c
+             INNER JOIN community_laws l ON l.id=c.law_id
+             INNER JOIN community_members cm
+               ON cm.community_id=l.originating_community_id AND cm.user_id=?
+             WHERE c.id=? AND l.originating_community_id=?
+             LIMIT 1"
+        );
+        if (!$authorized) clca_redirect($community_id,'finalize_failed');
+        $authorized->bind_param('iii',$user_id,$case_id,$community_id);
+        $can_finalize=$authorized->execute() && (bool)$authorized->get_result()->fetch_row();
+        $authorized->close();
+        if (!$can_finalize) clca_redirect($community_id,'finalize_failed');
+        $result=community_law_change_finalize_vote($conn,$case_id);
         $status=$result==='approved'?'vote_approved':($result==='rejected'?'vote_rejected':($result==='insufficient_turnout'?'vote_insufficient':'finalize_failed'));
         clca_redirect($community_id,$status);
     }
