@@ -52,6 +52,41 @@ try {
     $migration_files = glob($migration_dir . '/[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]_*.sql') ?: [];
     sort($migration_files, SORT_STRING);
 
+    // Some dated migrations have an explicit prerequisite that differs from
+    // lexical filename order. Keep the files immutable and apply this small
+    // dependency ordering before execution.
+    $migration_dependencies = [
+        '20261108_community_decision_ledger.sql' => [
+            '20261108_community_decision_knowledge_link.sql'
+        ]
+    ];
+    foreach ($migration_dependencies as $prerequisite => $dependents) {
+        $prerequisite_path = null;
+        foreach ($migration_files as $candidate_path) {
+            if (basename($candidate_path) === $prerequisite) {
+                $prerequisite_path = $candidate_path;
+                break;
+            }
+        }
+        if ($prerequisite_path === null) continue;
+        foreach ($dependents as $dependent) {
+            $dependent_index = null;
+            foreach ($migration_files as $index => $candidate_path) {
+                if (basename($candidate_path) === $dependent) {
+                    $dependent_index = $index;
+                    break;
+                }
+            }
+            if ($dependent_index === null) continue;
+            $dependent_path = $migration_files[$dependent_index];
+            array_splice($migration_files, $dependent_index, 1);
+            $prerequisite_index = array_search($prerequisite_path, $migration_files, true);
+            if ($prerequisite_index !== false) {
+                array_splice($migration_files, $prerequisite_index + 1, 0, [$dependent_path]);
+            }
+        }
+    }
+
     foreach ($migration_files as $migration_file) {
         $migration_name = basename($migration_file);
         $current_migration = $migration_name;

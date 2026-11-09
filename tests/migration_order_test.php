@@ -6,6 +6,23 @@ $files=glob($migrationsDir.'/[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]_*.sql') ?:
 $names=array_map('basename',$files);
 sort($names,SORT_STRING);
 
+$runner=file_get_contents($migrationsDir.'/auto_apply.php');
+if(!is_string($runner) || strpos($runner,'$migration_dependencies')===false) {
+    fwrite(STDERR,"FAIL: automatic migration runner must declare explicit prerequisite ordering\\n");
+    exit(1);
+}
+$effectiveNames=$names;
+$ledgerIndex=array_search('20261108_community_decision_ledger.sql',$effectiveNames,true);
+$knowledgeIndex=array_search('20261108_community_decision_knowledge_link.sql',$effectiveNames,true);
+if($ledgerIndex===false || $knowledgeIndex===false) {
+    fwrite(STDERR,"FAIL: decision ledger migrations are missing\\n");
+    exit(1);
+}
+$knowledgeName=$effectiveNames[$knowledgeIndex];
+array_splice($effectiveNames,$knowledgeIndex,1);
+$ledgerIndex=array_search('20261108_community_decision_ledger.sql',$effectiveNames,true);
+array_splice($effectiveNames,$ledgerIndex+1,0,[$knowledgeName]);
+
 $requiredOrder=[
     '20261106_community_law_objections_schema_repair.sql',
     '20261107_community_law_framework.sql',
@@ -39,9 +56,9 @@ $changeControl=array_search('20261108_community_law_change_control.sql',$names,t
 $changeEffects=array_search('20261108_community_law_change_effects.sql',$names,true);
 $changeReview=array_search('20261108_community_law_change_review.sql',$names,true);
 $changeVoting=array_search('20261108_community_law_change_voting.sql',$names,true);
-$decisionLedger=array_search('20261108_community_decision_ledger.sql',$names,true);
-$decisionOrigin=array_search('20261108_community_law_decision_origin.sql',$names,true);
-$decisionKnowledge=array_search('20261108_community_decision_knowledge_link.sql',$names,true);
+$decisionLedger=array_search('20261108_community_decision_ledger.sql',$effectiveNames,true);
+$decisionOrigin=array_search('20261108_community_law_decision_origin.sql',$effectiveNames,true);
+$decisionKnowledge=array_search('20261108_community_decision_knowledge_link.sql',$effectiveNames,true);
 if($changeControl===false || $changeEffects===false || $changeReview===false || $changeVoting===false ||
    !($changeControl<$changeEffects && $changeEffects<$changeReview && $changeReview<$changeVoting)) {
     fwrite(STDERR,"FAIL: law change schema migrations must follow their lexical dependency order\n");
