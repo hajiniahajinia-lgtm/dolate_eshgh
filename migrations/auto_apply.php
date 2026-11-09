@@ -58,6 +58,9 @@ try {
     $migration_dependencies = [
         '20261108_community_decision_ledger.sql' => [
             '20261108_community_decision_knowledge_link.sql'
+        ],
+        '20261109_community_law_corrective_completion_reviews.sql' => [
+            '20261109_community_law_corrective_completion_retries.sql'
         ]
     ];
     foreach ($migration_dependencies as $prerequisite => $dependents) {

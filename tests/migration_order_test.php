@@ -23,6 +23,31 @@ array_splice($effectiveNames,$knowledgeIndex,1);
 $ledgerIndex=array_search('20261108_community_decision_ledger.sql',$effectiveNames,true);
 array_splice($effectiveNames,$ledgerIndex+1,0,[$knowledgeName]);
 
+$completionReviews='20261109_community_law_corrective_completion_reviews.sql';
+$completionRetries='20261109_community_law_corrective_completion_retries.sql';
+if(!in_array($completionReviews,$names,true) || !in_array($completionRetries,$names,true) ||
+   strpos($runner, "'{$completionReviews}' => [")===false ||
+   strpos($runner, "'{$completionRetries}'")===false) {
+    fwrite(STDERR,"FAIL: corrective completion retry dependency is missing\\n");
+    exit(1);
+}
+$retryIndex=array_search($completionRetries,$effectiveNames,true);
+if($retryIndex===false) {
+    fwrite(STDERR,"FAIL: corrective completion retry migration is missing\\n");
+    exit(1);
+}
+array_splice($effectiveNames,$retryIndex,1);
+$reviewIndex=array_search($completionReviews,$effectiveNames,true);
+if($reviewIndex===false) {
+    fwrite(STDERR,"FAIL: corrective completion review migration is missing\\n");
+    exit(1);
+}
+array_splice($effectiveNames,$reviewIndex+1,0,[$completionRetries]);
+if(array_search($completionReviews,$effectiveNames,true)>=array_search($completionRetries,$effectiveNames,true)) {
+    fwrite(STDERR,"FAIL: corrective completion retry migration must run after its review table is created\\n");
+    exit(1);
+}
+
 $requiredOrder=[
     '20261106_community_law_objections_schema_repair.sql',
     '20261107_community_law_framework.sql',
