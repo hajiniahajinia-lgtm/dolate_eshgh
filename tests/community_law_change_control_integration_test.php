@@ -610,6 +610,9 @@ try {
     $db->query("INSERT INTO community_laws (id,law_code,originating_community_id,created_by,status,current_version_id,effective_at) VALUES (96003,'LAW-NEW-PARENT-SCOPE-TEST',91110,90200,'approved',99603,NOW())");
     $db->query("INSERT INTO community_law_versions (id,law_id,version_number,title,law_text,proposed_by,status,approved_at) VALUES (99603,96003,1,'قانون مادر مقصد','متن قانون مقصد',90200,'approved',NOW())");
     $db->query("INSERT INTO community_law_scopes (law_version_id,scope_community_id,include_descendants) VALUES (99603,91110,1)");
+    $db->query("INSERT INTO community_laws (id,law_code,originating_community_id,created_by,status,current_version_id,effective_at) VALUES (96004,'LAW-MOVED-LOCAL-TEST',91030,90200,'approved',99604,NOW())");
+    $db->query("INSERT INTO community_law_versions (id,law_id,version_number,title,law_text,proposed_by,status,approved_at) VALUES (99604,96004,1,'قانون محلی جامعهٔ جابه‌جا‌شده','متن قانون محلی جامعه',90200,'approved',NOW())");
+    $db->query("INSERT INTO community_law_scopes (law_version_id,scope_community_id,include_descendants) VALUES (99604,91030,1)");
     // Use the complete database hierarchy: scope validation must see every
     // community referenced by active and pending law scopes, not a partial fixture.
     $old_scope_map=community_law_load_parent_map($db);
@@ -688,6 +691,66 @@ try {
     change_case_check($destination_retry_impl && $destination_retry_impl['status']==='pending' && $destination_retry_notice===2,'retry of parent change also enters the destination law exactly once and preserves transition history');
 
 
+
+    // آزمون کامل انتقال واقعی جامعه از مادر قبلی به مادر جدید، همراه با پروندهٔ سازگاری قانون محلی.
+    // ابتدا وضعیت شمول را با والد فعلی پایگاه داده هم‌تراز می‌کنیم.
+    $db->begin_transaction();
+    change_case_check(community_law_record_hierarchy_scope_changes($db,$new_scope_map,$old_scope_map,91030,90200),'scope fixture can be restored to the current parent before the atomic parent move');
+    $db->commit();
+    $before_move_scope_history=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_history WHERE law_id IN (96001,96003) AND event_type IN ('scope_left','scope_entered')")->fetch_assoc()['n'];
+    $before_move_scope_notices=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_scope_notices WHERE community_id=91030 AND law_id IN (96001,96003)")->fetch_assoc()['n'];
+    $db->query("CREATE TRIGGER test_fail_parent_conformity_event BEFORE INSERT ON community_law_conformity_events
+        FOR EACH ROW BEGIN
+            IF NEW.event_type='review_case_opened' THEN
+                SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='forced parent conformity event failure';
+            END IF;
+        END");
+    $move_failed=false;
+    $db->begin_transaction();
+    try {
+        if (!community_hierarchy_record_parent_change($db,91030,910031,91020,91110,90200)) {
+            throw new RuntimeException('parent history registration failed');
+        }
+        if (!community_law_record_hierarchy_scope_changes($db,$old_scope_map,$new_scope_map,91030,90200)) {
+            throw new RuntimeException('parent scope transition failed');
+        }
+        $db->query("UPDATE communities SET parent_community_id=91110 WHERE id=91030");
+        if (!community_law_register_hierarchy_conformity_reviews($db,$new_scope_map,91030,90200)) {
+            throw new RuntimeException('parent conformity registration failed');
+        }
+        $db->commit();
+    } catch (Throwable $e) {
+        $move_failed=true;
+        $db->rollback();
+    }
+    $db->query("DROP TRIGGER test_fail_parent_conformity_event");
+    $parent_after_conformity_failure=$db->query("SELECT parent_community_id FROM communities WHERE id=91030")->fetch_assoc()['parent_community_id'];
+    $parent_history_after_failure=(int)$db->query("SELECT COUNT(*) AS n FROM community_hierarchy_change_history WHERE vote_round_id=910031")->fetch_assoc()['n'];
+    $conformity_after_failure=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_conformity_cases WHERE community_id=91030 AND local_law_version_id=99604 AND parent_law_version_id=99603")->fetch_assoc()['n'];
+    $scope_history_after_move_failure=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_history WHERE law_id IN (96001,96003) AND event_type IN ('scope_left','scope_entered')")->fetch_assoc()['n'];
+    $scope_notices_after_move_failure=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_scope_notices WHERE community_id=91030 AND law_id IN (96001,96003)")->fetch_assoc()['n'];
+    $old_impl_after_move_failure=$db->query("SELECT status FROM community_law_implementations WHERE law_version_id=99601 AND community_id=91030")->fetch_assoc();
+    $new_impl_after_move_failure=$db->query("SELECT status FROM community_law_implementations WHERE law_version_id=99603 AND community_id=91030")->fetch_assoc();
+    change_case_check($move_failed && (int)$parent_after_conformity_failure===91020 && $parent_history_after_failure===0 && $conformity_after_failure===0,'a failed conformity review rolls back the actual parent move, hierarchy history and new review case');
+    change_case_check($scope_history_after_move_failure===$before_move_scope_history && $scope_notices_after_move_failure===$before_move_scope_notices && $old_impl_after_move_failure && $old_impl_after_move_failure['status']==='pending' && $new_impl_after_move_failure && $new_impl_after_move_failure['status']==='not_applicable','a failed conformity review also rolls back both law-scope transitions, notices and implementation obligations');
+    $db->begin_transaction();
+    change_case_check(community_hierarchy_record_parent_change($db,91030,910031,91020,91110,90200),'parent history can be retried after the conformity event failure is removed');
+    change_case_check(community_law_record_hierarchy_scope_changes($db,$old_scope_map,$new_scope_map,91030,90200),'old and destination parent law scopes transition on retry');
+    $db->query("UPDATE communities SET parent_community_id=91110 WHERE id=91030");
+    change_case_check(community_law_register_hierarchy_conformity_reviews($db,$new_scope_map,91030,90200),'moving the community opens conformity reviews for its active local law against the new parent law');
+    $db->commit();
+    $moved_parent=$db->query("SELECT parent_community_id FROM communities WHERE id=91030")->fetch_assoc();
+    $moved_history=$db->query("SELECT old_parent_community_id,new_parent_community_id,actor_user_id FROM community_hierarchy_change_history WHERE vote_round_id=910031")->fetch_assoc();
+    $moved_conformity=$db->query("SELECT id,parent_community_id,local_law_id,parent_law_id,status FROM community_law_conformity_cases WHERE community_id=91030 AND local_law_version_id=99604 AND parent_law_version_id=99603")->fetch_assoc();
+    $moved_conformity_events=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_conformity_events e JOIN community_law_conformity_cases c ON c.id=e.case_id WHERE c.community_id=91030 AND c.local_law_version_id=99604 AND c.parent_law_version_id=99603 AND e.event_type='review_case_opened'")->fetch_assoc()['n'];
+    $old_impl_after_move=$db->query("SELECT status FROM community_law_implementations WHERE law_version_id=99601 AND community_id=91030")->fetch_assoc();
+    $new_impl_after_move=$db->query("SELECT status FROM community_law_implementations WHERE law_version_id=99603 AND community_id=91030")->fetch_assoc();
+    change_case_check($moved_parent && (int)$moved_parent['parent_community_id']===91110 && $moved_history && (int)$moved_history['old_parent_community_id']===91020 && (int)$moved_history['new_parent_community_id']===91110 && (int)$moved_history['actor_user_id']===90200,'successful parent transfer records the exact old and new parent and responsible actor');
+    change_case_check($moved_conformity && (int)$moved_conformity['parent_community_id']===91110 && (int)$moved_conformity['local_law_id']===96004 && (int)$moved_conformity['parent_law_id']===96003 && $moved_conformity['status']==='review_required' && $moved_conformity_events===1,'the moved community local law receives one open human conformity review against the new parent law');
+    change_case_check($old_impl_after_move && $old_impl_after_move['status']==='not_applicable' && $new_impl_after_move && $new_impl_after_move['status']==='pending','successful parent transfer ends the old parent obligation and activates the new parent obligation');
+    $old_move_notice=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_scope_notices WHERE law_id=96001 AND community_id=91030 AND transition='scope_left'")->fetch_assoc()['n'];
+    $new_move_notice=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_scope_notices WHERE law_id=96003 AND community_id=91030 AND transition='scope_entered'")->fetch_assoc()['n'];
+    change_case_check($old_move_notice===3 && $new_move_notice===3,'successful parent transfer notifies the moved community about both old and new parent law scopes');
 
     // اعلان‌ها فقط توسط عضو همان جامعه و از مسیر جدول منبع صحیح خوانده می‌شوند.
     $db->query("INSERT INTO community_members (community_id,user_id) VALUES (91030,90300) ON DUPLICATE KEY UPDATE user_id=VALUES(user_id)");
