@@ -2,11 +2,13 @@
 declare(strict_types=1);
 
 $migrationsDir=__DIR__.'/../migrations';
-$files=glob($migrationsDir.'/20261108_community_law_*.sql') ?: [];
+$files=glob($migrationsDir.'/[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]_*.sql') ?: [];
 $names=array_map('basename',$files);
 sort($names,SORT_STRING);
 
-$required=[
+$requiredOrder=[
+    '20261106_community_law_objections_schema_repair.sql',
+    '20261107_community_law_framework.sql',
     '20261108_community_law_conformity_workflow.sql',
     '20261108_community_law_decision_origin.sql',
     '20261108_community_law_z1_amendment_00_workflow.sql',
@@ -14,10 +16,12 @@ $required=[
     '20261108_community_law_z1_amendment_20_voting.sql',
     '20261108_community_law_z1_amendment_30_parent_review.sql',
     '20261108_community_law_z2_scope_notices.sql',
-    '20261108_community_law_z3_version_notices.sql'
+    '20261108_community_law_z3_version_notices.sql',
+    '20261109_community_law_conformity_review_rounds.sql',
+    '20261109_community_law_amendment_parent_review_rounds.sql'
 ];
 $positions=[];
-foreach($required as $name) {
+foreach($requiredOrder as $name) {
     $position=array_search($name,$names,true);
     if($position===false) {
         fwrite(STDERR,"FAIL: required migration missing: {$name}\n");
@@ -27,9 +31,23 @@ foreach($required as $name) {
 }
 for($i=1;$i<count($positions);$i++) {
     if($positions[$i]<=$positions[$i-1]) {
-        fwrite(STDERR,"FAIL: amendment migrations are not ordered after their prerequisites\n");
+        fwrite(STDERR,"FAIL: law and amendment migrations are not ordered after their prerequisites\n");
         exit(1);
     }
+}
+$changeControl=array_search('20261108_community_law_change_control.sql',$names,true);
+$changeVoting=array_search('20261108_community_law_change_voting.sql',$names,true);
+$changeEffects=array_search('20261108_community_law_change_effects.sql',$names,true);
+$decisionLedger=array_search('20261108_community_decision_ledger.sql',$names,true);
+$decisionKnowledge=array_search('20261108_community_decision_knowledge_link.sql',$names,true);
+if($changeControl===false || $changeVoting===false || $changeEffects===false ||
+   !($changeControl<$changeVoting && $changeVoting<$changeEffects)) {
+    fwrite(STDERR,"FAIL: law change effects must follow control and voting schema\n");
+    exit(1);
+}
+if($decisionLedger===false || $decisionKnowledge===false || $decisionLedger>=$decisionKnowledge) {
+    fwrite(STDERR,"FAIL: decision knowledge link must follow the decision ledger\n");
+    exit(1);
 }
 $obsolete=[
     '20261108_community_law_amendment_workflow.sql',
@@ -43,4 +61,4 @@ foreach($obsolete as $name) {
         exit(1);
     }
 }
-echo "PASS: amendment migrations execute after conformity and decision prerequisites in dependency order\n";
+echo "PASS: schema repair, decision ledger, law change and parent-child amendment migrations follow dependency order\n";
