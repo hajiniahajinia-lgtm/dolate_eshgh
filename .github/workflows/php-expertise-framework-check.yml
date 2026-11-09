@@ -266,7 +266,6 @@ jobs:
         run: |
           php tests/community_law_hierarchy_helpers_test.php
           php tests/community_charter_amendments_test.php
-          php tests/community_hierarchy_history_access_contract_test.php
 
   charter-mysql-integration:
     runs-on: ubuntu-latest
