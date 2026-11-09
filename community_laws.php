@@ -5176,6 +5176,29 @@ details>summary{cursor:pointer;font-weight:bold}
                 'ready_for_enactment' => 'آماده ابلاغ پس از کنترل نهایی',
                 'enacted' => 'ابلاغ و لازم‌الاجرا شده'
             ];
+            $appeal_status_labels = [
+                'submitted' => 'ثبت‌شده؛ در انتظار آغاز رسیدگی',
+                'under_review' => 'در حال رسیدگی',
+                'upheld' => 'اعتراض وارد تشخیص داده شد',
+                'dismissed' => 'اعتراض وارد تشخیص داده نشد'
+            ];
+            $appeal_type_labels = [
+                'charter_conflict' => 'تعارض با اصول بنیادین',
+                'jurisdiction_conflict' => 'خروج از حدود صلاحیت',
+                'rights_violation' => 'تضییع حقوق',
+                'discrimination' => 'تبعیض',
+                'power_concentration' => 'تمرکز قدرت',
+                'environmental_harm' => 'آسیب زیست‌محیطی',
+                'future_generations' => 'آسیب به نسل‌های آینده یا سایر جانداران',
+                'implementation_risk' => 'خطر یا مانع اجرایی',
+                'new_evidence' => 'شواهد تازه',
+                'other' => 'سایر موارد'
+            ];
+            $appeal_verdict_labels = [
+                'uphold' => 'اعتراض وارد است',
+                'dismiss' => 'اعتراض وارد نیست',
+                'unclear' => 'شواهد برای تصمیم قطعی کافی نیست'
+            ];
             ?>
             <div class="notice">
                 <strong><?= community_laws_escape($final_law['title']) ?></strong>
@@ -5313,7 +5336,8 @@ details>summary{cursor:pointer;font-weight:bold}
                         <summary>مشاهده اعتراض‌ها و رسیدگی‌ها (<?= count($appeals_by_version[(int)$final_law['version_id']]) ?>)</summary>
                         <?php foreach ($appeals_by_version[(int)$final_law['version_id']] as $appeal): ?>
                             <div class="notice">
-                                <div class="meta">اعتراض #<?= (int)$appeal['appeal_id'] ?> — وضعیت: <?= community_laws_escape($appeal['appeal_status']) ?> — ارزیابی‌ها: <?= (int)$appeal['assessment_count'] ?> از <?= (int)$appeal['reviewer_quorum'] ?></div>
+                                <div class="meta">اعتراض #<?= (int)$appeal['appeal_id'] ?> — وضعیت: <?= community_laws_escape($appeal_status_labels[$appeal['appeal_status']] ?? 'وضعیت نامشخص') ?> — ارزیابی‌ها: <?= (int)$appeal['assessment_count'] ?> از <?= (int)$appeal['reviewer_quorum'] ?></div>
+                                <div class="meta">موضوع: <?= community_laws_escape($appeal_type_labels[$appeal['appeal_type']] ?? 'سایر موارد') ?></div>
                                 <p><?= nl2br(community_laws_escape($appeal['description'])) ?></p>
                                 <?php if (!empty($appeal['evidence'])): ?><p class="muted">شواهد: <?= nl2br(community_laws_escape($appeal['evidence'])) ?></p><?php endif; ?>
                                 <?php if (!empty($appeal_assessments_by_id[(int)$appeal['appeal_id']])): ?>
@@ -5321,7 +5345,7 @@ details>summary{cursor:pointer;font-weight:bold}
                                         <summary>مشاهده استدلال‌های رسیدگی به اعتراض</summary>
                                         <?php foreach ($appeal_assessments_by_id[(int)$appeal['appeal_id']] as $appeal_assessment): ?>
                                             <div class="notice">
-                                                <div class="meta">ارزیاب #<?= (int)$appeal_assessment['reviewer_user_id'] ?> — <?= community_laws_escape($appeal_assessment['verdict']) ?> — <?= community_laws_escape($appeal_assessment['submitted_at']) ?></div>
+                                                <div class="meta">ارزیاب مستقل #<?= (int)$appeal_assessment['reviewer_user_id'] ?> — <?= community_laws_escape($appeal_verdict_labels[$appeal_assessment['verdict']] ?? 'نتیجه نامشخص') ?> — <?= community_laws_escape($appeal_assessment['submitted_at']) ?></div>
                                                 <p><?= nl2br(community_laws_escape($appeal_assessment['reasoning'])) ?></p>
                                                 <?php if (!empty($appeal_assessment['evidence'])): ?><p class="muted">شواهد: <?= nl2br(community_laws_escape($appeal_assessment['evidence'])) ?></p><?php endif; ?>
                                             </div>
