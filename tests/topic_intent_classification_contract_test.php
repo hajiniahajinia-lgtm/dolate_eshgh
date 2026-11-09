@@ -149,4 +149,11 @@ topic_intent_contract_check(
     'backend origin resolver enforces accepted status, immutable lawmaking intent, community ownership, and idea-topic consistency'
 );
 
+topic_intent_contract_check(
+    str_contains($law, 'name="source_decision_id" required') &&
+    str_contains($law, 'تا نصب آن و ثبت یک تصمیم معتبر قانون‌گذاری، امکان ایجاد پیش‌نویس وجود ندارد') &&
+    str_contains($law, "(!\$decision_ledger_ready || !\$source_decisions) ? 'disabled' : ''"),
+    'the law draft form cannot invite manual topic or idea fallback when no accepted decision is available'
+);
+
 fwrite(STDOUT, "PASS: topic intent classification contract checks passed.\n");

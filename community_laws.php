@@ -5948,9 +5948,9 @@ details>summary{cursor:pointer;font-weight:bold}
         <textarea name="law_text" maxlength="50000" required placeholder="متن دقیق و روشن قانون را بنویسید."></textarea>
         <label>برنامه اجرایی (اختیاری)</label>
         <textarea name="implementation_plan" maxlength="30000" placeholder="مسئول اجرا، منابع، زمان‌بندی و شاخص ارزیابی را مشخص کنید."></textarea>
-        <label>تصمیم جمعی منشأ قانون (در صورت انتخاب، باید تصمیم پذیرفته‌شده باشد)</label>
-        <select name="source_decision_id">
-            <option value="0">بدون پیوند مستقیم به تصمیم</option>
+        <label>تصمیم جمعی پذیرفته‌شده منشأ قانون</label>
+        <select name="source_decision_id" required>
+            <option value="" selected disabled>یک تصمیم معتبر قانون‌گذاری را انتخاب کنید</option>
             <?php foreach ($source_decisions as $source_decision_option): ?>
                 <option value="<?= (int)$source_decision_option['id'] ?>">
                     تصمیم #<?= (int)$source_decision_option['id'] ?> — موضوع: <?= community_laws_escape($source_decision_option['title']) ?>
@@ -5958,7 +5958,7 @@ details>summary{cursor:pointer;font-weight:bold}
             <?php endforeach; ?>
         </select>
         <?php if (!$decision_ledger_ready): ?>
-            <p class="muted">دفتر تصمیم‌ها هنوز در این پایگاه داده نصب نشده است؛ می‌توانید شناسهٔ موضوع یا ایده را به‌عنوان منشأ ثبت کنید.</p>
+            <p class="muted">دفتر تصمیم‌ها هنوز نصب نشده است؛ تا نصب آن و ثبت یک تصمیم معتبر قانون‌گذاری، امکان ایجاد پیش‌نویس وجود ندارد.</p>
         <?php elseif (!$source_decisions): ?>
             <p class="muted">در این جامعه هنوز تصمیم پذیرفته‌شده‌ای با موضوع قانون‌گذاری و ایدهٔ منتخبِ منطبق وجود ندارد؛ ابتدا باید فرایند موضوع و تصمیم کامل شود.</p>
         <?php else: ?>
@@ -5969,7 +5969,7 @@ details>summary{cursor:pointer;font-weight:bold}
             در صورت تصویب و پس از طی بررسی صلاحیت و مراحل نهایی، این قانون برای همه جوامع زیرشاخه نیز لازم‌الرعایه خواهد بود. دامنه شمول به‌صورت خودکار با تغییرات معتبر سلسله‌مراتب به‌روزرسانی و تاریخچه آن ثبت می‌شود.
         </div>
         <div class="notice warning">دامنه شمول در این مرحله فقط ثبت می‌شود؛ پیش از رأی‌گیری باید صلاحیت قانون و آثار آن بررسی شود.</div>
-        <button type="submit" name="create_law_draft" value="1">ثبت پیش‌نویس</button>
+        <button type="submit" name="create_law_draft" value="1" <?= (!$decision_ledger_ready || !$source_decisions) ? 'disabled' : '' ?>>ثبت پیش‌نویس</button>
     </form>
 </div>
 <?php else: ?>
