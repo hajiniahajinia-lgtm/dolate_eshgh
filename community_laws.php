@@ -4716,7 +4716,8 @@ details>summary{cursor:pointer;font-weight:bold}
                 if ($report_id_list!=='') {
                     $actions_result=$conn->query(
                         "SELECT id,report_id,community_id,created_by,responsible_user_id,title,
-                                action_details,success_criteria,target_date,created_at
+                                action_details,success_criteria,target_date,completion_status,
+                                completion_review_round,created_at
                          FROM community_law_outcome_corrective_actions
                          WHERE report_id IN ($report_id_list) ORDER BY id"
                     );

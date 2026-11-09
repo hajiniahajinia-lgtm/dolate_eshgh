@@ -10,6 +10,9 @@ $checks=[
  'completion review history is loaded for displayed corrective actions' =>
     strpos($source,"FROM community_law_outcome_corrective_completion_reviews")!==false &&
     strpos($source,"$"."outcome_completion_reviews_by_action")!==false,
+ 'corrective action query loads its completion state and review round' =>
+    strpos($source,"completion_status,")!==false &&
+    strpos($source,"completion_review_round,")!==false,
  'completion status is displayed with Persian labels' =>
     strpos($source,"'pending'=>'در انتظار بررسی مستقل'")!==false &&
     strpos($source,"'verified'=>'تکمیل با بررسی مستقل تأیید شد'")!==false &&
