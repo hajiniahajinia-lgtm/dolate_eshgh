@@ -160,10 +160,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($source_idea_id !== null) {
             $source_stmt = $conn->prepare(
-                'SELECT t.id AS topic_id
+                "SELECT t.id AS topic_id
                  FROM ideas i
                  JOIN topics t ON t.id=i.topic_id
-                 WHERE i.id=? AND t.community_id=? AND t.topic_intent='law' LIMIT 1'
+                 WHERE i.id=? AND t.community_id=? AND t.topic_intent='law' LIMIT 1"
             );
             $source_stmt->bind_param('ii', $source_idea_id, $community_id);
             $source_stmt->execute();
@@ -174,7 +174,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             $source_topic_id = (int)$source_row['topic_id'];
         } elseif ($source_topic_id !== null) {
-            $source_stmt = $conn->prepare('SELECT id FROM topics WHERE id=? AND community_id=? AND topic_intent='law' LIMIT 1');
+            $source_stmt = $conn->prepare("SELECT id FROM topics WHERE id=? AND community_id=? AND topic_intent='law' LIMIT 1");
             $source_stmt->bind_param('ii', $source_topic_id, $community_id);
             $source_stmt->execute();
             $source_exists = (bool)$source_stmt->get_result()->fetch_row();
