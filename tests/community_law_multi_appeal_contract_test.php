@@ -4,8 +4,8 @@ declare(strict_types=1);
 /** Multiple communities may file distinct appeals during the same published appeal window. */
 $source=file_get_contents(__DIR__.'/../community_laws.php');
 if($source===false){fwrite(STDERR,"FAIL: unable to read law workflow source\\n");exit(1);}
-$start=strpos($source,"if (isset($_POST['submit_law_appeal']))");
-$end=strpos("if (isset($_POST['submit_law_appeal_assessment']))",$start===false?0:$start);
+$start=strpos($source,"if (isset(\$_POST['submit_law_appeal']))");
+$end=strpos($source,"if (isset(\$_POST['submit_law_appeal_assessment']))",$start===false?0:$start);
 if($start===false||$end===false||$end<=$start){fwrite(STDERR,"FAIL: appeal submission handler boundary not found\\n");exit(1);}
 $handler=substr($source,$start,$end-$start);
 $checks=[
