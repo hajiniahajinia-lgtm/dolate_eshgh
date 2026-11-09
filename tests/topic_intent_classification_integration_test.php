@@ -65,7 +65,7 @@ try {
          WHERE table_schema=DATABASE() AND table_name='topics' AND column_name='topic_intent'"
     )->fetch_assoc();
     $indexes = $db->query(
-        "SELECT COUNT(*) AS total FROM information_schema.statistics
+        "SELECT COUNT(DISTINCT index_name) AS total FROM information_schema.statistics
          WHERE table_schema=DATABASE() AND table_name='topics' AND index_name='idx_topics_community_intent'"
     )->fetch_assoc();
     topic_intent_db_check((int)$columns['total'] === 1, 'topic intent column exists exactly once');
