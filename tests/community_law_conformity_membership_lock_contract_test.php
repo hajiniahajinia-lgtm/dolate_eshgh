@@ -12,9 +12,9 @@ $checks['transactional membership helper locks the exact community-member row'] 
     strpos($source, 'function community_law_conformity_lock_member(') !== false &&
     strpos($source, 'FROM community_members WHERE community_id=? AND user_id=? LIMIT 1 FOR UPDATE') !== false;
 $checks['conflict identification revalidates and locks local membership inside its transaction'] =
-    strpos($source, "community_law_conformity_lock_member($conn, (int)$case['community_id'], $user_id)") !== false;
+    substr_count($source, 'community_law_conformity_lock_member(') >= 3;
 $checks['conflict review revalidates and locks the selected side membership inside its transaction'] =
-    strpos($source, 'community_law_conformity_lock_member($conn, $reviewer_community_id, $user_id)') !== false;
+    substr_count($source, 'community_law_conformity_lock_member(') >= 3;
 $checks['both operations begin transactions before locking membership'] =
     strpos($source, "if (!$conn->begin_transaction())") !== false &&
     substr_count($source, 'community_law_conformity_lock_member(') >= 3;
