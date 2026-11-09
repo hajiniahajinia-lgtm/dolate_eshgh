@@ -42,7 +42,7 @@ topic_intent_contract_check(
     is_string($finalizer) &&
     str_contains($finalizer, "COALESCE(t.topic_intent, 'decision') AS topic_intent") &&
     str_contains($finalizer, "'topic_intent' => $topic_intent") &&
-    str_contains($finalizer, 'مسیر موضوع: ' . "' . $intent_label . '") &&
+    str_contains($finalizer, '"مسیر موضوع: " . $intent_label') &&
     'topic intent is carried into final knowledge dossiers and decision snapshots'
 );
 
