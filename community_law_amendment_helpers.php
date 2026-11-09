@@ -3,6 +3,18 @@
  * گردش‌کار اصلاح محدود قانون محلی.
  * نسخهٔ مصوب مبنا فقط خوانده می‌شود؛ نسخهٔ پیشنهادی تازه با وضعیت draft ساخته می‌شود.
  */
+if (!function_exists('community_law_amendment_lock_member')) {
+    function community_law_amendment_lock_member(mysqli $conn,int $community_id,int $user_id): bool {
+        if ($community_id<=0 || $user_id<=0) return false;
+        $stmt=$conn->prepare('SELECT 1 FROM community_members WHERE community_id=? AND user_id=? LIMIT 1 FOR UPDATE');
+        if (!$stmt) return false;
+        $stmt->bind_param('ii',$community_id,$user_id);
+        $ok=$stmt->execute() && (bool)$stmt->get_result()->fetch_row();
+        $stmt->close();
+        return $ok;
+    }
+}
+
 if (!function_exists('community_law_amendment_tables_ready')) {
     function community_law_amendment_tables_ready(mysqli $conn): bool {
         $tables=['community_law_amendment_cases','community_law_amendment_articles','community_law_amendment_events','community_law_amendment_parent_reviews','community_law_version_notices'];
@@ -96,14 +108,9 @@ if (!function_exists('community_law_create_amendment_draft')) {
             if (!$conn->begin_transaction()) return false;
             $started=true;
 
-            $member=$conn->prepare('SELECT 1 FROM community_members WHERE community_id=? AND user_id=? LIMIT 1');
-            if (!$member) throw new RuntimeException('membership prepare failed');
-            $member->bind_param('ii',$community_id,$user_id);
-            if (!$member->execute() || !$member->get_result()->fetch_row()) {
-                $member->close();
+            if (!community_law_amendment_lock_member($conn,$community_id,$user_id)) {
                 throw new RuntimeException('local membership required');
             }
-            $member->close();
 
             $case_stmt=$conn->prepare(
                 "SELECT c.id,c.community_id,c.local_law_id,c.local_law_version_id,c.parent_community_id,c.parent_law_version_id,c.status,child.parent_community_id AS current_parent_community_id,
@@ -632,14 +639,9 @@ if (!function_exists('community_law_submit_amendment_parent_review')) {
         try {
             if (!$conn->begin_transaction()) return false;
             $started=true;
-            $member=$conn->prepare('SELECT 1 FROM community_members WHERE community_id=? AND user_id=? LIMIT 1');
-            if (!$member) throw new RuntimeException('parent review membership prepare failed');
-            $member->bind_param('ii',$parent_community_id,$user_id);
-            if (!$member->execute() || !$member->get_result()->fetch_row()) {
-                $member->close();
+            if (!community_law_amendment_lock_member($conn,$parent_community_id,$user_id)) {
                 throw new RuntimeException('parent community membership required');
             }
-            $member->close();
 
             $lock=$conn->prepare(
                 "SELECT a.id,a.status,a.proposed_by,a.law_id,a.proposed_version_id,a.conformity_case_id,

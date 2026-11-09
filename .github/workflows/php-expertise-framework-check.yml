@@ -122,6 +122,7 @@ on:
       - 'tests/migration_order_test.php'
       - 'tests/community_law_amendment_vote_contract_test.php'
       - 'tests/community_law_amendment_notice_contract_test.php'
+      - 'tests/community_law_amendment_membership_lock_contract_test.php'
       - 'tests/community_law_parent_child_access_contract_test.php'
       - 'tests/community_law_parent_enactment_notice_contract_test.php'
       - 'tests/community_law_multi_appeal_contract_test.php'
@@ -289,6 +290,7 @@ jobs:
           php -l tests/migration_order_test.php
           php -l tests/community_law_amendment_vote_contract_test.php
           php -l tests/community_law_amendment_notice_contract_test.php
+          php -l tests/community_law_amendment_membership_lock_contract_test.php
           php -l tests/community_law_parent_enactment_notice_contract_test.php
           php -l tests/community_law_multi_appeal_contract_test.php
           php -l tests/community_law_appeal_ui_contract_test.php
@@ -329,6 +331,8 @@ jobs:
         run: php tests/community_law_amendment_vote_contract_test.php
       - name: Verify atomic amendment notice contract
         run: php tests/community_law_amendment_notice_contract_test.php
+      - name: Verify transactional amendment membership locking
+        run: php tests/community_law_amendment_membership_lock_contract_test.php
       - name: Verify atomic parent-law enactment notices
         run: php tests/community_law_parent_enactment_notice_contract_test.php
       - name: Verify multi-community appeal window
