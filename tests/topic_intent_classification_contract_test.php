@@ -82,6 +82,9 @@ topic_intent_contract_check(
 
 topic_intent_contract_check(
     is_string($archive) &&
+    str_contains($archive, "v.id AS version_id, v.status AS version_status") &&
+    str_contains($archive, 'مشاهدهٔ پروندهٔ رسمی قانون و مراحل آن') &&
+    str_contains($archive, 'community_laws.php?community_id=') &&
     str_contains($archive, 'intent_progress') &&
     str_contains($archive, 'community_law_versions') &&
     str_contains($archive, 'رأی موضوع فقط منشأ پیشنهاد است'),
@@ -94,6 +97,15 @@ topic_intent_contract_check(
     str_contains($community, 'به‌خودی‌خود الزام اجرایی ندارد') &&
     str_contains($community, 'رأی این موضوع به‌تنهایی قانون نیست'),
     'active topic details explain the next stage and legal meaning of each intent'
+);
+
+topic_intent_contract_check(
+    is_string($law = file_get_contents(__DIR__ . '/../community_laws.php')) &&
+    str_contains($law, 'id="law-<?= (int)$draft[\'law_id\'] ?>"') &&
+    str_contains($law, 'id="law-<?= (int)$proposal[\'law_id\'] ?>"') &&
+    str_contains($law, 'id="law-<?= (int)$active_law[\'law_id\'] ?>"') &&
+    str_contains($law, 'id="law-<?= (int)$law[\'law_id\'] ?>"'),
+    'law records expose stable anchors for source-topic navigation'
 );
 
 topic_intent_contract_check(

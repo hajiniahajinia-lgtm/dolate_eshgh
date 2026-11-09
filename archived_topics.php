@@ -294,7 +294,8 @@ while($row=$result->fetch_assoc()){
             : ['label'=>'در انتظار ثبت نتیجه در دفتر تصمیم‌ها', 'detail'=>'رأی موضوع باید به‌عنوان نتیجهٔ جمعی ثبت شود؛ این ثبت به‌تنهایی قانون ایجاد نمی‌کند.'];
     } elseif ($law_progress_ready) {
         $law_stmt = $conn->prepare(
-            "SELECT l.id AS law_id, l.status AS law_status, l.effective_at, v.status AS version_status
+            "SELECT l.id AS law_id, l.status AS law_status, l.effective_at,
+                    v.id AS version_id, v.status AS version_status
              FROM community_law_versions v
              JOIN community_laws l ON l.id=v.law_id
              WHERE v.source_topic_id=? AND l.originating_community_id=?
@@ -332,7 +333,12 @@ while($row=$result->fetch_assoc()){
                 if ($law_status === 'approved' && !empty($law_row['effective_at']) && strtotime((string)$law_row['effective_at']) > time()) {
                     $progress_label = 'قانون تصویب شده؛ در انتظار تاریخ اجرا';
                 }
-                $intent_progress = ['label'=>$progress_label, 'detail'=>$progress_detail];
+                $intent_progress = [
+                    'label'=>$progress_label,
+                    'detail'=>$progress_detail,
+                    'law_id'=>(int)$law_row['law_id'],
+                    'version_id'=>(int)$law_row['version_id']
+                ];
             }
         }
     }
@@ -1030,6 +1036,9 @@ document.addEventListener('DOMContentLoaded',function(){
               <div class="meta" style="margin-top:7px;padding:7px 9px;border-right:3px solid #7b6aa6;background:#f7f5fb;border-radius:6px;">
                 <strong>وضعیت مسیر: <?= htmlspecialchars($row['intent_progress']['label'], ENT_QUOTES, 'UTF-8') ?></strong>
                 <div><?= htmlspecialchars($row['intent_progress']['detail'], ENT_QUOTES, 'UTF-8') ?></div>
+                <?php if ($row['topic_intent'] === 'law' && !empty($row['intent_progress']['law_id'])): ?>
+                  <a href="community_laws.php?community_id=<?= (int)$row['community_id'] ?>#law-<?= (int)$row['intent_progress']['law_id'] ?>" style="display:inline-block;margin-top:5px;">مشاهدهٔ پروندهٔ رسمی قانون و مراحل آن</a>
+                <?php endif; ?>
               </div>
               <?php endif; ?>
               <?php if (trim((string)($row['description'] ?? '')) !== ''): ?>

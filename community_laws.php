@@ -4699,7 +4699,7 @@ details>summary{cursor:pointer;font-weight:bold}
                 }
             }
             ?>
-            <div class="card" style="background:#fbfdff;box-shadow:none">
+            <div class="card" id="law-<?= (int)$law['law_id'] ?>" style="background:#fbfdff;box-shadow:none">
                 <strong><?= community_laws_escape($law['title']) ?></strong>
                 <div class="meta">
                     شناسه: <?= community_laws_escape($law['law_code']) ?>
@@ -5164,7 +5164,7 @@ details>summary{cursor:pointer;font-weight:bold}
         <p class="muted">پیش‌نویسی ثبت نشده است.</p>
     <?php else: ?>
         <?php foreach ($draft_laws as $draft): ?>
-            <div class="notice">
+            <div class="notice" id="law-<?= (int)$draft['law_id'] ?>">
                 <strong><?= community_laws_escape($draft['title']) ?></strong>
                 <div class="meta"><?= community_laws_escape($draft['law_code']) ?> — پیش‌نویس؛ هنوز الزام‌آور نیست.</div>
                 <?php if ($is_member && (int)$draft['proposed_by'] === $user_id): ?>
@@ -5238,7 +5238,7 @@ details>summary{cursor:pointer;font-weight:bold}
         <p class="muted">پیشنهادی با رأی مثبت که هنوز پرونده بررسی نهایی آن آغاز نشده باشد وجود ندارد.</p>
     <?php else: ?>
         <?php foreach ($passed_laws_pending_final_review as $passed_law): ?>
-            <div class="notice">
+            <div class="notice" id="law-<?= (int)$passed_law['law_id'] ?>">
                 <strong><?= community_laws_escape($passed_law['title']) ?></strong>
                 <div class="meta"><?= community_laws_escape($passed_law['law_code']) ?> — رأی مثبت ثبت شده؛ هنوز قانون نیست و الزام‌آور نیست.</div>
                 <form method="post">
@@ -5293,7 +5293,7 @@ details>summary{cursor:pointer;font-weight:bold}
                 'unclear' => 'شواهد برای تصمیم قطعی کافی نیست'
             ];
             ?>
-            <div class="notice">
+            <div class="notice" id="law-<?= (int)$final_law['law_id'] ?>">
                 <strong><?= community_laws_escape($final_law['title']) ?></strong>
                 <div class="meta"><?= community_laws_escape($final_law['law_code']) ?> — <?= community_laws_escape($final_status_labels[$final_law['final_status']] ?? $final_law['final_status']) ?></div>
                 <?php if (
@@ -5496,7 +5496,7 @@ details>summary{cursor:pointer;font-weight:bold}
         <p class="muted">رأی‌گیری پایان‌یافته‌ای برای شمارش وجود ندارد.</p>
     <?php else: ?>
         <?php foreach ($closed_voting_laws as $closed_law): ?>
-            <div class="notice">
+            <div class="notice" id="law-<?= (int)$closed_law['law_id'] ?>">
                 <strong><?= community_laws_escape($closed_law['title']) ?></strong>
                 <div class="meta"><?= community_laws_escape($closed_law['law_code']) ?> — پایان مهلت: <?= community_laws_escape($closed_law['vote_deadline']) ?></div>
                 <form method="post">
@@ -5516,7 +5516,7 @@ details>summary{cursor:pointer;font-weight:bold}
         <p class="muted">رأی‌گیری فعالی که شما در آن واجد شرایط باشید وجود ندارد.</p>
     <?php else: ?>
         <?php foreach ($voting_laws as $active_law): ?>
-            <div class="notice">
+            <div class="notice" id="law-<?= (int)$active_law['law_id'] ?>">
                 <strong><?= community_laws_escape($active_law['title']) ?></strong>
                 <div class="meta"><?= community_laws_escape($active_law['law_code']) ?> — پایان رأی‌گیری: <?= community_laws_escape($active_law['vote_deadline']) ?></div>
                 <div class="law-text"><?= community_laws_escape($active_law['law_text']) ?></div>
@@ -5603,7 +5603,7 @@ details>summary{cursor:pointer;font-weight:bold}
         <p class="muted">پیشنهادی برای بررسی ثبت نشده است.</p>
     <?php else: ?>
         <?php foreach ($proposed_laws as $proposal): ?>
-            <div class="notice">
+            <div class="notice" id="law-<?= (int)$proposal['law_id'] ?>">
                 <strong><?= community_laws_escape($proposal['title']) ?></strong>
                 <div class="meta"><?= community_laws_escape($proposal['law_code']) ?> — پیشنهاد در انتظار غربالگری؛ هنوز رأی‌گیری آغاز نشده است.</div>
                 <div class="notice">
