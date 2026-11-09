@@ -316,7 +316,7 @@ try {
         'a conformity case can track multiple separately identified conflicts');
     foreach ([$multi_conflict_one,$multi_conflict_two] as $multi_conflict_id) {
         change_case_check(community_law_conformity_review_conflict(
-            $db,$multi_conflict_id,90301,90030,'no_conflict','بررسی مستقل جامعه محلی نشان می‌دهد این دو ماده با یکدیگر تعارض ندارند.'
+            $db,$multi_conflict_id,90301,90060,'no_conflict','بررسی مستقل جامعه محلی نشان می‌دهد این دو ماده با یکدیگر تعارض ندارند.'
         ),'local member can independently clear one conflict item');
         change_case_check(community_law_conformity_review_conflict(
             $db,$multi_conflict_id,90201,90020,'no_conflict','بررسی مستقل جامعه مادر نیز نبود تعارض در این مورد را تأیید می‌کند.'
