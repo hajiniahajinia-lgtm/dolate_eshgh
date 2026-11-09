@@ -416,6 +416,32 @@ try {
     $db->query("UPDATE community_law_authority_cases SET status='confirmed' WHERE law_version_id=".$second_version);
     $db->query("INSERT INTO community_law_final_results (law_version_id,individual_vote_basis,final_status) VALUES (".$second_version.",'count','vote_passed')");
     $db->query("INSERT INTO community_law_implementations (law_version_id,community_id,responsible_user_id,local_plan,status,started_at,target_date,progress_report) VALUES (99002,90020,90200,'برنامه اجرای پایه','in_progress',NOW(),DATE_ADD(CURDATE(),INTERVAL 30 DAY),'پیشرفت ثبت‌شده پیش از اصلاحیه'),(99002,90030,90200,'برنامه اجرای زیرشاخه','in_progress',NOW(),DATE_ADD(CURDATE(),INTERVAL 45 DAY),'گزارش اجرای زیرشاخه پیش از اصلاحیه')");
+    // هر جامعهٔ مشمول باید در نسخهٔ پایه رکورد اجرای مستقلی داشته باشد؛
+    // دو رکورد بالا وضعیت پیشرفت واقعی آزمون را حفظ می‌کنند و بقیه فقط تکمیل fixture هستند.
+    $base_scope_ids=community_law_scope_community_ids($db,99002);
+    change_case_check(is_array($base_scope_ids) && count($base_scope_ids)>=2,
+        'the amendment fixture resolves every community in the approved law scope');
+    $ensure_base_implementation=$db->prepare(
+        "INSERT INTO community_law_implementations
+         (law_version_id,community_id,responsible_user_id,local_plan,status,started_at,target_date,progress_report)
+         SELECT 99002,?,90200,'برنامهٔ پایهٔ آزمون','pending',NOW(),
+                DATE_ADD(CURDATE(),INTERVAL 60 DAY),'رکورد تکمیلی دامنهٔ آزمون'
+         WHERE NOT EXISTS (
+             SELECT 1 FROM community_law_implementations
+             WHERE law_version_id=99002 AND community_id=?
+         )"
+    );
+    foreach($base_scope_ids as $base_scope_id) {
+        $base_scope_id=(int)$base_scope_id;
+        $ensure_base_implementation->bind_param('ii',$base_scope_id,$base_scope_id);
+        $ensure_base_implementation->execute();
+    }
+    $ensure_base_implementation->close();
+    $base_implementation_total=(int)$db->query(
+        "SELECT COUNT(*) AS n FROM community_law_implementations WHERE law_version_id=99002"
+    )->fetch_assoc()['n'];
+    change_case_check($base_implementation_total===count($base_scope_ids),
+        'the amendment fixture contains exactly one implementation snapshot for every scoped community');
     change_case_check(community_law_open_amendment_final_review($db,9502,$second_version,90020,90201),'approved amendment with positive local vote can open the independent final review');
     $opened_final_review=$db->query("SELECT l.status AS law_status,l.current_version_id,v.status AS version_status,fc.status AS final_status,(SELECT COUNT(*) FROM community_law_final_review_electorate e WHERE e.law_version_id=v.id) AS electorate_count,(SELECT COUNT(*) FROM community_law_final_review_references r WHERE r.law_version_id=v.id AND r.reference_law_id=9501 AND r.reference_law_version_id=99001) AS parent_reference_count,(SELECT COUNT(*) FROM community_law_charter_references cr WHERE cr.law_version_id=v.id) AS charter_snapshot_count FROM community_law_versions v JOIN community_laws l ON l.id=v.law_id JOIN community_law_final_review_cases fc ON fc.law_version_id=v.id WHERE v.id=".$second_version)->fetch_assoc();
     change_case_check($opened_final_review && $opened_final_review['law_status']==='approved' && (int)$opened_final_review['current_version_id']===99002 && $opened_final_review['version_status']==='pending_final_review' && $opened_final_review['final_status']==='pending' && (int)$opened_final_review['electorate_count']>=3 && (int)$opened_final_review['parent_reference_count']===1 && (int)$opened_final_review['charter_snapshot_count']>0,'opening final review snapshots independent assessors, the active parent law and the charter without changing the current law');
