@@ -297,6 +297,42 @@ try {
     $review_history=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_history WHERE law_id=9502 AND event_type='conformity_conflict_reviewed'")->fetch_assoc()['n'];
     change_case_check($review_history===4,'all independent conflict reviews remain in permanent local law history');
 
+    // A case with multiple conflicts must not resolve when only one item
+    // has been cleared; it resolves only after every item is independently cleared.
+    $db->query("INSERT INTO community_law_conformity_cases
+        (community_id,parent_community_id,local_law_id,local_law_version_id,parent_law_id,parent_law_version_id,status,trigger_type,opened_by)
+        VALUES (90030,90020,9503,99003,9502,99002,'review_required','manual_review',90100)");
+    $multi_case_id=(int)$db->insert_id;
+    $multi_conflict_one=community_law_conformity_add_conflict(
+        $db,$multi_case_id,90300,'ماده ۱۵','ماده ۲','بررسی مورد نخست برای آزمون بسته‌شدن مرحله‌ای پرونده','شواهد مورد نخست'
+    );
+    $multi_conflict_two=community_law_conformity_add_conflict(
+        $db,$multi_case_id,90300,'ماده ۱۶','ماده ۳','بررسی مورد دوم برای اطمینان از باقی‌ماندن پرونده باز','شواهد مورد دوم'
+    );
+    change_case_check(is_int($multi_conflict_one) && is_int($multi_conflict_two) &&
+        $multi_conflict_one>0 && $multi_conflict_two>0,
+        'a conformity case can track multiple separately identified conflicts');
+    foreach ([$multi_conflict_one,$multi_conflict_two] as $multi_conflict_id) {
+        change_case_check(community_law_conformity_review_conflict(
+            $db,$multi_conflict_id,90301,90030,'no_conflict','بررسی مستقل جامعه محلی نشان می‌دهد این دو ماده با یکدیگر تعارض ندارند.'
+        ),'local member can independently clear one conflict item');
+        change_case_check(community_law_conformity_review_conflict(
+            $db,$multi_conflict_id,90201,90020,'no_conflict','بررسی مستقل جامعه مادر نیز نبود تعارض در این مورد را تأیید می‌کند.'
+        ),'parent member can independently clear the same conflict item');
+        if ($multi_conflict_id===$multi_conflict_one) {
+            $after_first=$db->query("SELECT status,resolved_at FROM community_law_conformity_cases WHERE id=".$multi_case_id)->fetch_assoc();
+            change_case_check($after_first && $after_first['status']==='review_required' && $after_first['resolved_at']===null,
+                'clearing one conflict cannot resolve a case while another conflict remains unreviewed');
+        }
+    }
+    $multi_final=$db->query("SELECT c.status,c.resolved_at,
+        (SELECT COUNT(*) FROM community_law_conformity_conflicts f WHERE f.case_id=c.id AND f.finding='no_conflict') AS cleared_items,
+        (SELECT COUNT(*) FROM community_law_conformity_conflicts f WHERE f.case_id=c.id AND f.finding<>'no_conflict') AS remaining_items
+        FROM community_law_conformity_cases c WHERE c.id=".$multi_case_id)->fetch_assoc();
+    change_case_check($multi_final && $multi_final['status']==='resolved' && $multi_final['resolved_at']!==null &&
+        (int)$multi_final['cleared_items']===2 && (int)$multi_final['remaining_items']===0,
+        'a case resolves only after every identified conflict has two-sided independent no-conflict findings');
+
     // پیشنهاد اصلاح فقط مواد مشخص را تغییر می‌دهد و نسخه مصوب را دست‌نخورده نگه می‌دارد.
     $amendment_id=community_law_create_amendment_draft(
         $db,$conformity_case_id,90020,90201,
