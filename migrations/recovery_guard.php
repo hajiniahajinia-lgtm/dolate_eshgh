@@ -24,7 +24,7 @@ function migration_recovery_ensure_table(mysqli $conn): void
 
 function migration_recovery_active(mysqli $conn): ?array
 {
-    $result = $conn->query("SELECT migration_name, checksum, stage, started_at FROM app_schema_migration_recovery WHERE marker_id = 1 LIMIT 1");
+    $result = $conn->query("SELECT migration_name, checksum, snapshot_json, stage, started_at FROM app_schema_migration_recovery WHERE marker_id = 1 LIMIT 1");
     if (!$result) {
         throw new RuntimeException('Could not inspect migration recovery marker: ' . $conn->error);
     }
