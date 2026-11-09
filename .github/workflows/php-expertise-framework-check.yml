@@ -5,6 +5,11 @@ on:
     branches:
       - feature/community-law-framework
     paths:
+      - 'add_topic.php'
+      - 'community.php'
+      - 'migrations/20261109_topic_intent_classification.sql'
+      - 'tests/topic_intent_classification_contract_test.php'
+      - 'tests/topic_intent_classification_integration_test.php'
       - 'expertise.php'
       - 'expertise_action.php'
       - 'votes.php'
@@ -119,6 +124,11 @@ on:
       - 'tests/migration_order_test.php'
   pull_request:
     paths:
+      - 'add_topic.php'
+      - 'community.php'
+      - 'migrations/20261109_topic_intent_classification.sql'
+      - 'tests/topic_intent_classification_contract_test.php'
+      - 'tests/topic_intent_classification_integration_test.php'
       - 'migrations/20261108_community_law_conformity_workflow.sql'
       - 'migrations/20261108_community_law_z1_amendment_00_workflow.sql'
       - 'migrations/20261108_community_law_z1_amendment_10_submission.sql'
@@ -219,6 +229,9 @@ jobs:
           php-version: '8.4'
       - name: Check PHP syntax
         run: |
+          php -l add_topic.php
+          php -l tests/topic_intent_classification_contract_test.php
+          php -l tests/topic_intent_classification_integration_test.php
           php -l expertise.php
           php -l expertise_action.php
           php -l votes.php
