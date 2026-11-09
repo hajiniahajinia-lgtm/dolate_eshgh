@@ -100,6 +100,7 @@ on:
       - 'tests/migration_order_test.php'
       - 'tests/migration_runner_plan_mode_contract_test.php'
       - 'tests/migration_recovery_guard_integration_test.php'
+      - '.github/workflows/php-expertise-framework-check.yml'
       - 'migrations/auto_apply.php'
       - 'community_law_amendment_helpers.php'
       - 'community_law_amendments.php'
