@@ -2119,7 +2119,7 @@ if (!function_exists('community_law_review_corrective_completion')) {
             !in_array($verdict,['confirm','reject'],true) || $rationale==='' ||
             mb_strlen($rationale)>12000 || ($evidence!==null && mb_strlen($evidence)>12000)) return false;
         $stmt=$conn->prepare(
-            "SELECT id,law_id,law_version_id,community_id,created_by,responsible_user_id,completion_status
+            "SELECT id,report_id,reassessment_id,law_id,law_version_id,community_id,created_by,responsible_user_id,completion_status
              FROM community_law_outcome_corrective_actions WHERE id=? LIMIT 1 FOR UPDATE"
         );
         if (!$stmt) return false;
@@ -2129,6 +2129,23 @@ if (!function_exists('community_law_review_corrective_completion')) {
         if (!$action || $action['completion_status']!=='pending' ||
             $reviewer_user_id===(int)$action['created_by'] ||
             $reviewer_user_id===(int)$action['responsible_user_id']) return false;
+        // ارزیابان گزارش اولیه و ارزیابی نهایی آن، در تأیید تکمیل همان اقدام تعارض نقش دارند.
+        $prior=$conn->prepare(
+            "SELECT
+                EXISTS(SELECT 1 FROM community_law_outcome_reviews
+                       WHERE report_id=? AND reviewer_user_id=?) AS reviewed_report,
+                EXISTS(SELECT 1 FROM community_law_outcome_reassessment_reviews
+                       WHERE reassessment_id=? AND reviewer_user_id=?) AS reviewed_reassessment"
+        );
+        if (!$prior) return false;
+        $report_id=(int)$action['report_id'];
+        $reassessment_id=(int)$action['reassessment_id'];
+        $prior->bind_param('iiii',$report_id,$reviewer_user_id,$reassessment_id,$reviewer_user_id);
+        if (!$prior->execute()) { $prior->close(); return false; }
+        $prior_row=$prior->get_result()->fetch_assoc();
+        $prior->close();
+        if (!$prior_row || (int)$prior_row['reviewed_report']===1 ||
+            (int)$prior_row['reviewed_reassessment']===1) return false;
         $community_id=(int)$action['community_id'];
         $member=$conn->prepare('SELECT 1 FROM community_members WHERE community_id=? AND user_id=? LIMIT 1');
         if (!$member) return false;

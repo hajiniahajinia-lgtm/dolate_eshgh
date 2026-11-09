@@ -55,7 +55,7 @@ try {
         created_by INT NOT NULL
     ) ENGINE=InnoDB");
     $db->query("CREATE TEMPORARY TABLE community_members (community_id INT NOT NULL,user_id INT NOT NULL,PRIMARY KEY(community_id,user_id)) ENGINE=InnoDB");
-    $db->query("INSERT INTO community_members VALUES (920,9700),(920,9701),(920,9702),(920,9703),(920,9704),(920,9706),(920,9707),(920,9708)");
+    $db->query("INSERT INTO community_members VALUES (920,9700),(920,9701),(920,9702),(920,9703),(920,9704),(920,9706),(920,9707),(920,9708),(920,9709),(920,9710),(920,9711)");
     $db->query("INSERT INTO collective_knowledge_entries
                 (title,entry_type,summary,content,visibility,community_id,source_topic_id,created_by)
                 VALUES ('دانش منشأ آزمایشی','lesson','خلاصهٔ دانش منشأ','متن دانش منشأ','community',920,990099,9700)");
@@ -283,18 +283,24 @@ try {
     outcome_check(community_law_review_corrective_completion(
         $db,$corrective_action_id,9701,'confirm','ایجادکننده اقدام تعارض منافع دارد'
     )===false,'corrective action creator cannot verify completion');
+    outcome_check(community_law_review_corrective_completion(
+        $db,$corrective_action_id,9702,'confirm','ارزیاب گزارش اولیه نباید دوباره تأیید کند'
+    )===false,'original outcome reviewer is excluded from completion verification');
+    outcome_check(community_law_review_corrective_completion(
+        $db,$corrective_action_id,9706,'confirm','ارزیاب بازبینی نهایی نباید دوباره تأیید کند'
+    )===false,'reassessment reviewer is excluded from completion verification');
     $completion_one=community_law_review_corrective_completion(
-        $db,$corrective_action_id,9706,'confirm','شواهد تکمیل اقدام را تأیید می‌کند'
+        $db,$corrective_action_id,9709,'confirm','شواهد تکمیل اقدام را تأیید می‌کند'
     );
     outcome_check(is_array($completion_one) && $completion_one['review_count']===1 &&
         $completion_one['completion_status']==='pending','one review cannot finalize completion');
     $completion_two=community_law_review_corrective_completion(
-        $db,$corrective_action_id,9707,'confirm','معیار موفقیت به‌طور مستقل احراز شد'
+        $db,$corrective_action_id,9710,'confirm','معیار موفقیت به‌طور مستقل احراز شد'
     );
     outcome_check(is_array($completion_two) && $completion_two['review_count']===2 &&
         $completion_two['completion_status']==='pending','two reviews do not bypass the three-review threshold');
     $completion_three=community_law_review_corrective_completion(
-        $db,$corrective_action_id,9708,'reject','یک بخش از معیار موفقیت هنوز احراز نشده است'
+        $db,$corrective_action_id,9711,'reject','یک بخش از معیار موفقیت هنوز احراز نشده است'
     );
     outcome_check(is_array($completion_three) && $completion_three['review_count']===3 &&
         $completion_three['completion_status']==='verified',
