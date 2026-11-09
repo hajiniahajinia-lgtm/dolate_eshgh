@@ -339,6 +339,19 @@ try {
     $resolved_no_conflict=$db->query("SELECT f.finding,c.status,c.resolved_at FROM community_law_conformity_conflicts f JOIN community_law_conformity_cases c ON c.id=f.case_id WHERE f.id=".$no_conflict_id)->fetch_assoc();
     change_case_check($resolved_no_conflict && $resolved_no_conflict['finding']==='no_conflict' && $resolved_no_conflict['status']==='resolved' && $resolved_no_conflict['resolved_at']!==null,'two independent no-conflict reviews resolve and timestamp the conformity case');
 
+    // Disagreement between the local and parent reviewers must remain unresolved.
+    $db->query("INSERT INTO community_laws (id,law_code,originating_community_id,created_by,status,current_version_id,effective_at) VALUES (987654341,'LAW-LOCAL-DISAGREEMENT-TEST',90020,90200,'approved',987654342,NOW())");
+    $db->query("INSERT INTO community_law_versions (id,law_id,version_number,title,law_text,proposed_by,status,approved_at) VALUES (987654342,987654341,1,'قانون محلی با اختلاف نظر','متن قانون محلی سوم',90200,'approved',NOW())");
+    $db->query("INSERT INTO community_law_scopes (law_version_id,scope_community_id,include_descendants) VALUES (987654342,90020,1)");
+    $db->query("INSERT INTO community_law_conformity_cases (community_id,parent_community_id,local_law_id,local_law_version_id,parent_law_id,parent_law_version_id,status,trigger_type,opened_by) VALUES (90020,90010,987654341,987654342,9501,99001,'review_required','manual_review',90100)");
+    $disagreement_case_id=(int)$db->insert_id;
+    $disagreement_id=community_law_conformity_add_conflict($db,$disagreement_case_id,90200,'ماده ۶','ماده ۹','آزمون اختلاف نظر دو جامعه','مستندات بررسی');
+    change_case_check(is_int($disagreement_id) && $disagreement_id>0,'a separate conformity case accepts a documented disagreement fixture');
+    change_case_check(community_law_conformity_review_conflict($db,$disagreement_id,90201,90020,'conflict_confirmed','از دید جامعه محلی، تعارض میان دو ماده با شواهد موجود تأیید می‌شود.'),'local reviewer can confirm a possible conflict');
+    change_case_check(community_law_conformity_review_conflict($db,$disagreement_id,90103,90010,'no_conflict','از دید جامعه مادر، دو ماده با یکدیگر تعارض حقوقی ندارند.'),'parent reviewer can independently disagree with the local finding');
+    $disagreement=$db->query("SELECT f.finding,c.status,c.resolved_at FROM community_law_conformity_conflicts f JOIN community_law_conformity_cases c ON c.id=f.case_id WHERE f.id=".$disagreement_id)->fetch_assoc();
+    change_case_check($disagreement && $disagreement['finding']==='needs_more_evidence' && $disagreement['status']==='review_required' && $disagreement['resolved_at']===null,'opposing local and parent findings require further review and never auto-resolve or force an amendment');
+
     $db->query("INSERT INTO community_law_implementations (law_version_id,community_id,responsible_user_id,local_plan,status,started_at,target_date,progress_report) VALUES (99001,90010,90101,'برنامهٔ جامعهٔ مادر','in_progress',NOW(),DATE_ADD(CURDATE(),INTERVAL 5 DAY),'گزارش پیشرفت مادر'),(99001,90020,90102,'برنامهٔ زیرجامعه','completed',NOW(),DATE_ADD(CURDATE(),INTERVAL 1 DAY),'گزارش تکمیل زیرجامعه')");
 
     $case_id=community_law_open_change_case($db,9501,90200,90020,'suspend','خطر جدی برای حقوق اعضا','گزارش مستند',true);

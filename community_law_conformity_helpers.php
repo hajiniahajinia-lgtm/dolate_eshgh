@@ -164,8 +164,14 @@ if (!function_exists('community_law_conformity_review_conflict')) {
 
             $aggregate = 'unreviewed';
             if ((int)$tally['local_count'] > 0 && (int)$tally['parent_count'] > 0) {
-                if ((int)$tally['conflict_count'] > 0) $aggregate = 'conflict_confirmed';
-                elseif ((int)$tally['no_conflict_count'] === 2) $aggregate = 'no_conflict';
+                if ((int)$tally['conflict_count'] > 0 && (int)$tally['no_conflict_count'] > 0) {
+                    // اختلاف نظر دو جامعه، تعارض را نه اثبات می‌کند و نه رد؛ بررسی بیشتر لازم است.
+                    $aggregate = 'needs_more_evidence';
+                } elseif ((int)$tally['conflict_count'] > 0) {
+                    $aggregate = 'conflict_confirmed';
+                } elseif ((int)$tally['no_conflict_count'] === 2) {
+                    $aggregate = 'no_conflict';
+                }
             }
             $update = $conn->prepare(
                 "UPDATE community_law_conformity_conflicts SET finding=?,
@@ -180,8 +186,21 @@ if (!function_exists('community_law_conformity_review_conflict')) {
             $case_status = (string)$row['status'];
             $resolved_at_sql = null;
             if ($aggregate === 'conflict_confirmed') {
-                // تأیید یک‌طرفه برای احتیاط، اصلاحیه را لازم می‌کند؛ اما به معنی توافق دوطرفه نیست.
+                // فقط پس از دو بررسی هم‌جهت، تعارض تأیید و اصلاحیه لازم می‌شود.
                 $case_status = 'amendment_required';
+            } elseif ($aggregate === 'needs_more_evidence') {
+                // اختلاف نظر، پرونده را باز نگه می‌دارد؛ تعارض‌های مستقلِ تأییدشده همچنان معتبرند.
+                $other_confirmed = $conn->prepare(
+                    "SELECT COUNT(*) AS total FROM community_law_conformity_conflicts
+                     WHERE case_id=? AND id<>? AND finding='conflict_confirmed'"
+                );
+                if (!$other_confirmed) throw new RuntimeException('other confirmed conflict check prepare failed');
+                $case_id_for_check = (int)$row['case_id'];
+                $other_confirmed->bind_param('ii', $case_id_for_check, $conflict_id);
+                if (!$other_confirmed->execute()) throw new RuntimeException('other confirmed conflict check failed');
+                $other_confirmed_count = (int)$other_confirmed->get_result()->fetch_assoc()['total'];
+                $other_confirmed->close();
+                $case_status = $other_confirmed_count > 0 ? 'amendment_required' : 'review_required';
             } elseif ($aggregate === 'no_conflict') {
                 // پرونده فقط وقتی بسته/حل‌شده می‌شود که هیچ تعارض دیگری باز یا تأییدشده نمانده باشد.
                 $remaining = $conn->prepare(
