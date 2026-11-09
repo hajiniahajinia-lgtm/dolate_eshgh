@@ -29,6 +29,7 @@ try {
     outcome_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_outcome_reassessments.sql');
     outcome_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_outcome_corrective_actions.sql');
     outcome_apply_sql($db,__DIR__.'/../migrations/20261109_community_law_corrective_completion_reviews.sql');
+    outcome_apply_sql($db,__DIR__.'/../migrations/20261109_community_law_corrective_completion_retries.sql');
     $db->query("CREATE TEMPORARY TABLE community_decision_records (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
         community_id INT NOT NULL,
@@ -271,7 +272,7 @@ try {
     $corrective_updates=(int)$db->query(
         "SELECT COUNT(*) total FROM community_law_outcome_corrective_updates WHERE action_id=".(int)$corrective_action_id
     )->fetch_assoc()['total'];
-    outcome_check($corrective_updates===3,'all corrective progress entries remain as immutable history');
+    outcome_check($corrective_updates===4,'all corrective progress entries remain as immutable history');
     $claim_status=$db->query("SELECT status FROM community_law_outcome_corrective_updates WHERE id=".(int)$completed_id)->fetch_assoc();
     $action_status=$db->query("SELECT completion_status FROM community_law_outcome_corrective_actions WHERE id=".(int)$corrective_action_id)->fetch_assoc();
     outcome_check($claim_status && $claim_status['status']==='completion_claimed' &&
@@ -284,21 +285,55 @@ try {
         $db,$corrective_action_id,9701,'confirm','ایجادکننده اقدام تعارض منافع دارد'
     )===false,'corrective action creator cannot verify completion');
     $completion_one=community_law_review_corrective_completion(
-        $db,$corrective_action_id,9706,'confirm','شواهد تکمیل اقدام را تأیید می‌کند'
+        $db,$corrective_action_id,9706,'reject','شواهد تکمیل اقدام کافی نیست'
     );
     outcome_check(is_array($completion_one) && $completion_one['review_count']===1 &&
         $completion_one['completion_status']==='pending','one review cannot finalize completion');
     $completion_two=community_law_review_corrective_completion(
-        $db,$corrective_action_id,9707,'confirm','معیار موفقیت به‌طور مستقل احراز شد'
+        $db,$corrective_action_id,9707,'reject','معیار موفقیت هنوز احراز نشده است'
     );
     outcome_check(is_array($completion_two) && $completion_two['review_count']===2 &&
         $completion_two['completion_status']==='pending','two reviews do not bypass the three-review threshold');
     $completion_three=community_law_review_corrective_completion(
-        $db,$corrective_action_id,9708,'reject','یک بخش از معیار موفقیت هنوز احراز نشده است'
+        $db,$corrective_action_id,9708,'confirm','بخشی از معیار موفقیت احراز شده است'
     );
     outcome_check(is_array($completion_three) && $completion_three['review_count']===3 &&
-        $completion_three['completion_status']==='verified',
-        'two of three independent reviewers verify completion');
+        $completion_three['completion_status']==='rejected',
+        'two of three independent reviewers reject the completion claim');
+    $rejected_round=$db->query("SELECT completion_status,completion_review_round FROM community_law_outcome_corrective_actions WHERE id=".(int)$corrective_action_id)->fetch_assoc();
+    outcome_check($rejected_round && $rejected_round['completion_status']==='rejected' &&
+        (int)$rejected_round['completion_review_round']===1,
+        'rejected completion preserves the first review round');
+    $retry_id=community_law_submit_outcome_corrective_update(
+        $db,$corrective_action_id,9704,'completed','پس از رفع نقص، اقدام دوباره تکمیل شد','شواهد اصلاح‌شده'
+    );
+    outcome_check(is_int($retry_id) && $retry_id>0,
+        'assigned executor can resubmit completion after addressing rejection');
+    $retry_state=$db->query("SELECT completion_status,completion_review_round FROM community_law_outcome_corrective_actions WHERE id=".(int)$corrective_action_id)->fetch_assoc();
+    outcome_check($retry_state && $retry_state['completion_status']==='pending' &&
+        (int)$retry_state['completion_review_round']===2,
+        'resubmission opens a new pending review round');
+    $retry_one=community_law_review_corrective_completion(
+        $db,$corrective_action_id,9706,'confirm','شواهد اصلاح‌شده را تأیید می‌کند'
+    );
+    outcome_check(is_array($retry_one) && $retry_one['review_count']===1 &&
+        $retry_one['completion_status']==='pending','new review round starts with a fresh tally');
+    $retry_two=community_law_review_corrective_completion(
+        $db,$corrective_action_id,9707,'confirm','معیار موفقیت اکنون احراز شده است'
+    );
+    outcome_check(is_array($retry_two) && $retry_two['review_count']===2 &&
+        $retry_two['completion_status']==='pending','second-round tally remains independent');
+    $retry_three=community_law_review_corrective_completion(
+        $db,$corrective_action_id,9708,'reject','یک ملاحظهٔ جزئی باقی است'
+    );
+    outcome_check(is_array($retry_three) && $retry_three['review_count']===3 &&
+        $retry_three['completion_status']==='verified',
+        'two of three second-round reviewers verify the corrected completion claim');
+    $round_counts=$db->query("SELECT review_round,COUNT(*) total FROM community_law_outcome_corrective_completion_reviews WHERE action_id=".(int)$corrective_action_id." GROUP BY review_round ORDER BY review_round")->fetch_all(MYSQLI_ASSOC);
+    outcome_check(count($round_counts)===2 && (int)$round_counts[0]['review_round']===1 &&
+        (int)$round_counts[0]['total']===3 && (int)$round_counts[1]['review_round']===2 &&
+        (int)$round_counts[1]['total']===3,
+        'first and second review rounds remain separately preserved');
     outcome_check(community_law_submit_outcome_corrective_update(
         $db,$corrective_action_id,9704,'in_progress','پس از تأیید مستقل نباید تغییر کند'
     )===false,'verified corrective action cannot be reopened');
@@ -306,12 +341,12 @@ try {
         "SELECT COUNT(*) total FROM community_law_history
          WHERE law_id=990000 AND event_type='outcome_corrective_completion_reviewed'"
     )->fetch_assoc()['total'];
-    outcome_check($completion_history===3,'all independent completion reviews are preserved in law history');
+    outcome_check($completion_history===6,'all independent completion reviews are preserved in law history');
     $corrective_history=(int)$db->query(
         "SELECT COUNT(*) total FROM community_law_history
          WHERE law_id=990000 AND event_type='outcome_corrective_action_updated'"
     )->fetch_assoc()['total'];
-    outcome_check($corrective_history===3,'each corrective progress update is recorded in law history');
+    outcome_check($corrective_history===4,'each corrective progress update is recorded in law history');
 
     // خروج جامعه از دامنه قانون، گزارش تازه و اقدام اصلاحی تازه را متوقف می‌کند؛
     // گزارش‌ها و اقدامات قبلی همچنان در تاریخچه باقی می‌مانند.
