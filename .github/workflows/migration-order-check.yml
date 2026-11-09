@@ -8,6 +8,7 @@ on:
       - 'migration_runner.php'
       - 'migrations/auto_apply.php'
       - 'tests/migration_order_test.php'
+      - 'tests/migration_runner_plan_mode_contract_test.php'
       - '.github/workflows/migration-order-check.yml'
   pull_request:
     paths:
@@ -30,4 +31,7 @@ jobs:
           php -l migrations/auto_apply.php
           php -l tests/migration_order_test.php
       - name: Verify migration prerequisite order
-        run: php tests/migration_order_test.php
+        run: |
+          php tests/migration_order_test.php
+          php -l tests/migration_runner_plan_mode_contract_test.php
+          php tests/migration_runner_plan_mode_contract_test.php

@@ -33,20 +33,21 @@ if (strlen($expected_token) < 32 || $provided_token === '' || !hash_equals($expe
     migration_response(403, ['success' => false, 'message' => 'Forbidden']);
 }
 
+$request_payload = json_decode((string)file_get_contents('php://input'), true);
+if (!is_array($request_payload)) {
+    $request_payload = [];
+}
+$migration_mode = (string)($request_payload['mode'] ?? 'plan');
+if (!in_array($migration_mode, ['plan', 'apply'], true)) {
+    migration_response(400, ['success' => false, 'message' => 'Invalid migration mode']);
+}
+
 try {
     require __DIR__ . '/db.php';
 
     if (!isset($conn) || !($conn instanceof mysqli)) {
         throw new RuntimeException('Database connection is unavailable');
     }
-
-    $conn->query("
-        CREATE TABLE IF NOT EXISTS app_schema_migrations (
-            migration_name VARCHAR(190) NOT NULL PRIMARY KEY,
-            checksum CHAR(64) NOT NULL,
-            applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-    ");
 
     $directory = __DIR__ . '/migrations';
     $files = is_dir($directory) ? (glob($directory . '/*.sql') ?: []) : [];
@@ -90,6 +91,67 @@ try {
             }
         }
     }
+
+    if ($migration_mode === 'plan') {
+        $registry_result = $conn->query("SHOW TABLES LIKE 'app_schema_migrations'");
+        if (!$registry_result || $registry_result->num_rows === 0) {
+            migration_response(409, [
+                'success' => false,
+                'mode' => 'plan',
+                'message' => 'Migration registry is missing; no database changes were made.',
+                'database_changes_made' => false
+            ]);
+        }
+
+        $registry_result->free();
+        $registry_rows = $conn->query('SELECT migration_name, checksum FROM app_schema_migrations');
+        if (!$registry_rows) {
+            throw new RuntimeException('Could not read migration registry');
+        }
+        $registry = [];
+        while ($registry_row = $registry_rows->fetch_assoc()) {
+            $registry[(string)$registry_row['migration_name']] = (string)$registry_row['checksum'];
+        }
+        $registry_rows->free();
+
+        $pending = [];
+        $already_applied = [];
+        $checksum_mismatches = [];
+        foreach ($files as $file) {
+            $name = basename($file);
+            if (!preg_match('/^[0-9]{8}_[A-Za-z0-9_-]+\\.sql$/', $name)) continue;
+            $sql = file_get_contents($file);
+            if ($sql === false) throw new RuntimeException('Could not read migration: ' . $name);
+            $sql = trim($sql);
+            if ($sql === '') continue;
+            $checksum = hash('sha256', $sql);
+            if (!array_key_exists($name, $registry)) {
+                $pending[] = $name;
+            } elseif (!hash_equals($registry[$name], $checksum)) {
+                $checksum_mismatches[] = $name;
+            } else {
+                $already_applied[] = $name;
+            }
+        }
+
+        migration_response($checksum_mismatches ? 409 : 200, [
+            'success' => count($checksum_mismatches) === 0,
+            'mode' => 'plan',
+            'pending' => $pending,
+            'already_applied' => $already_applied,
+            'checksum_mismatches' => $checksum_mismatches,
+            'database_changes_made' => false
+        ]);
+    }
+
+    // Registry creation is allowed only in explicit apply mode.
+    $conn->query("
+        CREATE TABLE IF NOT EXISTS app_schema_migrations (
+            migration_name VARCHAR(190) NOT NULL PRIMARY KEY,
+            checksum CHAR(64) NOT NULL,
+            applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
 
     $applied = [];
     $skipped = [];
