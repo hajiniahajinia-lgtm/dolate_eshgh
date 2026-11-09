@@ -2079,7 +2079,10 @@ if (!function_exists('community_law_submit_outcome_corrective_update')) {
         $latest->bind_param('i',$action_id);
         if (!$latest->execute()) { $latest->close(); return false; }
         $last=$latest->get_result()->fetch_assoc(); $latest->close();
-        if (($action['completion_status']??'none')!=='none' || ($last && in_array($last['status'],['completed','completion_claimed'],true))) return false;
+        $completion_status=(string)($action['completion_status']??'none');
+        if (in_array($completion_status,['pending','verified'],true) ||
+            ($completion_status==='rejected' && $status!=='completed') ||
+            ($completion_status==='none' && $last && in_array($last['status'],['completed','completion_claimed'],true))) return false;
         $stored_status=$status==='completed'?'completion_claimed':$status;
 
         $insert=$conn->prepare(
@@ -2093,7 +2096,12 @@ if (!function_exists('community_law_submit_outcome_corrective_update')) {
         $ok=$insert->execute(); $update_id=(int)$conn->insert_id; $insert->close();
         if (!$ok) return false;
         if ($stored_status==='completion_claimed') {
-            $claim=$conn->prepare("UPDATE community_law_outcome_corrective_actions SET completion_status='pending' WHERE id=? AND completion_status='none'");
+            $claim=$conn->prepare(
+                "UPDATE community_law_outcome_corrective_actions
+                 SET completion_status='pending',
+                     completion_review_round=completion_review_round+IF(completion_status='rejected',1,0)
+                 WHERE id=? AND completion_status IN ('none','rejected')"
+            );
             if (!$claim) return false;
             $claim->bind_param('i',$action_id); $claimed=$claim->execute() && $claim->affected_rows===1; $claim->close();
             if (!$claimed) return false;
@@ -2119,7 +2127,7 @@ if (!function_exists('community_law_review_corrective_completion')) {
             !in_array($verdict,['confirm','reject'],true) || $rationale==='' ||
             mb_strlen($rationale)>12000 || ($evidence!==null && mb_strlen($evidence)>12000)) return false;
         $stmt=$conn->prepare(
-            "SELECT id,report_id,reassessment_id,law_id,law_version_id,community_id,created_by,responsible_user_id,completion_status
+            "SELECT id,report_id,reassessment_id,law_id,law_version_id,community_id,created_by,responsible_user_id,completion_status,completion_review_round
              FROM community_law_outcome_corrective_actions WHERE id=? LIMIT 1 FOR UPDATE"
         );
         if (!$stmt) return false;
@@ -2155,18 +2163,19 @@ if (!function_exists('community_law_review_corrective_completion')) {
         if (!$is_member) return false;
         $insert=$conn->prepare(
             "INSERT INTO community_law_outcome_corrective_completion_reviews
-             (action_id,reviewer_user_id,verdict,rationale,evidence) VALUES (?,?,?,?,?)"
+             (action_id,review_round,reviewer_user_id,verdict,rationale,evidence) VALUES (?,?,?,?,?,?)"
         );
         if (!$insert) return false;
-        $insert->bind_param('iisss',$action_id,$reviewer_user_id,$verdict,$rationale,$evidence);
+        $review_round=(int)$action['completion_review_round'];
+        $insert->bind_param('iiisss',$action_id,$review_round,$reviewer_user_id,$verdict,$rationale,$evidence);
         if (!$insert->execute()) { $insert->close(); return false; }
         $insert->close();
         $counts=$conn->prepare(
             "SELECT COUNT(*) total,SUM(verdict='confirm') confirms
-             FROM community_law_outcome_corrective_completion_reviews WHERE action_id=?"
+             FROM community_law_outcome_corrective_completion_reviews WHERE action_id=? AND review_round=?"
         );
         if (!$counts) return false;
-        $counts->bind_param('i',$action_id);
+        $counts->bind_param('ii',$action_id,$review_round);
         if (!$counts->execute()) { $counts->close(); return false; }
         $summary=$counts->get_result()->fetch_assoc(); $counts->close();
         $total=(int)$summary['total']; $status='pending';
@@ -2181,7 +2190,7 @@ if (!function_exists('community_law_review_corrective_completion')) {
             $ok=$update->execute() && $update->affected_rows===1; $update->close();
             if (!$ok) return false;
         }
-        $details=json_encode(['action_id'=>$action_id,'verdict'=>$verdict,
+        $details=json_encode(['action_id'=>$action_id,'review_round'=>$review_round,'verdict'=>$verdict,
             'review_count'=>$total,'completion_status'=>$status],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
         if (!community_law_record_history($conn,(int)$action['law_id'],(int)$action['law_version_id'],
             $community_id,$reviewer_user_id,'outcome_corrective_completion_reviewed',$details)) return false;
