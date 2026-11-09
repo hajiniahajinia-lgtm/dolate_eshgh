@@ -88,8 +88,8 @@ $checks['enactment requires an expired appeal window, current charter and no unr
     strpos($enact, '$conn->rollback()') !== false;
 $checks['change requests require five independent reviewers and four supporting assessments'] =
     strpos($change_source, 'count($candidates)<5') !== false &&
-    strpos($change_source, "if ((int)$summary['total']>=5)") !== false &&
-    strpos($change_source, "if ((int)$summary['uphold_count']>=4)") !== false &&
+    strpos($change_source, 'if ((int)$summary[\'total\']>=5)') !== false &&
+    strpos($change_source, 'if ((int)$summary[\'uphold_count\']>=4)') !== false &&
     strpos($change_source, "'turnout_required'=>'2/3'") !== false &&
     strpos($change_source, "'approval_required'=>'2/3'") !== false;
 $checks['approved suspension, reinstatement and repeal effects are idempotent and audited'] =
