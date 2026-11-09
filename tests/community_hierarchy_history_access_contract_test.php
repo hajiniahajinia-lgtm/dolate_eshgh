@@ -12,22 +12,22 @@ if ($page === false || $community_page === false || $migration === false) {
 
 $checks = [
     'history page requires an authenticated session' =>
-        strpos($page, "if (!isset($_SESSION['user_id']))") !== false,
+        strpos($page, 'if (!isset($_SESSION[\'user_id\']))') !== false,
     'community identifier is validated as a positive integer' =>
         strpos($page, 'FILTER_VALIDATE_INT') !== false && strpos($page, '$community_id <= 0') !== false,
     'membership is checked against the exact requested community and current user' =>
         strpos($page, 'community_members WHERE community_id=? AND user_id=?') !== false &&
         strpos($page, 'if (!$is_member)') !== false,
     'nonmembers are denied before any history query is executed' =>
-        strpos($page, "if (!$is_member)") < strpos($page, 'FROM community_hierarchy_change_history'),
+        strpos($page, 'if (!$is_member)') < strpos($page, 'FROM community_hierarchy_change_history'),
     'history query is scoped to the requested community with bound parameters' =>
         strpos($page, 'WHERE h.community_id=?') !== false &&
-        strpos($page, "bind_param('iii', $community_id, $page_size, $offset)") !== false,
+        strpos($page, 'bind_param(\'iii\', $community_id, $page_size, $offset)') !== false,
     'history is ordered newest first and paginated' =>
         strpos($page, 'ORDER BY h.created_at DESC, h.id DESC') !== false &&
         strpos($page, 'LIMIT ? OFFSET ?') !== false,
     'all user-controlled and database text is HTML escaped' =>
-        strpos($page, "htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8')") !== false &&
+        strpos($page, 'htmlspecialchars((string)$value, ENT_QUOTES, \'UTF-8\')') !== false &&
         substr_count($page, 'community_hierarchy_history_escape(') >= 6,
     'page handles a missing migration without exposing another data source' =>
         strpos($page, "table_name='community_hierarchy_change_history'") !== false &&
