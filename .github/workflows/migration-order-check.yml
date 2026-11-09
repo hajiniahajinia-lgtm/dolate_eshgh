@@ -6,6 +6,7 @@ on:
       - fix/corrective-completion-migration-order
     paths:
       - 'migration_runner.php'
+      - 'migrations/recovery_guard.php'
       - 'migrations/auto_apply.php'
       - 'tests/migration_order_test.php'
       - 'tests/migration_runner_plan_mode_contract_test.php'
@@ -29,6 +30,7 @@ jobs:
       - name: Lint migration runner and contract test
         run: |
           php -l migration_runner.php
+          php -l migrations/recovery_guard.php
           php -l migrations/auto_apply.php
           php -l tests/migration_order_test.php
       - name: Verify migration prerequisite order

@@ -16,7 +16,11 @@ $checks=[
     "registry creation must occur after the read-only plan branch" => strpos($runner, "if ($"."migration_mode === 'plan')") < strpos($runner, "CREATE TABLE IF NOT EXISTS app_schema_migrations"),
     "plan must check the exact registry table name" => strpos($runner, "table_name = 'app_schema_migrations'")!==false,
     "apply must acquire the shared migration lock" => strpos($runner, "GET_LOCK('dolate_eshgh_schema_migrations'")!==false,
-    "apply must release the shared migration lock" => strpos($runner, "RELEASE_LOCK('dolate_eshgh_schema_migrations'")!==false
+    "apply must release the shared migration lock" => strpos($runner, "RELEASE_LOCK('dolate_eshgh_schema_migrations'")!==false,
+    "runner must write a durable marker before executing SQL" => strpos($runner, "migration_recovery_begin($"."conn, $"."name, $"."checksum)") < strpos($runner, "if (!$"."conn->multi_query($"."sql))"),
+    "runner must clear marker only after registry success" => strpos($runner, "migration_recovery_complete($"."conn, $"."name)") > strpos($runner, "$"."save->execute()"),
+    "plan must block when an interrupted marker exists" => strpos($runner, "'recovery_required' => true")!==false,
+    "runner must use shared recovery guard" => strpos($runner, "recovery_guard.php")!==false
 ];
 foreach($checks as $label=>$passed) {
     if(!$passed) {

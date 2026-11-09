@@ -43,6 +43,7 @@ if (!in_array($migration_mode, ['plan', 'apply'], true)) {
 }
 
 $migration_lock_acquired = false;
+require_once __DIR__ . '/migrations/recovery_guard.php';
 
 try {
     require __DIR__ . '/db.php';
@@ -95,6 +96,24 @@ try {
     }
 
     if ($migration_mode === 'plan') {
+        $recovery_table_result = $conn->query("SELECT COUNT(*) AS table_count FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'app_schema_migration_recovery'");
+        $recovery_table_row = $recovery_table_result ? $recovery_table_result->fetch_assoc() : null;
+        if ($recovery_table_result instanceof mysqli_result) $recovery_table_result->free();
+        $recovery_marker = null;
+        if ((int)($recovery_table_row['table_count'] ?? 0) === 1) {
+            $recovery_marker = migration_recovery_active($conn);
+        }
+        if ($recovery_marker !== null) {
+            migration_response(409, [
+                'success' => false,
+                'mode' => 'plan',
+                'message' => 'A previous migration was interrupted. Manual recovery is required; no migration will be retried.',
+                'recovery_required' => true,
+                'recovery_marker' => $recovery_marker,
+                'database_changes_made' => false
+            ]);
+        }
+
         $registry_result = $conn->query("SELECT COUNT(*) AS table_count FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'app_schema_migrations'");
         $registry_row = $registry_result ? $registry_result->fetch_assoc() : null;
         if ($registry_result instanceof mysqli_result) $registry_result->free();
@@ -107,7 +126,6 @@ try {
             ]);
         }
 
-        $registry_result->free();
         $registry_rows = $conn->query('SELECT migration_name, checksum FROM app_schema_migrations');
         if (!$registry_rows) {
             throw new RuntimeException('Could not read migration registry');
@@ -158,13 +176,20 @@ try {
     $migration_lock_acquired = true;
 
     // Registry creation is allowed only in explicit apply mode.
-    $conn->query("
+    if (!$conn->query("
         CREATE TABLE IF NOT EXISTS app_schema_migrations (
             migration_name VARCHAR(190) NOT NULL PRIMARY KEY,
             checksum CHAR(64) NOT NULL,
             applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-    ");
+    ")) {
+        throw new RuntimeException('Could not create migration registry: ' . $conn->error);
+    }
+    migration_recovery_ensure_table($conn);
+    $existing_recovery = migration_recovery_active($conn);
+    if ($existing_recovery !== null) {
+        throw new RuntimeException('Interrupted migration requires documented manual recovery: ' . (string)$existing_recovery['migration_name']);
+    }
 
     $applied = [];
     $skipped = [];
@@ -202,7 +227,8 @@ try {
             continue;
         }
 
-        // MySQL DDL is not generally transactional; migration files should be safe to retry.
+        // Persist a recovery marker BEFORE the first statement. MySQL DDL may auto-commit.
+        migration_recovery_begin($conn, $name, $checksum);
         if (!$conn->multi_query($sql)) {
             throw new RuntimeException('SQL execution failed for migration: ' . $name . ' (' . $conn->error . ')');
         }
@@ -230,6 +256,7 @@ try {
         $save->bind_param('ss', $name, $checksum);
         $save->execute();
         $save->close();
+        migration_recovery_complete($conn, $name);
 
         $applied[] = $name;
     }
