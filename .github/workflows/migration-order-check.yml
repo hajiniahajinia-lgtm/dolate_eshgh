@@ -10,6 +10,7 @@ on:
       - 'migrations/auto_apply.php'
       - 'tests/migration_order_test.php'
       - 'tests/migration_runner_plan_mode_contract_test.php'
+      - 'tests/migration_recovery_guard_integration_test.php'
       - '.github/workflows/migration-order-check.yml'
   pull_request:
     paths:
