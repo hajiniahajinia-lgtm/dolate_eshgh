@@ -299,9 +299,11 @@ try {
 
     // A case with multiple conflicts must not resolve when only one item
     // has been cleared; it resolves only after every item is independently cleared.
+    $db->query("INSERT INTO communities (id,parent_community_id) VALUES (90060,90020) ON DUPLICATE KEY UPDATE parent_community_id=VALUES(parent_community_id)");
+    $db->query("INSERT INTO community_members (community_id,user_id) VALUES (90060,90300),(90060,90301) ON DUPLICATE KEY UPDATE user_id=VALUES(user_id)");
     $db->query("INSERT INTO community_law_conformity_cases
         (community_id,parent_community_id,local_law_id,local_law_version_id,parent_law_id,parent_law_version_id,status,trigger_type,opened_by)
-        VALUES (90030,90020,9503,99003,9502,99002,'review_required','manual_review',90100)");
+        VALUES (90060,90020,9502,99002,9501,99001,'review_required','manual_review',90100)");
     $multi_case_id=(int)$db->insert_id;
     $multi_conflict_one=community_law_conformity_add_conflict(
         $db,$multi_case_id,90300,'ماده ۱۵','ماده ۲','بررسی مورد نخست برای آزمون بسته‌شدن مرحله‌ای پرونده','شواهد مورد نخست'
