@@ -177,4 +177,16 @@ topic_intent_contract_check(
     'a local amendment preserves the original provenance and records its exact base and proposed versions'
 );
 
+
+topic_intent_contract_check(
+    is_string($law = file_get_contents(__DIR__ . '/../community_laws.php')) &&
+    str_contains($law, 'community_law_history h') &&
+    str_contains($law, 'ORDER BY h.created_at DESC, h.id DESC') &&
+    str_contains($law, 'WHERE l.originating_community_id=?') &&
+    str_contains($law, 'تاریخچهٔ قوانین این جامعه') &&
+    str_contains($law, 'نمایش حداکثر ۳۰۰ رویداد اخیر') &&
+    str_contains($law, 'برای مشاهدهٔ تاریخچه باید عضو این جامعه باشید'),
+    'law history is shown as a member-only chronological timeline across versions and affected communities'
+);
+
 fwrite(STDOUT, "PASS: topic intent classification contract checks passed.\n");

@@ -4275,6 +4275,43 @@ if ($schema_ready) {
     }
 }
 
+
+$law_history_by_law = [];
+if ($schema_ready && $is_member) {
+    $history_stmt = $conn->prepare(
+        "SELECT h.id, h.law_id, l.law_code, current_version.title AS current_title,
+                h.law_version_id, v.version_number, h.community_id,
+                c.name AS event_community_name, h.actor_user_id,
+                h.event_type, h.details, h.created_at
+         FROM community_law_history h
+         JOIN community_laws l ON l.id=h.law_id
+         LEFT JOIN community_law_versions current_version ON current_version.id=l.current_version_id
+         LEFT JOIN community_law_versions v ON v.id=h.law_version_id
+         LEFT JOIN communities c ON c.id=h.community_id
+         WHERE l.originating_community_id=?
+         ORDER BY h.created_at DESC, h.id DESC
+         LIMIT 300"
+    );
+    if ($history_stmt) {
+        $history_stmt->bind_param('i', $community_id);
+        if ($history_stmt->execute()) {
+            $history_result = $history_stmt->get_result();
+            while ($history_row = $history_result->fetch_assoc()) {
+                $history_law_id = (int)$history_row['law_id'];
+                if (!isset($law_history_by_law[$history_law_id])) {
+                    $law_history_by_law[$history_law_id] = [
+                        'law_code' => $history_row['law_code'],
+                        'title' => $history_row['current_title'],
+                        'events' => []
+                    ];
+                }
+                $law_history_by_law[$history_law_id]['events'][] = $history_row;
+            }
+        }
+        $history_stmt->close();
+    }
+}
+
 $status = (string)($_GET['status'] ?? '');
 $status_messages = [
     'draft_saved' => 'پیش‌نویس قانون ثبت شد؛ این پیش‌نویس هنوز الزام‌آور نیست.',
@@ -5975,6 +6012,42 @@ details>summary{cursor:pointer;font-weight:bold}
 <?php else: ?>
 <div class="card notice">برای ثبت پیش‌نویس قانون یا اعتراض باید عضو این جامعه باشید.</div>
 <?php endif; ?>
+
+<div class="card">
+    <h3>تاریخچهٔ قوانین این جامعه</h3>
+    <p class="muted">رویدادها به ترتیب زمانی ثبت شده‌اند؛ سوابق نسخه‌های قبلی حفظ می‌شوند. این بخش برای اعضای جامعه نمایش داده می‌شود.</p>
+    <?php if (!$is_member): ?>
+        <p class="muted">برای مشاهدهٔ تاریخچه باید عضو این جامعه باشید.</p>
+    <?php elseif (!$law_history_by_law): ?>
+        <p class="muted">هنوز رویدادی در تاریخچهٔ قوانین این جامعه ثبت نشده است.</p>
+    <?php else: ?>
+        <?php foreach ($law_history_by_law as $history_law): ?>
+            <details style="margin-top:10px">
+                <summary><?= community_laws_escape($history_law['law_code']) ?> — <?= community_laws_escape($history_law['title'] ?? 'بدون عنوان') ?> (<?= count($history_law['events']) ?> رویداد)</summary>
+                <?php foreach ($history_law['events'] as $history_event): ?>
+                    <div class="notice" style="margin-top:8px">
+                        <strong><?= community_laws_escape([
+                            'draft_created'=>'ایجاد پیش‌نویس',
+                            'scope_entered'=>'ورود جامعه به دامنهٔ قانون',
+                            'scope_left'=>'خروج جامعه از دامنهٔ قانون',
+                            'implementation_initialized'=>'آغاز اجرای قانون'
+                        ][$history_event['event_type']] ?? $history_event['event_type']) ?></strong>
+                        <div class="meta">
+                            <?= community_laws_escape($history_event['created_at']) ?>
+                            — نسخه: <?= $history_event['version_number'] !== null ? (int)$history_event['version_number'] : '—' ?>
+                            — جامعه: <?= community_laws_escape($history_event['event_community_name'] ?? 'ثبت‌نشده') ?>
+                            — ثبت‌کننده: <?= $history_event['actor_user_id'] !== null ? '#' . (int)$history_event['actor_user_id'] : 'سامانه' ?>
+                        </div>
+                        <?php if (!empty($history_event['details'])): ?>
+                            <p><?= nl2br(community_laws_escape($history_event['details'])) ?></p>
+                        <?php endif; ?>
+                    </div>
+                <?php endforeach; ?>
+            </details>
+        <?php endforeach; ?>
+        <p class="muted">نمایش حداکثر ۳۰۰ رویداد اخیر است؛ سوابق قدیمی‌تر در پایگاه داده باقی می‌مانند.</p>
+    <?php endif; ?>
+</div>
 
 <div class="card">
     <h3>اعتراض‌های ثبت‌شده در این جامعه</h3>
