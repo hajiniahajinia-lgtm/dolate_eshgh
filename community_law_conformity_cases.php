@@ -6,12 +6,28 @@ if (!isset($_SESSION['user_id'])) { header('Location: login.php'); exit; }
 $user_id=(int)$_SESSION['user_id'];
 $community_id=(int)($_GET['community_id']??0);
 if ($community_id<=0) { http_response_code(400); exit('شناسه جامعه معتبر نیست.'); }
-$community_stmt=$conn->prepare('SELECT id,name FROM communities WHERE id=? LIMIT 1');
-$community_stmt->bind_param('i',$community_id); $community_stmt->execute();
-$community=$community_stmt->get_result()->fetch_assoc(); $community_stmt->close();
-if (!$community) { http_response_code(404); exit('جامعه پیدا نشد.'); }
-$is_member=community_law_conformity_is_member($conn,$community_id,$user_id);
-if (!$is_member) { http_response_code(403); exit('فقط اعضای جامعه می‌توانند پرونده‌های مرتبط را مشاهده کنند.'); }
+// دریافت جامعه و احراز عضویت در یک پرس‌وجو انجام می‌شود تا بررسی دسترسی اتمیک باشد.
+$community_stmt=$conn->prepare(
+ 'SELECT c.id,c.name
+  FROM communities c
+  INNER JOIN community_members cm ON cm.community_id=c.id AND cm.user_id=?
+  WHERE c.id=? LIMIT 1'
+);
+if (!$community_stmt) { http_response_code(503); exit('امکان بررسی دسترسی به جامعه وجود ندارد.'); }
+$community_stmt->bind_param('ii',$user_id,$community_id);
+if (!$community_stmt->execute()) { $community_stmt->close(); http_response_code(503); exit('امکان بررسی دسترسی به جامعه وجود ندارد.'); }
+$community=$community_stmt->get_result()->fetch_assoc();
+$community_stmt->close();
+if (!$community) {
+ $exists_stmt=$conn->prepare('SELECT id FROM communities WHERE id=? LIMIT 1');
+ if (!$exists_stmt) { http_response_code(503); exit('امکان دریافت اطلاعات جامعه وجود ندارد.'); }
+ $exists_stmt->bind_param('i',$community_id);
+ if (!$exists_stmt->execute()) { $exists_stmt->close(); http_response_code(503); exit('امکان دریافت اطلاعات جامعه وجود ندارد.'); }
+ $exists=(bool)$exists_stmt->get_result()->fetch_assoc();
+ $exists_stmt->close();
+ if (!$exists) { http_response_code(404); exit('جامعه پیدا نشد.'); }
+ http_response_code(403); exit('فقط اعضای جامعه می‌توانند پرونده‌های مرتبط را مشاهده کنند.');
+}
 if (empty($_SESSION['community_law_conformity_csrf'])) $_SESSION['community_law_conformity_csrf']=bin2hex(random_bytes(32));
 $csrf=$_SESSION['community_law_conformity_csrf'];
 function clcc_h($v): string { return htmlspecialchars((string)$v,ENT_QUOTES,'UTF-8'); }
@@ -42,11 +58,11 @@ if ($ready) {
    WHERE c.community_id=? OR c.parent_community_id=?
    ORDER BY c.created_at DESC,c.id DESC LIMIT 100"
  );
- if ($stmt) {
-  $stmt->bind_param('ii',$community_id,$community_id);
-  if ($stmt->execute()) { $res=$stmt->get_result(); while($row=$res->fetch_assoc()) $cases[]=$row; }
-  $stmt->close();
- }
+ if (!$stmt) { http_response_code(503); exit('امکان دریافت پرونده‌های هم‌ترازی وجود ندارد.'); }
+ $stmt->bind_param('ii',$community_id,$community_id);
+ if (!$stmt->execute()) { $stmt->close(); http_response_code(503); exit('امکان دریافت پرونده‌های هم‌ترازی وجود ندارد.'); }
+ $res=$stmt->get_result(); while($row=$res->fetch_assoc()) $cases[]=$row;
+ $stmt->close();
 }
 $labels=['review_required'=>'در انتظار بررسی','amendment_required'=>'اصلاحیه لازم است','amendment_in_progress'=>'اصلاحیه در حال پیگیری','resolved'=>'سازگاری تأیید شده','closed'=>'بسته‌شده'];
 ?>
@@ -68,7 +84,10 @@ body{font-family:Tahoma,Arial,sans-serif;background:#f5f6f8;color:#20242a;margin
    (SELECT COUNT(*) FROM community_law_conformity_conflict_reviews r WHERE r.conflict_id=f.id AND r.reviewer_user_id=?) AS my_review,
    (SELECT COUNT(*) FROM community_law_conformity_conflict_reviews r WHERE r.conflict_id=f.id AND r.reviewer_community_id=?) AS side_review
    FROM community_law_conformity_conflicts f WHERE f.case_id=? ORDER BY f.id");
- if($q){$q->bind_param('iii',$user_id,$community_id,$case_id);if($q->execute()){$rr=$q->get_result();while($x=$rr->fetch_assoc())$conflicts[]=$x;}$q->close();}
+ if(!$q){http_response_code(503);exit('امکان دریافت موارد اختلاف وجود ندارد.');}
+ $q->bind_param('iii',$user_id,$community_id,$case_id);
+ if(!$q->execute()){$q->close();http_response_code(503);exit('امکان دریافت موارد اختلاف وجود ندارد.');}
+ $rr=$q->get_result();while($x=$rr->fetch_assoc())$conflicts[]=$x;$q->close();
 ?>
 <div class="card">
 <h3>پرونده #<?=$case_id?> — <?=clcc_h($case['local_title'])?></h3>
@@ -96,7 +115,14 @@ body{font-family:Tahoma,Arial,sans-serif;background:#f5f6f8;color:#20242a;margin
 <label>استدلال مستند (حداقل ۲۰ نویسه)</label><textarea name="reasoning" minlength="20" maxlength="20000" required></textarea><label>شواهد تکمیلی</label><textarea name="evidence" maxlength="20000"></textarea>
 <button name="action" value="review_conflict">ثبت بررسی</button></form>
 <?php endif; ?>
-<?php $reviews=$conn->prepare("SELECT reviewer_community_id,finding,reasoning,evidence,created_at FROM community_law_conformity_conflict_reviews WHERE conflict_id=? ORDER BY id"); if($reviews){$reviews->bind_param('i',$f['id']);if($reviews->execute()){$res=$reviews->get_result();while($rv=$res->fetch_assoc()): ?><div class="notice"><strong><?= (int)$rv['reviewer_community_id']===(int)$case['community_id']?'دیدگاه جامعهٔ محلی':'دیدگاه جامعهٔ مادر' ?> — <?=clcc_h($rv['finding'])?></strong><p><?=nl2br(clcc_h($rv['reasoning']))?></p><?php if($rv['evidence']): ?><pre><?=clcc_h($rv['evidence'])?></pre><?php endif; ?></div><?php endwhile;}$reviews->close();} ?>
+<?php
+$reviews=$conn->prepare("SELECT reviewer_community_id,finding,reasoning,evidence,created_at FROM community_law_conformity_conflict_reviews WHERE conflict_id=? ORDER BY id");
+if(!$reviews){http_response_code(503);exit('امکان دریافت سوابق بررسی وجود ندارد.');}
+$reviews->bind_param('i',$f['id']);
+if(!$reviews->execute()){$reviews->close();http_response_code(503);exit('امکان دریافت سوابق بررسی وجود ندارد.');}
+$res=$reviews->get_result();
+while($rv=$res->fetch_assoc()):
+?><div class="notice"><strong><?= (int)$rv['reviewer_community_id']===(int)$case['community_id']?'دیدگاه جامعهٔ محلی':'دیدگاه جامعهٔ مادر' ?> — <?=clcc_h($rv['finding'])?></strong><p><?=nl2br(clcc_h($rv['reasoning']))?></p><?php if($rv['evidence']): ?><pre><?=clcc_h($rv['evidence'])?></pre><?php endif; ?></div><?php endwhile;$reviews->close(); ?>
 </details>
 <?php endforeach; ?>
 </div>

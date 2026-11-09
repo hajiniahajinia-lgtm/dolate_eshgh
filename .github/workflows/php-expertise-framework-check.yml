@@ -15,6 +15,7 @@ on:
       - 'community_hierarchy_history.php'
       - 'tests/community_hierarchy_history_access_contract_test.php'
       - 'tests/community_parent_change_conformity_contract_test.php'
+      - 'tests/community_law_conformity_case_access_contract_test.php'
       - 'collective_knowledge_finalizer.php'
       - 'community_charter_amendment_action.php'
       - 'community_charter_amendments.php'
@@ -220,6 +221,7 @@ jobs:
           php -l community_hierarchy_history.php
           php -l tests/community_hierarchy_history_access_contract_test.php
           php -l tests/community_parent_change_conformity_contract_test.php
+          php -l tests/community_law_conformity_case_access_contract_test.php
           php -l collective_knowledge_finalizer.php
           php -l community_charter_amendment_action.php
           php -l community_charter_amendments.php
@@ -266,6 +268,8 @@ jobs:
         run: php tests/community_hierarchy_history_access_contract_test.php
       - name: Verify hierarchy changes open conformity reviews
         run: php tests/community_parent_change_conformity_contract_test.php
+      - name: Verify conformity case membership and data access
+        run: php tests/community_law_conformity_case_access_contract_test.php
       - name: Run community law hierarchy and charter amendment tests
         run: |
           php tests/community_law_hierarchy_helpers_test.php
