@@ -601,17 +601,21 @@ try {
     $history=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_history WHERE law_id=9501 AND event_type IN ('change_case_submitted','change_case_independent_review_completed','change_case_parent_vote_opened','change_case_parent_vote_finalized')")->fetch_assoc()['n'];
     change_case_check($history>=4,'request, independent review, vote opening and parent vote are recorded in permanent law history (observed '.$history.')');
     // تغییر دامنهٔ قانون باید برای جامعهٔ متأثر اعلان بسازد و سوابق اجرا را حفظ کند.
-    $db->query("INSERT INTO communities (id,parent_community_id) VALUES (91010,NULL),(91020,91010),(91030,91020)");
+    $db->query("INSERT INTO communities (id,parent_community_id) VALUES (91010,NULL),(91020,91010),(91030,91020),(91110,NULL)");
     $db->query("INSERT INTO community_laws (id,law_code,originating_community_id,created_by,status,current_version_id,effective_at) VALUES (96001,'LAW-SCOPE-NOTICE-TEST',91020,90200,'approved',99601,NOW())");
     $db->query("INSERT INTO community_law_versions (id,law_id,version_number,title,law_text,proposed_by,status,approved_at) VALUES (99601,96001,1,'قانون آزمایش اعلان دامنه','متن قانون',90200,'approved',NOW())");
     $db->query("INSERT INTO community_law_scopes (law_version_id,scope_community_id,include_descendants) VALUES (99601,91020,1)");
     $db->query("INSERT INTO community_law_implementations (law_version_id,community_id,responsible_user_id,local_plan,status,started_at,target_date,progress_report) VALUES (99601,91030,90200,'برنامهٔ جامعهٔ متأثر','in_progress',NOW(),DATE_ADD(CURDATE(),INTERVAL 20 DAY),'گزارش پیشرفت حفظ‌شونده')");
+    // قانون مادر دوم در مقصد؛ با جابه‌جایی جامعه باید تعهد قبلی خاتمه و تعهد جدید ایجاد شود.
+    $db->query("INSERT INTO community_laws (id,law_code,originating_community_id,created_by,status,current_version_id,effective_at) VALUES (96003,'LAW-NEW-PARENT-SCOPE-TEST',91110,90200,'approved',99603,NOW())");
+    $db->query("INSERT INTO community_law_versions (id,law_id,version_number,title,law_text,proposed_by,status,approved_at) VALUES (99603,96003,1,'قانون مادر مقصد','متن قانون مقصد',90200,'approved',NOW())");
+    $db->query("INSERT INTO community_law_scopes (law_version_id,scope_community_id,include_descendants) VALUES (99603,91110,1)");
     // Use the complete database hierarchy: scope validation must see every
     // community referenced by active and pending law scopes, not a partial fixture.
     $old_scope_map=community_law_load_parent_map($db);
     change_case_check(is_array($old_scope_map) && ($old_scope_map[91030]??null)===91020,'scope transition fixture loads the complete hierarchy');
     $new_scope_map=$old_scope_map;
-    $new_scope_map[91030]=91010;
+    $new_scope_map[91030]=91110;
     // تغییر مسیر جامعه‌ای که در دامنهٔ یک قانونِ در حال بررسی است باید متوقف شود.
     $db->query("INSERT INTO community_laws (id,law_code,originating_community_id,created_by,status,current_version_id) VALUES (96002,'LAW-PENDING-HIERARCHY-TEST',91020,90200,'proposed',99602)");
     $db->query("INSERT INTO community_law_versions (id,law_id,version_number,title,law_text,proposed_by,status) VALUES (99602,96002,1,'قانون در حال بررسی برای آزمون سلسله‌مراتب','متن قانون',90200,'proposed')");
@@ -634,14 +638,20 @@ try {
     );
     $scope_left=$db->query("SELECT transition,notice_text FROM community_law_scope_notices WHERE law_id=96001 AND community_id=91030 ORDER BY id DESC LIMIT 1")->fetch_assoc();
     $left_impl=$db->query("SELECT status,responsible_user_id,local_plan,progress_report FROM community_law_implementations WHERE law_version_id=99601 AND community_id=91030")->fetch_assoc();
-    change_case_check($scope_left && $scope_left['transition']==='scope_left' && $left_impl && $left_impl['status']==='not_applicable' && $left_impl['progress_report']==='گزارش پیشرفت حفظ‌شونده','leaving the law scope creates a notice and preserves implementation evidence');
+    change_case_check($scope_left && $scope_left['transition']==='scope_left' && $left_impl && $left_impl['status']==='not_applicable' && $left_impl['progress_report']==='گزارش پیشرفت حفظ‌شونده','moving to a different parent ends the previous parent law obligation and preserves its evidence');
+    $destination_impl=$db->query("SELECT status FROM community_law_implementations WHERE law_version_id=99603 AND community_id=91030")->fetch_assoc();
+    $destination_notice=$db->query("SELECT transition FROM community_law_scope_notices WHERE law_id=96003 AND community_id=91030 ORDER BY id DESC LIMIT 1")->fetch_assoc();
+    change_case_check($destination_impl && $destination_impl['status']==='pending' && $destination_notice && $destination_notice['transition']==='scope_entered','the destination parent law automatically enters scope and creates a pending implementation obligation');
     change_case_check(
         community_law_record_hierarchy_scope_changes($db,$new_scope_map,$old_scope_map,91030,90200),
         'hierarchy scope re-entry is recorded and notified'
     );
     $scope_entered=$db->query("SELECT transition FROM community_law_scope_notices WHERE law_id=96001 AND community_id=91030 ORDER BY id DESC LIMIT 1")->fetch_assoc();
     $reentered_impl=$db->query("SELECT status,responsible_user_id,local_plan,progress_report FROM community_law_implementations WHERE law_version_id=99601 AND community_id=91030")->fetch_assoc();
-    change_case_check($scope_entered && $scope_entered['transition']==='scope_entered' && $reentered_impl && $reentered_impl['status']==='pending' && $reentered_impl['responsible_user_id']==='90200' && $reentered_impl['local_plan']==='برنامهٔ جامعهٔ متأثر' && $reentered_impl['progress_report']==='گزارش پیشرفت حفظ‌شونده','re-entering scope restores a pending obligation without deleting prior owner, plan or progress');
+    change_case_check($scope_entered && $scope_entered['transition']==='scope_entered' && $reentered_impl && $reentered_impl['status']==='pending' && $reentered_impl['responsible_user_id']==='90200' && $reentered_impl['local_plan']==='برنامهٔ جامعهٔ متأثر' && $reentered_impl['progress_report']==='گزارش پیشرفت حفظ‌شونده','re-entering the original parent scope restores a pending obligation without deleting prior owner, plan or progress');
+    $destination_after_exit=$db->query("SELECT status FROM community_law_implementations WHERE law_version_id=99603 AND community_id=91030")->fetch_assoc();
+    $destination_exit_notice=$db->query("SELECT transition FROM community_law_scope_notices WHERE law_id=96003 AND community_id=91030 ORDER BY id DESC LIMIT 1")->fetch_assoc();
+    change_case_check($destination_after_exit && $destination_after_exit['status']==='not_applicable' && $destination_exit_notice && $destination_exit_notice['transition']==='scope_left','leaving the destination parent scope stops its obligation while retaining its implementation record');
     $scope_history=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_history WHERE law_id=96001 AND event_type IN ('scope_left','scope_entered')")->fetch_assoc()['n'];
     change_case_check($scope_history===2,'scope entry and exit both remain in permanent law history');
     $scope_unread=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_scope_notices WHERE law_id=96001 AND community_id=91030 AND read_at IS NULL")->fetch_assoc()['n'];
@@ -673,6 +683,9 @@ try {
     $scope_retry_history=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_history WHERE law_id=96001 AND event_type='scope_left'")->fetch_assoc()['n'];
     $scope_retry_notices=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_scope_notices WHERE law_id=96001 AND community_id=91030 AND transition='scope_left'")->fetch_assoc()['n'];
     change_case_check($scope_retry_history===2 && $scope_retry_notices===2,'successful retry creates exactly one additional scope history event and notice');
+    $destination_retry_impl=$db->query("SELECT status FROM community_law_implementations WHERE law_version_id=99603 AND community_id=91030")->fetch_assoc();
+    $destination_retry_notice=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_scope_notices WHERE law_id=96003 AND community_id=91030 AND transition='scope_entered'")->fetch_assoc()['n'];
+    change_case_check($destination_retry_impl && $destination_retry_impl['status']==='pending' && $destination_retry_notice===2,'retry of parent change also enters the destination law exactly once and preserves transition history');
 
 
 
