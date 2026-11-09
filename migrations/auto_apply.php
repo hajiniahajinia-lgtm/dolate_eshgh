@@ -61,6 +61,9 @@ try {
         ],
         '20261109_community_law_corrective_completion_reviews.sql' => [
             '20261109_community_law_corrective_completion_retries.sql'
+        ],
+        '20261031_topic_expertise_proposals.sql' => [
+            '20261031_topic_expertise_proposal_voting.sql'
         ]
     ];
     foreach ($migration_dependencies as $prerequisite => $dependents) {

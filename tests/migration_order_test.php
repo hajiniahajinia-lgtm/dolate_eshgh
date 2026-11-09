@@ -23,6 +23,31 @@ array_splice($effectiveNames,$knowledgeIndex,1);
 $ledgerIndex=array_search('20261108_community_decision_ledger.sql',$effectiveNames,true);
 array_splice($effectiveNames,$ledgerIndex+1,0,[$knowledgeName]);
 
+$proposalSchema='20261031_topic_expertise_proposals.sql';
+$proposalVoting='20261031_topic_expertise_proposal_voting.sql';
+if(!in_array($proposalSchema,$names,true) || !in_array($proposalVoting,$names,true) ||
+   strpos($runner, "'{$proposalSchema}' => [")===false ||
+   strpos($runner, "'{$proposalVoting}'")===false) {
+    fwrite(STDERR,"FAIL: expertise proposal voting dependency is missing\\n");
+    exit(1);
+}
+$proposalVotingIndex=array_search($proposalVoting,$effectiveNames,true);
+if($proposalVotingIndex===false) {
+    fwrite(STDERR,"FAIL: expertise proposal voting migration is missing\\n");
+    exit(1);
+}
+array_splice($effectiveNames,$proposalVotingIndex,1);
+$proposalSchemaIndex=array_search($proposalSchema,$effectiveNames,true);
+if($proposalSchemaIndex===false) {
+    fwrite(STDERR,"FAIL: expertise proposal schema migration is missing\\n");
+    exit(1);
+}
+array_splice($effectiveNames,$proposalSchemaIndex+1,0,[$proposalVoting]);
+if(array_search($proposalSchema,$effectiveNames,true)>=array_search($proposalVoting,$effectiveNames,true)) {
+    fwrite(STDERR,"FAIL: expertise proposal voting migration must run after its proposal table is created\\n");
+    exit(1);
+}
+
 $completionReviews='20261109_community_law_corrective_completion_reviews.sql';
 $completionRetries='20261109_community_law_corrective_completion_retries.sql';
 if(!in_array($completionReviews,$names,true) || !in_array($completionRetries,$names,true) ||
