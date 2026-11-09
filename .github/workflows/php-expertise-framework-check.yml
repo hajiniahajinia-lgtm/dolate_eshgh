@@ -6,6 +6,8 @@ on:
       - feature/community-law-framework
       - fix/corrective-completion-migration-order
     paths:
+      - 'migration_runner.php'
+      - 'migrations/recovery_guard.php'
       - 'add_topic.php'
       - 'community.php'
       - 'community_laws.php'
@@ -146,6 +148,8 @@ on:
       - 'tests/migration_order_test.php'
   pull_request:
     paths:
+      - 'migration_runner.php'
+      - 'migrations/recovery_guard.php'
       - 'migrations/auto_apply.php'
       - 'add_topic.php'
       - 'community.php'
