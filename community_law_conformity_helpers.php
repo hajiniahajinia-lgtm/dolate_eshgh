@@ -301,7 +301,7 @@ if (!function_exists('community_law_conformity_review_conflict')) {
                 $conn, (int)$row['local_law_id'], (int)$row['local_law_version_id'],
                 (int)$row['community_id'], $user_id, 'conformity_conflict_reviewed', $details
             )) throw new RuntimeException('law history insert failed');
-            $conn->commit();
+            if (!$conn->commit()) throw new RuntimeException('conformity transaction commit failed');
             return true;
         } catch (Throwable $e) {
             $conn->rollback();
