@@ -242,6 +242,8 @@ try {
     change_case_check($parent_result && $parent_result['law_status']==='approved' && (int)$parent_result['current_version_id']===99002 && $parent_result['law_text']==='متن اصلاح‌شدهٔ قانون محلی','parent review cannot replace local text or change the active approved law');
     $parent_history=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_amendment_parent_reviews WHERE case_id=".(int)$amendment_id)->fetch_assoc()['n'];
     change_case_check($parent_history===4,'all independent parent compatibility reviews across both rounds are preserved');
+    // Keep temporary reviewers out of later CI scenarios that snapshot the full parent electorate.
+    $db->query("DELETE FROM community_members WHERE community_id=90010 AND user_id IN (90109,90110)");
 
     // پس از اصلاح دوباره توسط جامعه محلی، دو تأیید سازگاری مرحله را به بررسی نهایی می‌برند.
     $second_amendment_id=community_law_create_amendment_draft(
