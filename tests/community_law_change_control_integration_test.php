@@ -140,6 +140,8 @@ try {
     $conformity_after_failure = (int)$db->query("SELECT COUNT(*) AS n FROM community_law_conformity_cases WHERE local_law_version_id=987654322")->fetch_assoc()['n'];
     $conformity_history_after_failure = (int)$db->query("SELECT COUNT(*) AS n FROM community_law_history WHERE law_id=987654321 AND event_type='conformity_review_opened'")->fetch_assoc()['n'];
     change_case_check($conformity_event_failed && $conformity_after_failure===0 && $conformity_history_after_failure===0,'a failed conformity event rolls back the newly opened case and law history');
+    // Keep the isolated fixture outside the parent law's descendant scope for later tests.
+    $db->query('UPDATE communities SET parent_community_id=NULL WHERE id=90040');
 
     $conformity_case_id=(int)$db->query("SELECT id FROM community_law_conformity_cases WHERE community_id=90020 AND local_law_version_id=99002 AND parent_law_version_id=99001")->fetch_assoc()['id'];
     $conflict_id=community_law_conformity_add_conflict($db,$conformity_case_id,90200,'ماده ۳','ماده ۷','تعارض احتمالی دربارهٔ دامنهٔ اختیار جامعهٔ محلی','متن و مستندات دو ماده');
