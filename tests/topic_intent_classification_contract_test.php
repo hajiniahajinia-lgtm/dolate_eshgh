@@ -43,5 +43,11 @@ topic_intent_contract_check(
     'only explicitly lawmaking topics and their ideas or accepted decisions can supply formal law provenance'
 );
 
+topic_intent_contract_check(
+    str_contains($law, '$source_decision_id === null && $source_topic_id === null && $source_idea_id === null') &&
+    str_contains($law, "community_laws_redirect(\$community_id, 'invalid_source')"),
+    'a formal law draft cannot be created without traceable lawmaking provenance'
+);
+
 
 fwrite(STDOUT, "PASS: topic intent classification contract checks passed.\n");

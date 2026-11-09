@@ -122,6 +122,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $source_topic_id = $source_topic_id > 0 ? $source_topic_id : null;
         $source_idea_id = $source_idea_id > 0 ? $source_idea_id : null;
         $source_decision_id = $source_decision_id > 0 ? $source_decision_id : null;
+        // هر پیش‌نویس قانون باید منشأ قابل‌ردیابی از مسیر قانون‌گذاری داشته باشد.
+        if ($source_decision_id === null && $source_topic_id === null && $source_idea_id === null) {
+            community_laws_redirect($community_id, 'invalid_source');
+        }
         // قانون مصوب هر جامعه، در صورت احراز صلاحیت، برای همه زیرشاخه‌های آن نیز لازم‌الرعایه است.
         $include_descendants = 1;
 
@@ -5978,7 +5982,7 @@ details>summary{cursor:pointer;font-weight:bold}
         <textarea name="law_text" maxlength="50000" required placeholder="متن دقیق و روشن قانون را بنویسید."></textarea>
         <label>برنامه اجرایی (اختیاری)</label>
         <textarea name="implementation_plan" maxlength="30000" placeholder="مسئول اجرا، منابع، زمان‌بندی و شاخص ارزیابی را مشخص کنید."></textarea>
-        <label>تصمیم جمعی منشأ قانون (اختیاری)</label>
+        <label>تصمیم جمعی منشأ قانون (در صورت انتخاب، باید تصمیم پذیرفته‌شده باشد)</label>
         <select name="source_decision_id">
             <option value="0">بدون پیوند مستقیم به تصمیم</option>
             <?php foreach ($source_decisions as $source_decision_option): ?>
@@ -5994,7 +5998,8 @@ details>summary{cursor:pointer;font-weight:bold}
         <?php else: ?>
             <p class="muted">فقط تصمیم‌های پذیرفته‌شده از موضوعات «تصمیم‌گیری» یا «قانون‌گذاری» نمایش داده می‌شوند. با انتخاب تصمیم، موضوع و ایدهٔ مرتبط خودکار پیوند می‌خورند. این پیوند به‌تنهایی قانون را تصویب یا لازم‌الاجرا نمی‌کند.</p>
         <?php endif; ?>
-        <label>شناسه موضوع مرتبط (اختیاری، در صورت نداشتن شناسه تصمیم)</label>
+        <p class="muted">ثبت منشأ الزامی است: یک تصمیم پذیرفته‌شده یا شناسهٔ موضوع/ایده‌ای که از مسیر قانون‌گذاری ایجاد شده باشد. صرف ثبت منشأ به معنی تصویب قانون نیست.</p>
+        <label>شناسه موضوع مرتبط (در صورت نداشتن شناسه تصمیم)</label>
         <input type="number" name="source_topic_id" min="1">
         <label>شناسه ایده مرتبط (اختیاری، در صورت نداشتن شناسه تصمیم)</label>
         <input type="number" name="source_idea_id" min="1">
