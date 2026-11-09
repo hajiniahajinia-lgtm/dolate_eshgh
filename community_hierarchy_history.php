@@ -15,32 +15,43 @@ if (!$community_id || $community_id <= 0) {
     exit('شناسه جامعه معتبر نیست.');
 }
 
-$community_stmt = $conn->prepare('SELECT id, name FROM communities WHERE id=? LIMIT 1');
+// جامعه و عضویت در یک پرس‌وجو بررسی می‌شوند تا بین دو بررسی، وضعیت دسترسی تغییر نکند.
+$community_stmt = $conn->prepare(
+    'SELECT c.id, c.name
+     FROM communities c
+     INNER JOIN community_members cm ON cm.community_id=c.id AND cm.user_id=?
+     WHERE c.id=? LIMIT 1'
+);
 if (!$community_stmt) {
     http_response_code(503);
-    exit('امکان دریافت اطلاعات جامعه وجود ندارد.');
+    exit('امکان بررسی دسترسی به جامعه وجود ندارد.');
 }
-$community_stmt->bind_param('i', $community_id);
-$community_stmt->execute();
+$community_stmt->bind_param('ii', $user_id, $community_id);
+if (!$community_stmt->execute()) {
+    $community_stmt->close();
+    http_response_code(503);
+    exit('امکان بررسی دسترسی به جامعه وجود ندارد.');
+}
 $community = $community_stmt->get_result()->fetch_assoc();
 $community_stmt->close();
 if (!$community) {
-    http_response_code(404);
-    exit('جامعه پیدا نشد.');
-}
-
-$member_stmt = $conn->prepare('SELECT 1 FROM community_members WHERE community_id=? AND user_id=? LIMIT 1');
-if (!$member_stmt) {
-    http_response_code(503);
-    exit('امکان بررسی عضویت وجود ندارد.');
-}
-$member_stmt->bind_param('ii', $community_id, $user_id);
-$member_stmt->execute();
-$is_member = (bool)$member_stmt->get_result()->fetch_row();
-$member_stmt->close();
-if (!$is_member) {
-    http_response_code(403);
-    exit('مشاهده تاریخچه فقط برای اعضای همین جامعه مجاز است.');
+    $exists_stmt = $conn->prepare('SELECT 1 FROM communities WHERE id=? LIMIT 1');
+    if (!$exists_stmt) {
+        http_response_code(503);
+        exit('امکان دریافت اطلاعات جامعه وجود ندارد.');
+    }
+    $exists_stmt->bind_param('i', $community_id);
+    if (!$exists_stmt->execute()) {
+        $exists_stmt->close();
+        http_response_code(503);
+        exit('امکان دریافت اطلاعات جامعه وجود ندارد.');
+    }
+    $community_exists = (bool)$exists_stmt->get_result()->fetch_row();
+    $exists_stmt->close();
+    http_response_code($community_exists ? 403 : 404);
+    exit($community_exists
+        ? 'مشاهده تاریخچه فقط برای اعضای همین جامعه مجاز است.'
+        : 'جامعه پیدا نشد.');
 }
 
 function community_hierarchy_history_escape($value): string {
@@ -63,13 +74,18 @@ $history = [];
 
 if ($history_ready) {
     $count_stmt = $conn->prepare('SELECT COUNT(*) AS total FROM community_hierarchy_change_history WHERE community_id=?');
-    if ($count_stmt) {
-        $count_stmt->bind_param('i', $community_id);
-        if ($count_stmt->execute()) {
-            $total_rows = (int)($count_stmt->get_result()->fetch_assoc()['total'] ?? 0);
-        }
-        $count_stmt->close();
+    if (!$count_stmt) {
+        http_response_code(503);
+        exit('امکان دریافت تاریخچه وجود ندارد.');
     }
+    $count_stmt->bind_param('i', $community_id);
+    if (!$count_stmt->execute()) {
+        $count_stmt->close();
+        http_response_code(503);
+        exit('امکان دریافت تاریخچه وجود ندارد.');
+    }
+    $total_rows = (int)($count_stmt->get_result()->fetch_assoc()['total'] ?? 0);
+    $count_stmt->close();
 
     $history_stmt = $conn->prepare(
         "SELECT h.id, h.vote_round_id, h.old_parent_community_id, h.new_parent_community_id,
@@ -85,14 +101,19 @@ if ($history_ready) {
          ORDER BY h.created_at DESC, h.id DESC
          LIMIT ? OFFSET ?"
     );
-    if ($history_stmt) {
-        $history_stmt->bind_param('iii', $community_id, $page_size, $offset);
-        if ($history_stmt->execute()) {
-            $result = $history_stmt->get_result();
-            while ($row = $result->fetch_assoc()) $history[] = $row;
-        }
-        $history_stmt->close();
+    if (!$history_stmt) {
+        http_response_code(503);
+        exit('امکان دریافت تاریخچه وجود ندارد.');
     }
+    $history_stmt->bind_param('iii', $community_id, $page_size, $offset);
+    if (!$history_stmt->execute()) {
+        $history_stmt->close();
+        http_response_code(503);
+        exit('امکان دریافت تاریخچه وجود ندارد.');
+    }
+    $result = $history_stmt->get_result();
+    while ($row = $result->fetch_assoc()) $history[] = $row;
+    $history_stmt->close();
 }
 
 $total_pages = max(1, (int)ceil($total_rows / $page_size));
