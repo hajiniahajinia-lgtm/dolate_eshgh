@@ -17,8 +17,8 @@ $requiredOrder=[
     '20261108_community_law_z1_amendment_30_parent_review.sql',
     '20261108_community_law_z2_scope_notices.sql',
     '20261108_community_law_z3_version_notices.sql',
-    '20261109_community_law_conformity_review_rounds.sql',
-    '20261109_community_law_amendment_parent_review_rounds.sql'
+    '20261109_community_law_amendment_parent_review_rounds.sql',
+    '20261109_community_law_conformity_review_rounds.sql'
 ];
 $positions=[];
 foreach($requiredOrder as $name) {
@@ -36,13 +36,14 @@ for($i=1;$i<count($positions);$i++) {
     }
 }
 $changeControl=array_search('20261108_community_law_change_control.sql',$names,true);
-$changeVoting=array_search('20261108_community_law_change_voting.sql',$names,true);
 $changeEffects=array_search('20261108_community_law_change_effects.sql',$names,true);
+$changeReview=array_search('20261108_community_law_change_review.sql',$names,true);
+$changeVoting=array_search('20261108_community_law_change_voting.sql',$names,true);
 $decisionLedger=array_search('20261108_community_decision_ledger.sql',$names,true);
 $decisionKnowledge=array_search('20261108_community_decision_knowledge_link.sql',$names,true);
-if($changeControl===false || $changeVoting===false || $changeEffects===false ||
-   !($changeControl<$changeVoting && $changeVoting<$changeEffects)) {
-    fwrite(STDERR,"FAIL: law change effects must follow control and voting schema\n");
+if($changeControl===false || $changeEffects===false || $changeReview===false || $changeVoting===false ||
+   !($changeControl<$changeEffects && $changeEffects<$changeReview && $changeReview<$changeVoting)) {
+    fwrite(STDERR,"FAIL: law change schema migrations must follow their lexical dependency order\n");
     exit(1);
 }
 if($decisionLedger===false || $decisionKnowledge===false || $decisionLedger>=$decisionKnowledge) {
