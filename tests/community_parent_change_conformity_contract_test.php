@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 $source = file_get_contents(__DIR__ . '/../set_community_parent.php');
+$helper = file_get_contents(__DIR__ . '/../community_law_helpers.php');
 if (!is_string($source)) {
     fwrite(STDERR, "FAIL: unable to read hierarchy transition source\n");
     exit(1);
@@ -26,6 +27,14 @@ $checks['a failed conformity review aborts finalization'] =
     $finalize !== false && $review < $finalize;
 $checks['conformity review remains inside the same transaction through commit'] =
     $review !== false && $commit !== false && $review < $commit;
+$checks['conformity review is invoked exactly once after parent update'] =
+    substr_count($source, 'community_law_register_hierarchy_conformity_reviews(') === 1 &&
+    is_string($helper) &&
+    strpos($helper, 'return community_law_register_hierarchy_conformity_reviews(') === false;
+$checks['scope history helper only records scope transitions and leaves review orchestration to caller'] =
+    is_string($helper) &&
+    strpos($helper, 'function community_law_record_hierarchy_scope_changes(') !== false &&
+    strpos($helper, 'return $ok;') !== false;
 
 $failed = 0;
 foreach ($checks as $label => $passed) {

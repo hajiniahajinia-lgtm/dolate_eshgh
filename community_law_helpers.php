@@ -620,10 +620,9 @@ if (!function_exists('community_law_record_hierarchy_scope_changes')) {
             }
         }
         $active->free();
-        if (!$ok) return false;
-        return community_law_register_hierarchy_conformity_reviews(
-            $conn, $new_parent_map, $changed_community_id, $actor_user_id
-        );
+        // بررسی سازگاری پس از اعمال واقعی والد جدید، در set_community_parent.php
+        // و در همان تراکنش فراخوانی می‌شود تا فقط یک بار و با ترتیب صحیح انجام گیرد.
+        return $ok;
     }
 }
 
