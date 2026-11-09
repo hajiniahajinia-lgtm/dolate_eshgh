@@ -8,8 +8,8 @@ if ($source === false || $migration === false) {
     fwrite(STDERR, "FAIL: unable to read parent-law enactment sources\n");
     exit(1);
 }
-$start = strpos($source, "if (isset($_POST['enact_law']))");
-$end = strpos($source, "if (isset($_POST['create_law_revision']))", $start === false ? 0 : $start);
+$start = strpos($source, "if (isset(\$_POST['enact_law']))");
+$end = strpos($source, "if (isset(\$_POST['create_law_revision']))", $start === false ? 0 : $start);
 if ($start === false || $end === false || $end <= $start) {
     fwrite(STDERR, "FAIL: ordinary enactment boundary not found\n");
     exit(1);
