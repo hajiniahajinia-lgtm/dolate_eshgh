@@ -205,7 +205,7 @@ if (!function_exists('community_law_conformity_review_conflict')) {
             $tally = $reviews->get_result()->fetch_assoc();
             $reviews->close();
 
-            $aggregate = 'unreviewed';
+            $aggregate = $review_round > 1 ? 'needs_more_evidence' : 'unreviewed';
             if ((int)$tally['local_count'] > 0 && (int)$tally['parent_count'] > 0) {
                 if ((int)$tally['conflict_count'] > 0 && (int)$tally['no_conflict_count'] > 0) {
                     // اختلاف نظر دو جامعه، تعارض را نه اثبات می‌کند و نه رد؛ بررسی بیشتر لازم است.
