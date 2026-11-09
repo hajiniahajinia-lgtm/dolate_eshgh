@@ -40,14 +40,16 @@ $changeEffects=array_search('20261108_community_law_change_effects.sql',$names,t
 $changeReview=array_search('20261108_community_law_change_review.sql',$names,true);
 $changeVoting=array_search('20261108_community_law_change_voting.sql',$names,true);
 $decisionLedger=array_search('20261108_community_decision_ledger.sql',$names,true);
+$decisionOrigin=array_search('20261108_community_law_decision_origin.sql',$names,true);
 $decisionKnowledge=array_search('20261108_community_decision_knowledge_link.sql',$names,true);
 if($changeControl===false || $changeEffects===false || $changeReview===false || $changeVoting===false ||
    !($changeControl<$changeEffects && $changeEffects<$changeReview && $changeReview<$changeVoting)) {
     fwrite(STDERR,"FAIL: law change schema migrations must follow their lexical dependency order\n");
     exit(1);
 }
-if($decisionLedger===false || $decisionKnowledge===false || $decisionLedger>=$decisionKnowledge) {
-    fwrite(STDERR,"FAIL: decision knowledge link must follow the decision ledger\n");
+if($decisionLedger===false || $decisionOrigin===false || $decisionKnowledge===false ||
+   $decisionLedger>=$decisionOrigin || $decisionLedger>=$decisionKnowledge) {
+    fwrite(STDERR,"FAIL: law origin and knowledge links must follow the decision ledger\n");
     exit(1);
 }
 $obsolete=[
