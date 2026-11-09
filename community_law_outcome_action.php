@@ -19,9 +19,9 @@ if (!community_law_tables_ready($conn)) clor_redirect($community_id,'schema');
 $outcome_schema_check=$conn->query(
     "SELECT COUNT(*) AS total FROM information_schema.tables
      WHERE table_schema=DATABASE()
-       AND table_name IN ('community_law_outcome_reports','community_law_outcome_reviews','community_law_outcome_followups','community_law_outcome_reassessments','community_law_outcome_reassessment_reviews','community_law_outcome_corrective_actions','community_law_outcome_corrective_updates')"
+       AND table_name IN ('community_law_outcome_reports','community_law_outcome_reviews','community_law_outcome_followups','community_law_outcome_reassessments','community_law_outcome_reassessment_reviews','community_law_outcome_corrective_actions','community_law_outcome_corrective_updates','community_law_outcome_corrective_completion_reviews')"
 );
-$outcome_schema_ready=$outcome_schema_check && (int)$outcome_schema_check->fetch_assoc()['total']===7;
+$outcome_schema_ready=$outcome_schema_check && (int)$outcome_schema_check->fetch_assoc()['total']===8;
 if ($outcome_schema_check) $outcome_schema_check->free();
 if (!$outcome_schema_ready) clor_redirect($community_id,'schema');
 try {
@@ -51,6 +51,17 @@ try {
         if ($action_id===false) { $conn->rollback(); clor_redirect($community_id,'outcome_corrective_action_failed'); }
         if (!$conn->commit()) throw new RuntimeException('corrective action commit failed');
         clor_redirect($community_id,'outcome_corrective_action_saved');
+    }
+    if (($_POST['action']??'')==='verify_corrective_completion') {
+        $verification=community_law_review_corrective_completion(
+            $conn,(int)($_POST['corrective_action_id']??0),$user_id,
+            (string)($_POST['completion_verdict']??''),
+            trim((string)($_POST['completion_rationale']??'')),
+            trim((string)($_POST['completion_evidence']??''))?:null
+        );
+        if ($verification===false) { $conn->rollback(); clor_redirect($community_id,'outcome_completion_review_failed'); }
+        if (!$conn->commit()) throw new RuntimeException('completion review commit failed');
+        clor_redirect($community_id,$verification['completion_status']==='verified'?'outcome_completion_verified':'outcome_completion_review_saved');
     }
     if (($_POST['action']??'')==='update_corrective_action') {
         $update_id=community_law_submit_outcome_corrective_update(

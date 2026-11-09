@@ -2055,7 +2055,7 @@ if (!function_exists('community_law_submit_outcome_corrective_update')) {
             $update_text==='' || mb_strlen($update_text)>20000 ||
             ($evidence!==null && mb_strlen($evidence)>20000)) return false;
         $stmt=$conn->prepare(
-            "SELECT id,report_id,law_id,law_version_id,community_id,responsible_user_id
+            "SELECT id,report_id,law_id,law_version_id,community_id,created_by,responsible_user_id,completion_status
              FROM community_law_outcome_corrective_actions WHERE id=? LIMIT 1 FOR UPDATE"
         );
         if (!$stmt) return false;
@@ -2079,7 +2079,8 @@ if (!function_exists('community_law_submit_outcome_corrective_update')) {
         $latest->bind_param('i',$action_id);
         if (!$latest->execute()) { $latest->close(); return false; }
         $last=$latest->get_result()->fetch_assoc(); $latest->close();
-        if ($last && $last['status']==='completed') return false;
+        if (($action['completion_status']??'none')!=='none' || ($last && in_array($last['status'],['completed','completion_claimed'],true))) return false;
+        $stored_status=$status==='completed'?'completion_claimed':$status;
 
         $insert=$conn->prepare(
             "INSERT INTO community_law_outcome_corrective_updates
@@ -2088,11 +2089,17 @@ if (!function_exists('community_law_submit_outcome_corrective_update')) {
         );
         if (!$insert) return false;
         $report_id=(int)$action['report_id'];
-        $insert->bind_param('iiiisss',$action_id,$report_id,$community_id,$actor_user_id,$status,$update_text,$evidence);
+        $insert->bind_param('iiiisss',$action_id,$report_id,$community_id,$actor_user_id,$stored_status,$update_text,$evidence);
         $ok=$insert->execute(); $update_id=(int)$conn->insert_id; $insert->close();
         if (!$ok) return false;
+        if ($stored_status==='completion_claimed') {
+            $claim=$conn->prepare("UPDATE community_law_outcome_corrective_actions SET completion_status='pending' WHERE id=? AND completion_status='none'");
+            if (!$claim) return false;
+            $claim->bind_param('i',$action_id); $claimed=$claim->execute() && $claim->affected_rows===1; $claim->close();
+            if (!$claimed) return false;
+        }
         $details=json_encode(['report_id'=>$report_id,'action_id'=>$action_id,
-            'update_id'=>$update_id,'status'=>$status],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
+            'update_id'=>$update_id,'status'=>$stored_status],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
         if (!community_law_record_history($conn,(int)$action['law_id'],(int)$action['law_version_id'],
             $community_id,$actor_user_id,'outcome_corrective_action_updated',$details)) return false;
         return $update_id;
@@ -2100,6 +2107,70 @@ if (!function_exists('community_law_submit_outcome_corrective_update')) {
 }
 
 
+
+if (!function_exists('community_law_review_corrective_completion')) {
+    /** سه ارزیاب مستقل؛ تکمیل فقط با تأیید دست‌کم دو نفر از سه نفر معتبر می‌شود. */
+    function community_law_review_corrective_completion(
+        mysqli $conn,int $action_id,int $reviewer_user_id,string $verdict,
+        string $rationale,?string $evidence=null
+    ): array|false {
+        $rationale=trim($rationale);
+        if ($action_id<=0 || $reviewer_user_id<=0 ||
+            !in_array($verdict,['confirm','reject'],true) || $rationale==='' ||
+            mb_strlen($rationale)>12000 || ($evidence!==null && mb_strlen($evidence)>12000)) return false;
+        $stmt=$conn->prepare(
+            "SELECT id,law_id,law_version_id,community_id,created_by,responsible_user_id,completion_status
+             FROM community_law_outcome_corrective_actions WHERE id=? LIMIT 1 FOR UPDATE"
+        );
+        if (!$stmt) return false;
+        $stmt->bind_param('i',$action_id);
+        if (!$stmt->execute()) { $stmt->close(); return false; }
+        $action=$stmt->get_result()->fetch_assoc(); $stmt->close();
+        if (!$action || $action['completion_status']!=='pending' ||
+            $reviewer_user_id===(int)$action['created_by'] ||
+            $reviewer_user_id===(int)$action['responsible_user_id']) return false;
+        $community_id=(int)$action['community_id'];
+        $member=$conn->prepare('SELECT 1 FROM community_members WHERE community_id=? AND user_id=? LIMIT 1');
+        if (!$member) return false;
+        $member->bind_param('ii',$community_id,$reviewer_user_id);
+        if (!$member->execute()) { $member->close(); return false; }
+        $is_member=(bool)$member->get_result()->fetch_row(); $member->close();
+        if (!$is_member) return false;
+        $insert=$conn->prepare(
+            "INSERT INTO community_law_outcome_corrective_completion_reviews
+             (action_id,reviewer_user_id,verdict,rationale,evidence) VALUES (?,?,?,?,?)"
+        );
+        if (!$insert) return false;
+        $insert->bind_param('iisss',$action_id,$reviewer_user_id,$verdict,$rationale,$evidence);
+        if (!$insert->execute()) { $insert->close(); return false; }
+        $insert->close();
+        $counts=$conn->prepare(
+            "SELECT COUNT(*) total,SUM(verdict='confirm') confirms
+             FROM community_law_outcome_corrective_completion_reviews WHERE action_id=?"
+        );
+        if (!$counts) return false;
+        $counts->bind_param('i',$action_id);
+        if (!$counts->execute()) { $counts->close(); return false; }
+        $summary=$counts->get_result()->fetch_assoc(); $counts->close();
+        $total=(int)$summary['total']; $status='pending';
+        if ($total>=3) $status=(int)$summary['confirms']>=2?'verified':'rejected';
+        if ($status!=='pending') {
+            $update=$conn->prepare(
+                "UPDATE community_law_outcome_corrective_actions SET completion_status=?
+                 WHERE id=? AND completion_status='pending'"
+            );
+            if (!$update) return false;
+            $update->bind_param('si',$status,$action_id);
+            $ok=$update->execute() && $update->affected_rows===1; $update->close();
+            if (!$ok) return false;
+        }
+        $details=json_encode(['action_id'=>$action_id,'verdict'=>$verdict,
+            'review_count'=>$total,'completion_status'=>$status],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
+        if (!community_law_record_history($conn,(int)$action['law_id'],(int)$action['law_version_id'],
+            $community_id,$reviewer_user_id,'outcome_corrective_completion_reviewed',$details)) return false;
+        return ['review_count'=>$total,'completion_status'=>$status];
+    }
+}
 
 if (!function_exists('community_law_register_hierarchy_conformity_reviews')) {
     /**

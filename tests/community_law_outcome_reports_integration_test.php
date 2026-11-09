@@ -28,6 +28,7 @@ try {
     outcome_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_outcome_followups.sql');
     outcome_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_outcome_reassessments.sql');
     outcome_apply_sql($db,__DIR__.'/../migrations/20261108_community_law_outcome_corrective_actions.sql');
+    outcome_apply_sql($db,__DIR__.'/../migrations/20261109_community_law_corrective_completion_reviews.sql');
     $db->query("CREATE TEMPORARY TABLE community_decision_records (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
         community_id INT NOT NULL,
@@ -271,6 +272,41 @@ try {
         "SELECT COUNT(*) total FROM community_law_outcome_corrective_updates WHERE action_id=".(int)$corrective_action_id
     )->fetch_assoc()['total'];
     outcome_check($corrective_updates===3,'all corrective progress entries remain as immutable history');
+    $claim_status=$db->query("SELECT status FROM community_law_outcome_corrective_updates WHERE id=".(int)$completed_id)->fetch_assoc();
+    $action_status=$db->query("SELECT completion_status FROM community_law_outcome_corrective_actions WHERE id=".(int)$corrective_action_id)->fetch_assoc();
+    outcome_check($claim_status && $claim_status['status']==='completion_claimed' &&
+        $action_status && $action_status['completion_status']==='pending',
+        'executor completion is only a claim pending independent verification');
+    outcome_check(community_law_review_corrective_completion(
+        $db,$corrective_action_id,9704,'confirm','مسئول اجرا نمی‌تواند تکمیل کار خود را تأیید کند'
+    )===false,'assigned executor cannot verify own completion claim');
+    outcome_check(community_law_review_corrective_completion(
+        $db,$corrective_action_id,9701,'confirm','ایجادکننده اقدام تعارض منافع دارد'
+    )===false,'corrective action creator cannot verify completion');
+    $completion_one=community_law_review_corrective_completion(
+        $db,$corrective_action_id,9706,'confirm','شواهد تکمیل اقدام را تأیید می‌کند'
+    );
+    outcome_check(is_array($completion_one) && $completion_one['review_count']===1 &&
+        $completion_one['completion_status']==='pending','one review cannot finalize completion');
+    $completion_two=community_law_review_corrective_completion(
+        $db,$corrective_action_id,9707,'confirm','معیار موفقیت به‌طور مستقل احراز شد'
+    );
+    outcome_check(is_array($completion_two) && $completion_two['review_count']===2 &&
+        $completion_two['completion_status']==='pending','two reviews do not bypass the three-review threshold');
+    $completion_three=community_law_review_corrective_completion(
+        $db,$corrective_action_id,9708,'reject','یک بخش از معیار موفقیت هنوز احراز نشده است'
+    );
+    outcome_check(is_array($completion_three) && $completion_three['review_count']===3 &&
+        $completion_three['completion_status']==='verified',
+        'two of three independent reviewers verify completion');
+    outcome_check(community_law_submit_outcome_corrective_update(
+        $db,$corrective_action_id,9704,'in_progress','پس از تأیید مستقل نباید تغییر کند'
+    )===false,'verified corrective action cannot be reopened');
+    $completion_history=(int)$db->query(
+        "SELECT COUNT(*) total FROM community_law_history
+         WHERE law_id=990000 AND event_type='outcome_corrective_completion_reviewed'"
+    )->fetch_assoc()['total'];
+    outcome_check($completion_history===3,'all independent completion reviews are preserved in law history');
     $corrective_history=(int)$db->query(
         "SELECT COUNT(*) total FROM community_law_history
          WHERE law_id=990000 AND event_type='outcome_corrective_action_updated'"
