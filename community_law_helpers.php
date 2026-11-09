@@ -2098,8 +2098,8 @@ if (!function_exists('community_law_submit_outcome_corrective_update')) {
         if ($stored_status==='completion_claimed') {
             $claim=$conn->prepare(
                 "UPDATE community_law_outcome_corrective_actions
-                 SET completion_status='pending',
-                     completion_review_round=completion_review_round+IF(completion_status='rejected',1,0)
+                 SET completion_review_round=completion_review_round+IF(completion_status='rejected',1,0),
+                     completion_status='pending'
                  WHERE id=? AND completion_status IN ('none','rejected')"
             );
             if (!$claim) return false;
