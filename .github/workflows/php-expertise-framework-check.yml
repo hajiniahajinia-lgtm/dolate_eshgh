@@ -97,6 +97,7 @@ on:
       - 'community_law_change_cases.php'
       - 'tests/community_law_change_control_integration_test.php'
       - 'tests/migration_order_test.php'
+      - 'migrations/auto_apply.php'
       - 'community_law_amendment_helpers.php'
       - 'community_law_amendments.php'
       - 'tests/community_law_change_control_integration_test.php'
@@ -290,6 +291,7 @@ jobs:
           php -l community_law_amendments.php
           php -l tests/community_law_change_control_integration_test.php
           php -l tests/migration_order_test.php
+          php -l migrations/auto_apply.php
           php -l tests/community_law_amendment_vote_contract_test.php
           php -l tests/community_law_amendment_notice_contract_test.php
           php -l tests/community_law_amendment_membership_lock_contract_test.php
