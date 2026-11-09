@@ -57,6 +57,7 @@ on:
       - 'request_member_removal.php'
       - 'vote_member_removal.php'
       - 'tests/community_law_hierarchy_helpers_test.php'
+      - 'tests/community_law_scope_contract_test.php'
       - 'tests/community_charter_amendments_test.php'
       - 'tests/community_charter_amendments_integration_test.php'
       - 'community_decision_ledger.php'
@@ -294,6 +295,7 @@ jobs:
           php -l topic_expertise_profile.php
           php -l topic_expertise_profile_action.php
           php -l tests/community_law_hierarchy_helpers_test.php
+          php -l tests/community_law_scope_contract_test.php
           php -l tests/community_charter_amendments_test.php
           php -l tests/community_charter_amendments_integration_test.php
           php -l tests/community_law_implementation_integration_test.php
@@ -331,6 +333,7 @@ jobs:
       - name: Run community law hierarchy and charter amendment tests
         run: |
           php tests/community_law_hierarchy_helpers_test.php
+          php tests/community_law_scope_contract_test.php
           php tests/community_charter_amendments_test.php
 
   charter-mysql-integration:
