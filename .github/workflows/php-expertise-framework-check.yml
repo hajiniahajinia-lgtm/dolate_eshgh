@@ -142,6 +142,7 @@ on:
       - 'tests/migration_order_test.php'
   pull_request:
     paths:
+      - 'migrations/auto_apply.php'
       - 'add_topic.php'
       - 'community.php'
       - 'migrations/20261109_topic_intent_classification.sql'
