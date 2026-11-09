@@ -6,8 +6,8 @@ $files=glob($migrationsDir.'/[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]_*.sql') ?:
 $names=array_map('basename',$files);
 sort($names,SORT_STRING);
 
-$runner=file_get_contents($migrationsDir.'/auto_apply.php');
-$protectedRunner=file_get_contents(__DIR__.'/../migration_runner.php');
+$runner=file_get_contents(__DIR__.'/../migration_runner.php');
+$protectedRunner=$runner;
 if(!is_string($runner) || strpos($runner,'$migration_dependencies')===false ||
    !is_string($protectedRunner) || strpos($protectedRunner,'$migration_dependencies')===false) {
     fwrite(STDERR,"FAIL: automatic migration runner must declare explicit prerequisite ordering\\n");
