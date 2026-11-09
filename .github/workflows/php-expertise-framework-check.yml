@@ -295,7 +295,7 @@ jobs:
           php -l tests/community_law_change_control_integration_test.php
           php -l tests/migration_order_test.php
           php -l tests/migration_runner_plan_mode_contract_test.php
-          php -l migrations/auto_apply.php
+          php -l migration_runner.php\n          php -l migrations/recovery_guard.php\n          php -l tests/migration_recovery_guard_integration_test.php\n          php -l migrations/auto_apply.php
           php -l tests/community_law_amendment_vote_contract_test.php
           php -l tests/community_law_amendment_notice_contract_test.php
           php -l tests/community_law_amendment_membership_lock_contract_test.php
