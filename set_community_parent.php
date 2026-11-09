@@ -188,6 +188,13 @@ try {
                             }
                             if (!$apply->execute() || $apply->affected_rows > 1) throw new Exception('apply hierarchy winner failed');
                             $apply->close();
+                            // پس از اعمال والد جدید، سازگاری قوانین محلیِ جامعه و همهٔ زیرشاخه‌های متأثر
+                            // با قوانین لازم‌الاجرای بالادستی برای بررسی انسانی ثبت می‌شود.
+                            if (!community_law_register_hierarchy_conformity_reviews(
+                                $conn, $new_parents, $community_id, $user_id
+                            )) {
+                                throw new Exception('register hierarchy conformity reviews failed');
+                            }
                         }
                         $status = 'approved';
                     }
