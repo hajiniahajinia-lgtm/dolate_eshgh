@@ -2,6 +2,8 @@
 declare(strict_types=1);
 
 $runner=file_get_contents(__DIR__.'/../migration_runner.php');
+$guard=file_get_contents(__DIR__.'/../migrations/recovery_guard.php');
+$auto=file_get_contents(__DIR__.'/../migrations/auto_apply.php');
 if(!is_string($runner)) {
     fwrite(STDERR,"FAIL: protected migration runner is missing\\n");
     exit(1);
@@ -20,7 +22,11 @@ $checks=[
     "runner must write a durable marker before executing SQL" => strpos($runner, "migration_recovery_begin($"."conn, $"."name, $"."checksum)") < strpos($runner, "if (!$"."conn->multi_query($"."sql))"),
     "runner must clear marker only after registry success" => strpos($runner, "migration_recovery_complete($"."conn, $"."name)") > strpos($runner, "$"."save->execute()"),
     "plan must block when an interrupted marker exists" => strpos($runner, "'recovery_required' => true")!==false,
-    "runner must use shared recovery guard" => strpos($runner, "recovery_guard.php")!==false
+    "runner must use shared recovery guard" => strpos($runner, "recovery_guard.php")!==false,
+    "durable marker table must be created before migrations" => is_string($guard) && strpos($guard, "CREATE TABLE IF NOT EXISTS app_schema_migration_recovery")!==false,
+    "durable marker must be persisted before migration SQL" => is_string($guard) && strpos($guard, "INSERT INTO app_schema_migration_recovery")!==false,
+    "marker must be cleared only by explicit completion helper" => is_string($guard) && strpos($guard, "DELETE FROM app_schema_migration_recovery")!==false,
+    "legacy auto-apply must not execute migrations on page requests" => is_string($auto) && strpos($auto, "return;")!==false && strpos($auto, "multi_query")===false
 ];
 foreach($checks as $label=>$passed) {
     if(!$passed) {
