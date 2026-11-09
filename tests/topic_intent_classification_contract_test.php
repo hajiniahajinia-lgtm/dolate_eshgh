@@ -156,4 +156,25 @@ topic_intent_contract_check(
     'the law draft form cannot invite manual topic or idea fallback when no accepted decision is available'
 );
 
+$amendmentHelper = file_get_contents(__DIR__ . '/../community_law_amendment_helpers.php');
+topic_intent_contract_check(
+    is_string($law) &&
+    str_contains($law, 'v.source_topic_id, v.source_idea_id, v.source_decision_id') &&
+    str_contains($law, '$source_topic_id = $previous[\'source_topic_id\'] !== null ? (int)$previous[\'source_topic_id\'] : null;') &&
+    str_contains($law, '$source_idea_id = $previous[\'source_idea_id\'] !== null ? (int)$previous[\'source_idea_id\'] : null;') &&
+    str_contains($law, '$source_decision_id = $previous[\'source_decision_id\'] !== null ? (int)$previous[\'source_decision_id\'] : null;'),
+    'a new review revision inherits the exact source topic, idea, and decision from its locked predecessor'
+);
+
+topic_intent_contract_check(
+    is_string($amendmentHelper) &&
+    str_contains($amendmentHelper, 'v.source_topic_id,v.source_idea_id') &&
+    str_contains($amendmentHelper, 'v.source_decision_id,v.status AS version_status') &&
+    str_contains($amendmentHelper, '$source_topic=$record[\'source_topic_id\']!==null?(int)$record[\'source_topic_id\']:null;') &&
+    str_contains($amendmentHelper, '$source_idea=$record[\'source_idea_id\']!==null?(int)$record[\'source_idea_id\']:null;') &&
+    str_contains($amendmentHelper, '$source_decision=$record[\'source_decision_id\']!==null?(int)$record[\'source_decision_id\']:null;') &&
+    str_contains($amendmentHelper, 'base_version_id,proposed_version_id'),
+    'a local amendment preserves the original provenance and records its exact base and proposed versions'
+);
+
 fwrite(STDOUT, "PASS: topic intent classification contract checks passed.\n");
