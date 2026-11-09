@@ -108,6 +108,7 @@ on:
       - 'migrations/20261108_community_law_decision_origin.sql'
       - 'tests/community_law_outcome_reports_integration_test.php'
       - 'tests/community_law_corrective_completion_ui_contract_test.php'
+      - 'tests/community_law_parent_child_access_contract_test.php'
       - 'community_law_outcome_action.php'
       - 'migrations/20261108_community_law_outcome_reports.sql'
       - 'migrations/20261108_community_law_outcome_reviews.sql'
@@ -120,6 +121,7 @@ on:
       - 'tests/migration_order_test.php'
       - 'tests/community_law_amendment_vote_contract_test.php'
       - 'tests/community_law_amendment_notice_contract_test.php'
+      - 'tests/community_law_parent_child_access_contract_test.php'
       - 'tests/community_law_parent_enactment_notice_contract_test.php'
       - 'tests/community_law_multi_appeal_contract_test.php'
       - 'tests/community_law_appeal_ui_contract_test.php'
@@ -307,6 +309,7 @@ jobs:
           php -l tests/community_law_implementation_integration_test.php
           php -l tests/community_law_outcome_reports_integration_test.php
           php -l tests/community_law_corrective_completion_ui_contract_test.php
+          php -l tests/community_law_parent_child_access_contract_test.php
           php -l community_law_outcome_action.php
           php -l community_law_helpers.php
           php -l community_decision_ledger.php
@@ -343,6 +346,8 @@ jobs:
         run: php tests/community_law_conformity_case_access_contract_test.php
       - name: Verify corrective completion UI
         run: php tests/community_law_corrective_completion_ui_contract_test.php
+      - name: Verify parent and child community law access boundaries
+        run: php tests/community_law_parent_child_access_contract_test.php
       - name: Run community law hierarchy and charter amendment tests
         run: |
           php tests/community_law_hierarchy_helpers_test.php
