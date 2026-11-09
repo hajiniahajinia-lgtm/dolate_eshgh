@@ -15,13 +15,13 @@ $checks=[
     strpos($source,"'verified'=>'تکمیل با بررسی مستقل تأیید شد'")!==false &&
     strpos($source,"'rejected'=>'تکمیل در بررسی مستقل تأیید نشد")!==false,
  'independent completion review form is connected to its action handler' =>
-    strpos($source,'name="verify_corrective_completion"')!==false &&
+    strpos($source,'value="verify_corrective_completion"')!==false &&
     strpos($source,'name="completion_verdict"')!==false &&
     strpos($source,'name="completion_rationale"')!==false,
  'review eligibility excludes report and reassessment reviewers and conflicted roles' =>
     strpos($source,"$"."has_prior_review_conflict")!==false &&
-    strpos($source,"$"."corrective_action['created_by']!==$user_id")!==false &&
-    strpos($source,"$"."corrective_action['responsible_user_id']!==$user_id")!==false,
+    strpos($source,"$"."corrective_action['created_by']!==\$user_id")!==false &&
+    strpos($source,"$"."corrective_action['responsible_user_id']!==\$user_id")!==false,
  'completion claims are not presented as independently verified' =>
     strpos($source,"'completion_claimed'=>'در انتظار تأیید مستقل'")!==false &&
     strpos($source,"'completion_status'=>'pending'")===false,
