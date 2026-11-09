@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/community-law-framework
+      - fix/corrective-completion-migration-order
     paths:
       - 'add_topic.php'
       - 'community.php'
