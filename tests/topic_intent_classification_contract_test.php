@@ -13,6 +13,8 @@ $community = file_get_contents(__DIR__ . '/../community.php');
 $handler = file_get_contents(__DIR__ . '/../add_topic.php');
 $finalizer = file_get_contents(__DIR__ . '/../collective_knowledge_finalizer.php');
 $ledger = file_get_contents(__DIR__ . '/../community_decision_ledger.php');
+$archive = file_get_contents(__DIR__ . '/../archived_topics.php');
+$library = file_get_contents(__DIR__ . '/../knowledge_library.php');
 
 topic_intent_contract_check(
     is_string($community) &&
@@ -51,6 +53,30 @@ topic_intent_contract_check(
     str_contains($ledger, 'topic_intent_snapshot') &&
     str_contains($ledger, "['knowledge', 'decision', 'law']"),
     'the independent decision ledger preserves the original topic track'
+);
+
+topic_intent_contract_check(
+    is_string($archive) &&
+    str_contains($archive, "COALESCE(t.topic_intent, 'decision') AS topic_intent") &&
+    str_contains($archive, 'name="topic_intent"') &&
+    str_contains($archive, "'topic_intent'"),
+    'the archive exposes a filter and visible label for each topic intent'
+);
+
+topic_intent_contract_check(
+    is_string($library) &&
+    str_contains($library, 'source_topic_intent') &&
+    str_contains($library, 'مسیر مبدأ:') &&
+    str_contains($library, "['knowledge'=>'دانش‌محور','decision'=>'تصمیم‌گیری','law'=>'قانون‌گذاری']"),
+    'knowledge entries retain and display the intent of their source topic'
+);
+
+topic_intent_contract_check(
+    is_string($community) &&
+    str_contains($community, 'name="topic_intent"') &&
+    str_contains($community, "COALESCE(t.topic_intent, 'decision')=?") &&
+    str_contains($community, 'مسیر موضوع:'),
+    'active topic list supports filtering and labels the three topic tracks'
 );
 
 topic_intent_contract_check(
