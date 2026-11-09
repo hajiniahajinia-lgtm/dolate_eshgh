@@ -474,9 +474,9 @@ try {
     change_case_check($law && $law['status']==='suspended' && $law['repealed_at']===null && $law['suspended_at']!==null,'an approved parent-community vote applies suspension and preserves repeal history');
     change_case_check(community_law_open_change_case($db,9501,90200,90020,'suspend','درخواست تعلیق تکراری')===false,'an already suspended law cannot receive a second suspension request');
     $implementation_states=$db->query("SELECT status FROM community_law_implementations WHERE law_version_id=99001 ORDER BY community_id")->fetch_all(MYSQLI_ASSOC);
-    change_case_check(count($implementation_states)===2 && $implementation_states[0]['status']==='suspended' && $implementation_states[1]['status']==='suspended','all affected community implementation records enter suspended state');
+    change_case_check(count($implementation_states)===3 && array_reduce($implementation_states,static fn(bool $ok,array $row): bool => $ok && $row['status']==='suspended',true),'all three affected community implementation records, including the newly adopted child, enter suspended state');
     $snapshot_count=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_change_implementation_snapshots WHERE case_id=".(int)$case_id)->fetch_assoc()['n'];
-    change_case_check($snapshot_count===2,'previous implementation plans, owners, progress and statuses are snapshotted before suspension');
+    change_case_check($snapshot_count===3,'all three previous implementation records are snapshotted before suspension');
     $applied=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_change_cases WHERE id=".(int)$case_id." AND effect_applied_at IS NOT NULL")->fetch_assoc()['n'];
     change_case_check($applied===1,'the applied legal effect is marked idempotently');
 
