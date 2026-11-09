@@ -325,14 +325,9 @@ if (!function_exists('community_law_submit_amendment_for_vote')) {
             if (!$conn->begin_transaction()) return false;
             $started=true;
 
-            $member=$conn->prepare('SELECT 1 FROM community_members WHERE community_id=? AND user_id=? LIMIT 1');
-            if (!$member) throw new RuntimeException('amendment submit membership prepare failed');
-            $member->bind_param('ii',$community_id,$user_id);
-            if (!$member->execute() || !$member->get_result()->fetch_row()) {
-                $member->close();
+            if (!community_law_amendment_lock_member($conn,$community_id,$user_id)) {
                 throw new RuntimeException('local membership required');
             }
-            $member->close();
 
             $lock=$conn->prepare(
                 "SELECT a.id,a.status,a.proposed_by,a.law_id,a.base_version_id,a.proposed_version_id,a.conformity_case_id,
