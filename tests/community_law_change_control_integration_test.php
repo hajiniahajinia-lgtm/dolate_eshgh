@@ -118,6 +118,20 @@ try {
         $deep_parent_versions===[99001,99002],
         'deep descendant law is checked against both immediate and higher-level applicable parent laws'
     );
+    
+    // شکست ثبت رویداد بررسی سازگاری باید پروندهٔ تازه و تاریخچه را در همان تراکنش برگرداند.
+    $db->query("INSERT INTO community_laws (id,law_code,originating_community_id,created_by,status,current_version_id,effective_at) VALUES (9504,'LAW-ROLLBACK-LOCAL-TEST',90030,90200,'approved',99004,NOW())");
+    $db->query("INSERT INTO community_law_versions (id,law_id,version_number,title,law_text,proposed_by,status,approved_at) VALUES (99004,9504,1,'قانون آزمایشی بازگشت','متن قانون',90200,'approved',NOW())");
+    $db->query("CREATE TRIGGER test_fail_conformity_event BEFORE INSERT ON community_law_conformity_events
+        FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='forced conformity event failure'");
+    $db->begin_transaction();
+    $conformity_event_failed = !community_law_register_hierarchy_conformity_reviews($db,[90010=>0,90020=>90010,90030=>90020],90020,90100);
+    $db->rollback();
+    $db->query("DROP TRIGGER test_fail_conformity_event");
+    $conformity_after_failure = (int)$db->query("SELECT COUNT(*) AS n FROM community_law_conformity_cases WHERE local_law_version_id=99004")->fetch_assoc()['n'];
+    $conformity_history_after_failure = (int)$db->query("SELECT COUNT(*) AS n FROM community_law_history WHERE law_id=9504 AND event_type='conformity_review_opened'")->fetch_assoc()['n'];
+    change_case_check($conformity_event_failed && $conformity_after_failure===0 && $conformity_history_after_failure===0,'a failed conformity event rolls back the newly opened case and law history');
+
     $conformity_case_id=(int)$db->query("SELECT id FROM community_law_conformity_cases WHERE community_id=90020 AND local_law_version_id=99002 AND parent_law_version_id=99001")->fetch_assoc()['id'];
     $conflict_id=community_law_conformity_add_conflict($db,$conformity_case_id,90200,'ماده ۳','ماده ۷','تعارض احتمالی دربارهٔ دامنهٔ اختیار جامعهٔ محلی','متن و مستندات دو ماده');
     change_case_check(is_int($conflict_id) && $conflict_id>0,'local member can record a conflict with exact article references and evidence');
