@@ -9,6 +9,10 @@ if(!is_string($runner)) {
     exit(1);
 }
 $checks=[
+    "runner responses must not be cached" => strpos($runner, "Cache-Control: no-store, private")!==false,
+    "runner responses must disable MIME sniffing" => strpos($runner, "X-Content-Type-Options: nosniff")!==false,
+    "runner responses must deny framing" => strpos($runner, "X-Frame-Options: DENY")!==false,
+    "runner responses must not expose referrer data" => strpos($runner, "Referrer-Policy: no-referrer")!==false,
     "default mode must be read-only plan" => strpos($runner, "$"."request_payload['mode'] ?? 'plan'")!==false,
     "plan mode must be supported" => strpos($runner, "if ($"."migration_mode === 'plan')")!==false,
     "plan must report that no database changes were made" => strpos($runner, "'database_changes_made' => false")!==false,

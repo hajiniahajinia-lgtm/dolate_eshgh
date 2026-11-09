@@ -6,6 +6,11 @@ declare(strict_types=1);
  * This endpoint only accepts POST requests authenticated with a host-only token.
  */
 header('Content-Type: application/json; charset=utf-8');
+header('Cache-Control: no-store, private');
+header('Pragma: no-cache');
+header('X-Content-Type-Options: nosniff');
+header('X-Frame-Options: DENY');
+header('Referrer-Policy: no-referrer');
 ini_set('display_errors', '0');
 error_reporting(E_ALL);
 
