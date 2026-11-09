@@ -3403,6 +3403,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $version_update->close();
             $case_update->close();
 
+            // شناسایی قانون مادر برای همه جوامع مشمول باید در همان تراکنش ابلاغ ثبت شود.
+            // زیرشاخه برای لازم‌الاجرا شدن قانون مادر به رأی پذیرش جداگانه نیاز ندارد.
+            $notice_community_ids = array_values(array_unique(array_merge(
+                $implementation_community_ids,
+                [(int)$law['originating_community_id']]
+            )));
+            sort($notice_community_ids, SORT_NUMERIC);
+            $notice_details = json_encode([
+                'previous_version_id' => null,
+                'current_version_id' => $version_id,
+                'scope_community_ids' => $implementation_community_ids,
+                'recognition' => 'automatic_by_parent_law_scope',
+                'implementation_state_initialized' => true
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            if (!is_string($notice_details)) throw new Exception('version notice details encoding failed');
+            $notice_text = 'نسخهٔ جدید قانون بالادستی لازم‌الاجرا شد؛ این جامعه در دامنهٔ شمول آن قرار دارد.';
+            $notice = $conn->prepare(
+                "INSERT INTO community_law_version_notices
+                    (law_id,law_version_id,previous_version_id,community_id,actor_user_id,event_type,notice_text,details)
+                 VALUES (?,?,NULL,?,?,'version_activated',?,?)"
+            );
+            if (!$notice) throw new Exception('ordinary enactment version notice prepare failed');
+            foreach ($notice_community_ids as $notice_community_id) {
+                $law_id_for_notice = (int)$law['law_id'];
+                $notice->bind_param(
+                    'iiiiss',
+                    $law_id_for_notice,
+                    $version_id,
+                    $notice_community_id,
+                    $user_id,
+                    $notice_text,
+                    $notice_details
+                );
+                if (!$notice->execute() || $notice->affected_rows !== 1) {
+                    $notice->close();
+                    throw new RuntimeException('ordinary enactment version notice insert failed');
+                }
+            }
+            $notice->close();
+
             if (!community_law_record_history(
                 $conn, (int)$law['law_id'], $version_id, $community_id, $user_id,
                 $is_amendment_enactment ? 'law_amendment_enacted' : 'law_enacted',
