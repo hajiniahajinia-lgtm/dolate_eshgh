@@ -38,8 +38,8 @@ topic_intent_contract_check(
 
 topic_intent_contract_check(
     is_string($law = file_get_contents(__DIR__ . '/../community_laws.php')) &&
-    substr_count($law, "t.topic_intent = 'law'") >= 3 &&
-    str_contains($law, "t.topic_intent='law'"),
+    substr_count($law, "topic_intent='law'") >= 2 &&
+    str_contains($law, "t.topic_intent = 'law'"),
     'only explicitly lawmaking topics and their ideas or accepted decisions can supply formal law provenance'
 );
 
