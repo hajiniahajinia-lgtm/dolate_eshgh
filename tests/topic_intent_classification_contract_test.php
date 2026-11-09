@@ -44,7 +44,7 @@ topic_intent_contract_check(
 topic_intent_contract_check(
     is_string($finalizer) &&
     str_contains($finalizer, "COALESCE(t.topic_intent, 'decision') AS topic_intent") &&
-    str_contains($finalizer, "'topic_intent' => $topic_intent") &&
+    str_contains($finalizer, "'topic_intent' => \$topic_intent") &&
     str_contains($finalizer, '"مسیر موضوع: " . $intent_label'),
     'topic intent is carried into final knowledge dossiers and decision snapshots'
 );
@@ -117,8 +117,8 @@ topic_intent_contract_check(
 
 topic_intent_contract_check(
     is_string($law = file_get_contents(__DIR__ . '/../community_laws.php')) &&
-    substr_count($law, "topic_intent='law'") >= 2 &&
-    str_contains($law, "t.topic_intent = 'law'"),
+    str_contains($law, "t.topic_intent='law'") &&
+    str_contains($law, 'community_law_resolve_accepted_lawmaking_origin'),
     'only explicitly lawmaking topics and their ideas or accepted decisions can supply formal law provenance'
 );
 
