@@ -335,6 +335,7 @@ while($row=$result->fetch_assoc()){
         'title'=>$row['title'],
         'description'=>$row['description'],
         'topic_purpose'=>in_array((string)($row['topic_purpose'] ?? 'mixed'), ['knowledge','execution','mixed'], true) ? (string)$row['topic_purpose'] : 'mixed',
+        'topic_intent'=>in_array((string)($row['topic_intent'] ?? 'decision'), ['knowledge','decision','law'], true) ? (string)$row['topic_intent'] : 'decision',
         'finalized_at'=>$row['finalized_at'],
         'creator'=>$creator_name,
         'votes'=>$votes,
