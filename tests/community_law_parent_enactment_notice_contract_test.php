@@ -24,7 +24,7 @@ $checks = [
         strpos($block, "UPDATE community_law_versions SET status='approved'") < $notice,
     'every scoped community and the originating parent are notified' =>
         strpos($block, '$implementation_community_ids') < $notice &&
-        strpos($block, "[(int]\$law['originating_community_id']]") !== false &&
+        strpos($block, "[(int)\$law['originating_community_id']]") !== false &&
         strpos($block, 'array_unique(array_merge(') !== false,
     'notice explicitly records automatic recognition through parent-law scope' =>
         strpos($block, "'automatic_by_parent_law_scope'") !== false,
