@@ -42,6 +42,8 @@ if (!in_array($migration_mode, ['plan', 'apply'], true)) {
     migration_response(400, ['success' => false, 'message' => 'Invalid migration mode']);
 }
 
+$migration_lock_acquired = false;
+
 try {
     require __DIR__ . '/db.php';
 
@@ -93,8 +95,10 @@ try {
     }
 
     if ($migration_mode === 'plan') {
-        $registry_result = $conn->query("SHOW TABLES LIKE 'app_schema_migrations'");
-        if (!$registry_result || $registry_result->num_rows === 0) {
+        $registry_result = $conn->query("SELECT COUNT(*) AS table_count FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'app_schema_migrations'");
+        $registry_row = $registry_result ? $registry_result->fetch_assoc() : null;
+        if ($registry_result instanceof mysqli_result) $registry_result->free();
+        if ((int)($registry_row['table_count'] ?? 0) !== 1) {
             migration_response(409, [
                 'success' => false,
                 'mode' => 'plan',
@@ -143,6 +147,15 @@ try {
             'database_changes_made' => false
         ]);
     }
+
+    // Serialize apply requests; MySQL DDL cannot be rolled back reliably.
+    $lock_result = $conn->query("SELECT GET_LOCK('dolate_eshgh_schema_migrations', 5) AS got_lock");
+    $lock_row = $lock_result ? $lock_result->fetch_assoc() : null;
+    if ($lock_result instanceof mysqli_result) $lock_result->free();
+    if ((int)($lock_row['got_lock'] ?? 0) !== 1) {
+        throw new RuntimeException('Could not acquire migration lock; another migration may be running');
+    }
+    $migration_lock_acquired = true;
 
     // Registry creation is allowed only in explicit apply mode.
     $conn->query("
@@ -221,12 +234,20 @@ try {
         $applied[] = $name;
     }
 
+    if ($migration_lock_acquired) {
+        $conn->query("SELECT RELEASE_LOCK('dolate_eshgh_schema_migrations')");
+        $migration_lock_acquired = false;
+    }
+
     migration_response(200, [
         'success' => true,
         'applied' => $applied,
         'already_applied' => $skipped
     ]);
 } catch (Throwable $e) {
+    if ($migration_lock_acquired && isset($conn) && $conn instanceof mysqli) {
+        try { $conn->query("SELECT RELEASE_LOCK('dolate_eshgh_schema_migrations')"); } catch (Throwable $ignored) {}
+    }
     error_log('[database migrations] ' . $e->getMessage());
     migration_response(500, [
         'success' => false,

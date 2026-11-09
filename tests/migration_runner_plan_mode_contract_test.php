@@ -13,7 +13,10 @@ $checks=[
     "plan must report pending migrations" => strpos($runner, "'pending' => $"."pending")!==false,
     "plan must detect checksum mismatches" => strpos($runner, "'checksum_mismatches' => $"."checksum_mismatches")!==false,
     "apply mode must be explicit" => strpos($runner, "in_array($"."migration_mode, ['plan', 'apply'], true)")!==false,
-    "registry creation must occur after the read-only plan branch" => strpos($runner, "if ($"."migration_mode === 'plan')") < strpos($runner, "CREATE TABLE IF NOT EXISTS app_schema_migrations")
+    "registry creation must occur after the read-only plan branch" => strpos($runner, "if ($"."migration_mode === 'plan')") < strpos($runner, "CREATE TABLE IF NOT EXISTS app_schema_migrations"),
+    "plan must check the exact registry table name" => strpos($runner, "table_name = 'app_schema_migrations'")!==false,
+    "apply must acquire the shared migration lock" => strpos($runner, "GET_LOCK('dolate_eshgh_schema_migrations'")!==false,
+    "apply must release the shared migration lock" => strpos($runner, "RELEASE_LOCK('dolate_eshgh_schema_migrations'")!==false
 ];
 foreach($checks as $label=>$passed) {
     if(!$passed) {
