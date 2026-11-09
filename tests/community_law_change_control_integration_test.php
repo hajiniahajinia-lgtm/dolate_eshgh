@@ -72,6 +72,19 @@ try {
     $history_success=$db->query("SELECT community_id,old_parent_community_id,new_parent_community_id,actor_user_id,event_type FROM community_hierarchy_change_history WHERE vote_round_id=920001")->fetch_assoc();
     change_case_check($history_success && (int)$history_success['community_id']===92020 && $history_success['old_parent_community_id']===null && (int)$history_success['new_parent_community_id']===92010 && (int)$history_success['actor_user_id']===90100 && $history_success['event_type']==='parent_changed','successful hierarchy change permanently records community, old/new parent, actor and event type');
 
+    $duplicate_history_rejected=false;
+    try {
+        $db->begin_transaction();
+        community_hierarchy_record_parent_change($db,92020,920001,null,92010,90100);
+        $db->commit();
+    } catch (Throwable $e) {
+        $duplicate_history_rejected=true;
+        $db->rollback();
+    }
+    $history_after_replay=(int)$db->query("SELECT COUNT(*) AS n FROM community_hierarchy_change_history WHERE vote_round_id=920001")->fetch_assoc()['n'];
+    change_case_check($duplicate_history_rejected && $history_after_replay===1,'replaying the same vote round cannot duplicate hierarchy history');
+
+
 
     $db->query("INSERT INTO communities (id,parent_community_id) VALUES (90010,NULL),(90020,90010) ON DUPLICATE KEY UPDATE parent_community_id=VALUES(parent_community_id)");
     $db->query("INSERT INTO community_members (community_id,user_id) VALUES (90010,90100),(90020,90200),(90010,90101),(90010,90102),(90010,90103),(90010,90104),(90010,90105),(90010,90106),(90010,90107),(90010,90108),(90020,90201),(90020,90202),(90020,90203),(90020,90204),(90020,90205),(90020,90206),(90020,90207),(90020,90106) ON DUPLICATE KEY UPDATE user_id=VALUES(user_id)");
@@ -486,6 +499,35 @@ try {
     change_case_check($scope_history===2,'scope entry and exit both remain in permanent law history');
     $scope_unread=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_scope_notices WHERE law_id=96001 AND community_id=91030 AND read_at IS NULL")->fetch_assoc()['n'];
     change_case_check($scope_unread===2,'each scope transition creates a separate unread community notice');
+
+    // اعلان ناموفقِ تغییر دامنه باید تاریخچه و وضعیت اجرا را نیز rollback کند؛ سپس همان رویداد قابل تکرار باشد.
+    $db->query("CREATE TRIGGER test_fail_hierarchy_scope_notice BEFORE INSERT ON community_law_scope_notices
+        FOR EACH ROW BEGIN
+            IF NEW.law_id=96001 AND NEW.community_id=91030 THEN
+                SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='forced hierarchy scope notice failure';
+            END IF;
+        END");
+    $db->begin_transaction();
+    $scope_notice_failed=false;
+    try {
+        community_law_record_hierarchy_scope_changes($db,$old_scope_map,$new_scope_map,91030,90200);
+    } catch (Throwable $e) {
+        $scope_notice_failed=true;
+        $db->rollback();
+    }
+    $db->query("DROP TRIGGER test_fail_hierarchy_scope_notice");
+    $scope_after_failure=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_history WHERE law_id=96001 AND event_type='scope_left'")->fetch_assoc()['n'];
+    $notices_after_failure=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_scope_notices WHERE law_id=96001 AND community_id=91030 AND transition='scope_left'")->fetch_assoc()['n'];
+    $impl_after_failure=$db->query("SELECT status,progress_report FROM community_law_implementations WHERE law_version_id=99601 AND community_id=91030")->fetch_assoc();
+    change_case_check($scope_notice_failed && $scope_after_failure===1 && $notices_after_failure===1 && $impl_after_failure && $impl_after_failure['status']==='pending' && $impl_after_failure['progress_report']==='گزارش پیشرفت حفظ‌شونده','failed scope notice rolls back scope history and implementation status without losing prior evidence');
+    $db->begin_transaction();
+    change_case_check(community_law_record_hierarchy_scope_changes($db,$old_scope_map,$new_scope_map,91030,90200),'scope transition successfully retries after the notice failure is removed');
+    $db->commit();
+    $scope_retry_history=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_history WHERE law_id=96001 AND event_type='scope_left'")->fetch_assoc()['n'];
+    $scope_retry_notices=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_scope_notices WHERE law_id=96001 AND community_id=91030 AND transition='scope_left'")->fetch_assoc()['n'];
+    change_case_check($scope_retry_history===2 && $scope_retry_notices===2,'successful retry creates exactly one additional scope history event and notice');
+
+
 
     // اعلان‌ها فقط توسط عضو همان جامعه و از مسیر جدول منبع صحیح خوانده می‌شوند.
     $db->query("INSERT INTO community_members (community_id,user_id) VALUES (91030,90300) ON DUPLICATE KEY UPDATE user_id=VALUES(user_id)");
