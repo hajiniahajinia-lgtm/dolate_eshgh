@@ -4,7 +4,7 @@ declare(strict_types=1);
 $source=file_get_contents(__DIR__.'/../community_laws.php');
 if($source===false){fwrite(STDERR,"FAIL: unable to read law workflow source".PHP_EOL);exit(1);}
 $start=strpos($source,"if (isset(\$_POST['submit_law_appeal_assessment']))");
-$end=strpos("if (isset(\$_POST['enact_law']))",$start===false?0:$start);
+$end=strpos($source,"if (isset(\$_POST['enact_law']))",$start===false?0:$start);
 if($start===false||$end===false||$end<=$start){fwrite(STDERR,"FAIL: appeal assessment handler boundary not found".PHP_EOL);exit(1);}
 $handler=substr($source,$start,$end-$start);
 $checks=[
