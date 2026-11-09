@@ -508,7 +508,7 @@ try {
             ($details['implementation_state_copied']??false)!==true) $notice_details_ok=false;
     }
     change_case_check($notice_communities===$expected_notice_communities && $notice_details_ok,
-        'successful enactment sends exactly one version notice to the origin community and every community in the resolved scope with both version identifiers');
+        'successful enactment sends exactly one version notice to the origin community and every community in the resolved scope with both version identifiers; actual='.json_encode($notice_communities).' expected='.json_encode($expected_notice_communities).' details_ok='.($notice_details_ok?'yes':'no').' rows='.json_encode($notice_rows));
     change_case_check(!community_law_enact_amendment($db,9502,$second_version,90020,90201),'an already enacted amendment cannot be activated a second time');
 
 
