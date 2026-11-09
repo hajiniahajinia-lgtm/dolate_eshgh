@@ -246,10 +246,13 @@ $sql = "
     FROM topics t
     JOIN topic_voting_meta m ON m.topic_id=t.id
     WHERE t.community_id=? AND m.finalized=1 AND m.finalized_at IS NOT NULL
+      AND (?='' OR COALESCE(t.topic_intent, 'decision')=?)
     ORDER BY m.finalized_at DESC
 ";
+$archive_intent_filter = (string)($_GET['topic_intent'] ?? '');
+if (!in_array($archive_intent_filter, ['knowledge', 'decision', 'law'], true)) $archive_intent_filter = '';
 $stmt = $conn->prepare($sql);
-$stmt->bind_param("i",$community_id);
+$stmt->bind_param("iss",$community_id,$archive_intent_filter,$archive_intent_filter);
 $stmt->execute();
 $result=$stmt->get_result();
 
