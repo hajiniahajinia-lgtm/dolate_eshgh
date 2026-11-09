@@ -107,7 +107,7 @@ if ($schema_ready) {
                        WHERE n.case_id=c.id AND n.community_id=?)
          ORDER BY c.created_at DESC,c.id DESC LIMIT 50"
     );
-    if ($case_stmt) {
+    if ($is_member && $case_stmt) {
         $case_stmt->bind_param('iiiiiiii',$user_id,$user_id,$user_id,$user_id,$user_id,$community_id,$community_id,$community_id);
         if ($case_stmt->execute()) {
             $res=$case_stmt->get_result();
