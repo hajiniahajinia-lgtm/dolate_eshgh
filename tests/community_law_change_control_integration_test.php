@@ -335,6 +335,27 @@ try {
         (int)$multi_final['cleared_items']===2 && (int)$multi_final['remaining_items']===0,
         'a case resolves only after every identified conflict has two-sided independent no-conflict findings');
 
+    // حتی با وجود یک تعارض تأییدشده، تعارض شناسایی‌شدهٔ دیگری باید پیش از آغاز اصلاحیه تعیین تکلیف شود.
+    $blocking_conflict=community_law_conformity_add_conflict(
+        $db,$conformity_case_id,90201,'ماده ۹','ماده ۱','بررسی مستقل دوم برای کنترل منع اصلاح زودهنگام','شواهد تعارض دوم'
+    );
+    change_case_check(is_int($blocking_conflict) && $blocking_conflict>0,'a second conflict can be recorded before amendment drafting');
+    $blocked_amendment=community_law_create_amendment_draft(
+        $db,$conformity_case_id,90020,90201,
+        'تلاش برای اصلاح پیش از تعیین تکلیف همه تعارض‌ها.',
+        [['reference'=>'ماده ۳','previous_text'=>'متن قانون محلی','proposed_text'=>'متن موقت','reason'=>'رفع تعارض تأییدشده']],
+        'آزمون جلوگیری از اصلاح زودهنگام'
+    );
+    change_case_check($blocked_amendment===false,'amendment drafting is blocked while any other identified conflict remains unresolved');
+    change_case_check(community_law_conformity_review_conflict(
+        $db,$blocking_conflict,90200,90020,'no_conflict','بررسی مستقل جامعه محلی نشان می‌دهد این مورد تعارضی ایجاد نمی‌کند.'
+    ),'local reviewer can clear the additional conflict independently');
+    change_case_check(community_law_conformity_review_conflict(
+        $db,$blocking_conflict,90101,90010,'no_conflict','بررسی مستقل جامعه مادر نیز نبود تعارض در این مورد را تأیید می‌کند.'
+    ),'parent reviewer can complete the additional conflict review');
+    $case_after_clear=$db->query("SELECT status,resolved_at FROM community_law_conformity_cases WHERE id=".(int)$conformity_case_id)->fetch_assoc();
+    change_case_check($case_after_clear && $case_after_clear['status']==='amendment_required' && $case_after_clear['resolved_at']===null,'clearing a secondary conflict preserves the confirmed primary conflict and does not resolve the amendment case');
+
     // پیشنهاد اصلاح فقط مواد مشخص را تغییر می‌دهد و نسخه مصوب را دست‌نخورده نگه می‌دارد.
     $amendment_id=community_law_create_amendment_draft(
         $db,$conformity_case_id,90020,90201,
