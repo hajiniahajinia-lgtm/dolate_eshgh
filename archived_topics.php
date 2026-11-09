@@ -22,6 +22,23 @@ if (empty($_SESSION['community_duty_csrf'])) { $_SESSION['community_duty_csrf'] 
 $community_duty_csrf = $_SESSION['community_duty_csrf'];
 require_once __DIR__ . '/community_member_removal_helpers.php';
 $community_removal_ready = community_removal_tables_ready($conn);
+
+// دفتر تصمیم مستقل و اختیاری است؛ آرشیو در نصب‌های قدیمی نیز بدون خطا کار می‌کند.
+$decision_ledger_ready = false;
+$decision_ledger_check = $conn->query("SELECT COUNT(*) AS total FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='community_decision_records'");
+if ($decision_ledger_check) {
+    $decision_ledger_ready = (int)($decision_ledger_check->fetch_assoc()['total'] ?? 0) === 1;
+    $decision_ledger_check->close();
+}
+if ($decision_ledger_ready) require_once __DIR__ . '/community_decision_ledger.php';
+
+// وضعیت مسیر رسمی قانون را فقط در صورت نصب جدول‌های قوانین بررسی می‌کنیم.
+$law_progress_ready = false;
+$law_progress_check = $conn->query("SELECT COUNT(*) AS total FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN ('community_laws','community_law_versions')");
+if ($law_progress_check) {
+    $law_progress_ready = (int)($law_progress_check->fetch_assoc()['total'] ?? 0) === 2;
+    $law_progress_check->close();
+}
 if ($community_removal_ready) community_removal_finalize_expired($conn, $community_id);
 $arch_count = 0;
 $arch_count_stmt = $conn->prepare("SELECT COUNT(*) AS total FROM topics t JOIN topic_voting_meta m ON m.topic_id=t.id WHERE t.community_id=? AND m.finalized=1 AND m.finalized_at IS NOT NULL");
@@ -231,14 +248,19 @@ function get_winner_idea($conn, $topic_id) {
 // گرفتن موضوعات نهایی شده
 // =====================
 $sql = "
-    SELECT t.id, t.title, t.description, t.created_at, t.user_id, m.finalized_at, t.community_id, COALESCE(t.topic_purpose, 'mixed') AS topic_purpose
+    SELECT t.id, t.title, t.description, t.created_at, t.user_id, m.finalized_at, t.community_id,
+           COALESCE(t.topic_purpose, 'mixed') AS topic_purpose,
+           COALESCE(t.topic_intent, 'decision') AS topic_intent
     FROM topics t
     JOIN topic_voting_meta m ON m.topic_id=t.id
     WHERE t.community_id=? AND m.finalized=1 AND m.finalized_at IS NOT NULL
+      AND (?='' OR COALESCE(t.topic_intent, 'decision')=?)
     ORDER BY m.finalized_at DESC
 ";
+$archive_intent_filter = (string)($_GET['topic_intent'] ?? '');
+if (!in_array($archive_intent_filter, ['knowledge', 'decision', 'law'], true)) $archive_intent_filter = '';
 $stmt = $conn->prepare($sql);
-$stmt->bind_param("i",$community_id);
+$stmt->bind_param("iss",$community_id,$archive_intent_filter,$archive_intent_filter);
 $stmt->execute();
 $result=$stmt->get_result();
 
@@ -251,6 +273,78 @@ while($row=$result->fetch_assoc()){
     $participation=participation_percent($conn,$topic_id,(int)$row['community_id']);
     $enforce=get_enforce_stats($conn,$topic_id);
     $winner_idea=get_winner_idea($conn,$topic_id);
+    $decision_link = null;
+    if ($decision_ledger_ready) {
+        $candidate_link = community_decision_get_knowledge_link($conn, $topic_id);
+        if ($candidate_link && (int)$candidate_link['community_id'] === (int)$row['community_id']) {
+            $decision_link = $candidate_link;
+        }
+    }
+
+    $topic_intent = in_array((string)($row['topic_intent'] ?? 'decision'), ['knowledge','decision','law'], true)
+        ? (string)$row['topic_intent'] : 'decision';
+    $intent_progress = ['label'=>'', 'detail'=>''];
+    if ($topic_intent === 'knowledge') {
+        $intent_progress = $decision_link && !empty($decision_link['knowledge_entry_id'])
+            ? ['label'=>'پروندهٔ دانش ثبت شده', 'detail'=>'این پرونده جمع‌بندی دانشی است و به‌خودی‌خود الزام اجرایی ایجاد نمی‌کند.']
+            : ['label'=>'در انتظار تکمیل پروندهٔ دانش', 'detail'=>'نتیجهٔ این مسیر برای شناخت و یادگیری جمعی است، نه تصویب قانون.'];
+    } elseif ($topic_intent === 'decision') {
+        $intent_progress = $decision_link
+            ? ['label'=>'نتیجه در دفتر تصمیم‌ها ثبت شده', 'detail'=>'وضعیت پذیرش و الزام در پروندهٔ تصمیم نمایش داده می‌شود.']
+            : ['label'=>'در انتظار ثبت نتیجه در دفتر تصمیم‌ها', 'detail'=>'رأی موضوع باید به‌عنوان نتیجهٔ جمعی ثبت شود؛ این ثبت به‌تنهایی قانون ایجاد نمی‌کند.'];
+    } elseif ($law_progress_ready) {
+        $law_stmt = $conn->prepare(
+            "SELECT l.id AS law_id, l.status AS law_status, l.effective_at,
+                    v.id AS version_id, v.status AS version_status
+             FROM community_law_versions v
+             JOIN community_laws l ON l.id=v.law_id
+             WHERE v.source_topic_id=? AND l.originating_community_id=?
+             ORDER BY v.id DESC LIMIT 1"
+        );
+        if ($law_stmt) {
+            $law_stmt->bind_param('ii', $topic_id, $community_id);
+            $law_stmt->execute();
+            $law_row = $law_stmt->get_result()->fetch_assoc();
+            $law_stmt->close();
+            if ($law_row) {
+                $law_status_labels = [
+                    'draft'=>'پیش‌نویس قانون ثبت شده',
+                    'proposed'=>'برای بررسی رسمی ارائه شده',
+                    'voting'=>'در رأی‌گیری قانون',
+                    'approved'=>'قانون تصویب شده',
+                    'rejected'=>'پیشنهاد قانون رد شده',
+                    'suspended'=>'اجرای قانون تعلیق شده',
+                    'repealed'=>'قانون لغو شده'
+                ];
+                $version_status_labels = [
+                    'draft'=>'پیش‌نویس نسخهٔ قانون',
+                    'proposed'=>'نسخه برای بررسی ارائه شده',
+                    'voting'=>'نسخه در رأی‌گیری',
+                    'approved'=>'نسخه تأیید شده؛ ابلاغ نهایی جداگانه بررسی می‌شود',
+                    'rejected'=>'نسخه رد شده',
+                    'superseded'=>'نسخه با اصلاحیهٔ جدید جایگزین شده'
+                ];
+                $law_status = (string)$law_row['law_status'];
+                $version_status = (string)$law_row['version_status'];
+                $progress_label = in_array($law_status, ['approved','rejected','suspended','repealed'], true)
+                    ? ($law_status_labels[$law_status] ?? 'وضعیت قانون مشخص نیست')
+                    : ($version_status_labels[$version_status] ?? ($law_status_labels[$law_status] ?? 'در حال بررسی رسمی'));
+                $progress_detail = 'رأی موضوع فقط منشأ پیشنهاد است؛ اعتبار قانون تابع بررسی، تصویب و ابلاغ رسمی است.';
+                if ($law_status === 'approved' && !empty($law_row['effective_at']) && strtotime((string)$law_row['effective_at']) > time()) {
+                    $progress_label = 'قانون تصویب شده؛ در انتظار تاریخ اجرا';
+                }
+                $intent_progress = [
+                    'label'=>$progress_label,
+                    'detail'=>$progress_detail,
+                    'law_id'=>(int)$law_row['law_id'],
+                    'version_id'=>(int)$law_row['version_id']
+                ];
+            }
+        }
+    }
+    if ($topic_intent === 'law' && $intent_progress['label'] === '') {
+        $intent_progress = ['label'=>'هنوز پیش‌نویس رسمی ثبت نشده', 'detail'=>'موضوع قانون‌گذاری آغاز مسیر است؛ تا تصویب و ابلاغ معتبر، هیچ قاعدهٔ الزام‌آوری ایجاد نمی‌کند.'];
+    }
 
     $creator_name='ناشناس';
     if(!empty($row['user_id'])){
@@ -314,12 +408,15 @@ while($row=$result->fetch_assoc()){
         'title'=>$row['title'],
         'description'=>$row['description'],
         'topic_purpose'=>in_array((string)($row['topic_purpose'] ?? 'mixed'), ['knowledge','execution','mixed'], true) ? (string)$row['topic_purpose'] : 'mixed',
+        'topic_intent'=>$topic_intent,
+        'intent_progress'=>$intent_progress,
         'finalized_at'=>$row['finalized_at'],
         'creator'=>$creator_name,
         'votes'=>$votes,
         'participation'=>$participation,
         'enforce'=>$enforce,
         'idea'=>$winner_idea,
+        'decision_link'=>$decision_link,
         'winner_enforceable'=>$winner_idea_is_enforceable,
         'execution_candidates'=>$execution_candidates,
         'election'=>$election,
@@ -908,6 +1005,16 @@ document.addEventListener('DOMContentLoaded',function(){
 
   
   <h1>📦 آرشیو موضوعات (نهایی‌شده)</h1>
+  <form method="get" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 14px;padding:10px;background:#fff;border:1px solid #d8e0e9;border-radius:9px;">
+    <input type="hidden" name="community_id" value="<?= (int)$community_id ?>">
+    <label for="archive-topic-intent" style="font-weight:bold;">نمایش مسیر:</label>
+    <select id="archive-topic-intent" name="topic_intent" onchange="this.form.submit()" style="min-width:180px;padding:8px;border:1px solid #b8c4d2;border-radius:7px;">
+      <option value=""<?= $archive_intent_filter === '' ? ' selected' : '' ?>>همهٔ مسیرها</option>
+      <option value="knowledge"<?= $archive_intent_filter === 'knowledge' ? ' selected' : '' ?>>دانش‌محور</option>
+      <option value="decision"<?= $archive_intent_filter === 'decision' ? ' selected' : '' ?>>تصمیم‌گیری</option>
+      <option value="law"<?= $archive_intent_filter === 'law' ? ' selected' : '' ?>>قانون‌گذاری</option>
+    </select>
+  </form>
   <?php if($election_message!==''): ?><div style="margin:0 0 14px;padding:10px;border-radius:8px;background:#fff3cd;color:#664d03;text-align:center"><?= htmlspecialchars($election_message,ENT_QUOTES,'UTF-8') ?></div><?php endif; ?>
   <?php if(!$candidate_tables_ready||!$candidate_plans_ready): ?><div style="margin:0 0 14px;padding:10px;border-radius:8px;background:#fff3cd;color:#664d03;text-align:center">برای فعال‌شدن برنامهٔ اولیه و نظارت بر اجرا، فایل <strong>migrations/20261027_topic_execution_monitoring.sql</strong> باید طبق روش امن پروژه در پایگاه داده اجرا شود.</div><?php elseif(!$election_tables_ready): ?><div style="margin:0 0 14px;padding:10px;border-radius:8px;background:#fff3cd;color:#664d03;text-align:center">برای فعال‌شدن فوریت و نهایی‌شدن انتخابات مجری، فایل <strong>migration_execution_election_urgency.sql</strong> را یک‌بار و به‌صورت کنترل‌شده در پایگاه داده اجرا کنید.</div><?php endif; ?>
   <div class="columns">
@@ -923,6 +1030,17 @@ document.addEventListener('DOMContentLoaded',function(){
         <div class="card" id="topic-card-<?= (int)$row['id'] ?>">
             <div class="title-wrap">
               <div class="title" tabindex="0"><?= htmlspecialchars($row['title'], ENT_QUOTES, 'UTF-8') ?></div>
+              <?php $archive_intent_labels = ['knowledge'=>'دانش‌محور','decision'=>'تصمیم‌گیری','law'=>'قانون‌گذاری']; ?>
+              <span class="meta" style="display:inline-block;margin-top:5px;padding:3px 8px;border-radius:12px;background:#eee8ff;color:#563b86;"><?= $archive_intent_labels[$row['topic_intent']] ?></span>
+              <?php if (!empty($row['intent_progress']['label'])): ?>
+              <div class="meta" style="margin-top:7px;padding:7px 9px;border-right:3px solid #7b6aa6;background:#f7f5fb;border-radius:6px;">
+                <strong>وضعیت مسیر: <?= htmlspecialchars($row['intent_progress']['label'], ENT_QUOTES, 'UTF-8') ?></strong>
+                <div><?= htmlspecialchars($row['intent_progress']['detail'], ENT_QUOTES, 'UTF-8') ?></div>
+                <?php if ($row['topic_intent'] === 'law' && !empty($row['intent_progress']['law_id'])): ?>
+                  <a href="community_laws.php?community_id=<?= (int)$row['community_id'] ?>#law-<?= (int)$row['intent_progress']['law_id'] ?>" style="display:inline-block;margin-top:5px;">مشاهدهٔ پروندهٔ رسمی قانون و مراحل آن</a>
+                <?php endif; ?>
+              </div>
+              <?php endif; ?>
               <?php if (trim((string)($row['description'] ?? '')) !== ''): ?>
               <div class="desc-tooltip"><?= nl2br(htmlspecialchars($row['description'], ENT_QUOTES, 'UTF-8')) ?></div>
               <?php endif; ?>
@@ -933,6 +1051,17 @@ document.addEventListener('DOMContentLoaded',function(){
             <div class="idea-box" id="idea-box-<?= $row['id'] ?>">
                 <?= nl2br(htmlspecialchars($row['idea']['idea_content'])) ?>
                 <div class="meta">ایده‌دهنده: <?= htmlspecialchars($row['idea']['idea_author'] ?? 'ناشناس') ?></div>
+            </div>
+            <?php endif; ?>
+
+            <?php if(!empty($row['decision_link'])): ?>
+            <div id="decision-<?= (int)$row['decision_link']['decision_id'] ?>" style="margin-top:9px;padding:9px 11px;border:1px solid #cbd5e1;border-radius:8px;background:#f8fafc;font-size:12px;line-height:1.9">
+              <strong>📋 پروندهٔ تصمیم جامعه</strong>
+              <div>شناسهٔ تصمیم: <?= (int)$row['decision_link']['decision_id'] ?> · پذیرش جمعی: <?= $row['decision_link']['acceptance_status']==='accepted'?'پذیرفته‌شده':($row['decision_link']['acceptance_status']==='not_accepted'?'پذیرفته‌نشده':'بدون رأی') ?></div>
+              <div>وضعیت الزام: <?= $row['decision_link']['enforceability_status']==='enforceable'?'لازم‌الاجرا':($row['decision_link']['enforceability_status']==='not_enforceable'?'غیرلازم‌الاجرا':'تعیین‌نشده') ?></div>
+              <?php if(!empty($row['decision_link']['knowledge_entry_id'])): ?>
+              <a href="knowledge_library.php?id=<?= (int)$row['decision_link']['knowledge_entry_id'] ?>">مشاهدهٔ پروندهٔ دانش مرتبط</a>
+              <?php else: ?><span class="meta">برای این تصمیم هنوز پروندهٔ دانش پیوند نخورده است.</span><?php endif; ?>
             </div>
             <?php endif; ?>
 
@@ -975,6 +1104,17 @@ document.addEventListener('DOMContentLoaded',function(){
             </details>
             <?php endif; ?>
 
+            <?php if(!empty($row['decision_link'])): ?>
+            <div style="margin-top:9px;padding:9px 11px;border:1px solid #cbd5e1;border-radius:8px;background:#f8fafc;font-size:12px;line-height:1.9">
+              <strong>📋 پروندهٔ تصمیم جامعه</strong>
+              <div>شناسهٔ تصمیم: <?= (int)$row['decision_link']['decision_id'] ?> · پذیرش جمعی: <?= $row['decision_link']['acceptance_status']==='accepted'?'پذیرفته‌شده':($row['decision_link']['acceptance_status']==='not_accepted'?'پذیرفته‌نشده':'بدون رأی') ?></div>
+              <div>وضعیت الزام: <?= $row['decision_link']['enforceability_status']==='enforceable'?'لازم‌الاجرا':($row['decision_link']['enforceability_status']==='not_enforceable'?'غیرلازم‌الاجرا':'تعیین‌نشده') ?></div>
+              <?php if(!empty($row['decision_link']['knowledge_entry_id'])): ?>
+              <a href="knowledge_library.php?id=<?= (int)$row['decision_link']['knowledge_entry_id'] ?>">مشاهدهٔ پروندهٔ دانش مرتبط</a>
+              <?php else: ?><span class="meta">برای این تصمیم هنوز پروندهٔ دانش پیوند نخورده است.</span><?php endif; ?>
+            </div>
+            <?php endif; ?>
+
             <div class="votebox">
                 <div>کل آرا: <strong><?= (int)$row['votes']['total'] ?></strong></div>
                 <div>آری: <strong><?= (int)$row['votes']['yes'] ?></strong></div>
@@ -1006,9 +1146,11 @@ document.addEventListener('DOMContentLoaded',function(){
             <summary><?= htmlspecialchars($loser_group['title'],ENT_QUOTES,'UTF-8') ?> (<?= count($loser_group['items']) ?>)</summary>
             <div class="archive-subgroup-body">
             <?php if(!empty($loser_group['items'])): foreach($loser_group['items'] as $row): ?>
-        <div class="card">
+        <div class="card" id="topic-card-<?= (int)$row['id'] ?>">
             <div class="title-wrap">
               <div class="title" tabindex="0"><?= htmlspecialchars($row['title'], ENT_QUOTES, 'UTF-8') ?></div>
+              <?php $archive_intent_labels = ['knowledge'=>'دانش‌محور','decision'=>'تصمیم‌گیری','law'=>'قانون‌گذاری']; ?>
+              <span class="meta" style="display:inline-block;margin-top:5px;padding:3px 8px;border-radius:12px;background:#eee8ff;color:#563b86;"><?= $archive_intent_labels[$row['topic_intent']] ?></span>
               <?php if (trim((string)($row['description'] ?? '')) !== ''): ?>
               <div class="desc-tooltip"><?= nl2br(htmlspecialchars($row['description'], ENT_QUOTES, 'UTF-8')) ?></div>
               <?php endif; ?>

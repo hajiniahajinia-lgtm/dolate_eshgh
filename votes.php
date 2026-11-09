@@ -156,30 +156,129 @@ if($_SERVER['REQUEST_METHOD'] === 'POST'){
             exit;
         }
 
+        $conn->begin_transaction();
+        try {
         $weight = 1.00;
-        $competency = $conn->prepare("
-            SELECT ec.weight
-            FROM topic_expertise_proposals p
-            JOIN expertise_competencies ec ON ec.domain_id=p.domain_id AND ec.user_id=?
-            WHERE p.topic_id=? AND p.community_id=? AND p.status='approved'
-              AND ec.valid_from<=NOW() AND ec.valid_until>NOW()
-            LIMIT 1
-        ");
-        if ($competency) {
-            $competency->bind_param("iii", $user_id, $topic_id, $community_id);
-            $competency->execute();
-            $cr = $competency->get_result()->fetch_assoc();
-            $competency->close();
-            if ($cr) { $weight = max(1.00, (float)$cr['weight']); }
+        $profile_tables = $conn->query(
+            "SELECT COUNT(*) AS total FROM information_schema.tables
+             WHERE table_schema=DATABASE()
+               AND table_name IN ('topic_expertise_profiles','topic_expertise_profile_domains')"
+        );
+        $profile_schema_ready = $profile_tables &&
+            (int)$profile_tables->fetch_assoc()['total'] === 2;
+        if ($profile_tables) $profile_tables->free();
+
+        $approved_profile_found = false;
+        $profile_lookup_failed = false;
+        if ($profile_schema_ready) {
+            $profile_lookup = $conn->prepare(
+                "SELECT p.id, COUNT(pd.id) AS domain_count,
+                        COALESCE(SUM(pd.share_percent),0) AS share_total,
+                        COUNT(DISTINCT pd.domain_id) AS distinct_domains
+                 FROM topic_expertise_profiles p
+                 LEFT JOIN topic_expertise_profile_domains pd ON pd.profile_id=p.id
+                 WHERE p.topic_id=? AND p.community_id=? AND p.status='approved'
+                 GROUP BY p.id
+                 ORDER BY p.version_number DESC LIMIT 1"
+            );
+            if (!$profile_lookup) {
+                $profile_lookup_failed = true;
+            } else {
+                $profile_lookup->bind_param("ii", $topic_id, $community_id);
+                if (!$profile_lookup->execute()) {
+                    $profile_lookup_failed = true;
+                } else {
+                    $profile = $profile_lookup->get_result()->fetch_assoc();
+                    if ($profile) {
+                        $approved_profile_found = true;
+                        $profile_valid =
+                            (int)$profile['domain_count'] > 0 &&
+                            (int)$profile['domain_count'] === (int)$profile['distinct_domains'] &&
+                            abs((float)$profile['share_total'] - 100.00) < 0.001;
+                        if ($profile_valid) {
+                            $profile_weight_stmt = $conn->prepare(
+                                "SELECT COALESCE(
+                                    SUM(pd.share_percent *
+                                        LEAST(3.00, GREATEST(1.00, COALESCE(ec.weight,1.00)))
+                                    ) / 100.00, 1.00
+                                 ) AS calculated_weight
+                                 FROM topic_expertise_profile_domains pd
+                                 LEFT JOIN expertise_competencies ec
+                                   ON ec.domain_id=pd.domain_id AND ec.user_id=?
+                                  AND ec.valid_from<=NOW() AND ec.valid_until>NOW()
+                                 WHERE pd.profile_id=?"
+                            );
+                            if ($profile_weight_stmt) {
+                                $profile_weight_stmt->bind_param("ii", $user_id, $profile['id']);
+                                if ($profile_weight_stmt->execute()) {
+                                    $profile_weight_row = $profile_weight_stmt->get_result()->fetch_assoc();
+                                    if ($profile_weight_row) {
+                                        $weight = min(3.00, max(1.00, (float)$profile_weight_row['calculated_weight']));
+                                    }
+                                }
+                                $profile_weight_stmt->close();
+                            }
+                        } else {
+                            // پروفایل تأییدشده اما ناسازگار است؛ وزن پایه اعمال می‌شود و مسیر قدیمی دور زده نمی‌شود.
+                            $profile_lookup_failed = true;
+                        }
+                    }
+                }
+                $profile_lookup->close();
+            }
         }
+
+        // سازگاری با پیشنهادهای تک‌حوزه‌ای قدیمی فقط وقتی پروفایل چندحوزه‌ای تأییدشده‌ای وجود ندارد.
+        if (!$approved_profile_found && !$profile_lookup_failed) {
+            $competency = $conn->prepare("
+                SELECT ec.weight
+                FROM topic_expertise_proposals p
+                JOIN expertise_competencies ec ON ec.domain_id=p.domain_id AND ec.user_id=?
+                WHERE p.topic_id=? AND p.community_id=? AND p.status='approved'
+                  AND ec.valid_from<=NOW() AND ec.valid_until>NOW()
+                LIMIT 1
+            ");
+            if ($competency) {
+                $competency->bind_param("iii", $user_id, $topic_id, $community_id);
+                $competency->execute();
+                $cr = $competency->get_result()->fetch_assoc();
+                $competency->close();
+                if ($cr) { $weight = min(3.00, max(1.00, (float)$cr['weight'])); }
+            }
+        }
+
+        // وزن تخصصی هر فرد در هر موضوع فقط یک‌بار ثبت می‌شود؛ رأی به ایده‌های دیگر
+        // و تغییر بعدی شایستگی، وزن او را در همان موضوع تغییر نمی‌دهد.
+        $weight_snapshot_insert = $conn->prepare(
+            "INSERT IGNORE INTO topic_expertise_voter_weight_snapshots
+                (topic_id,user_id,vote_weight)
+             VALUES (?,?,?)"
+        );
+        if(!$weight_snapshot_insert) throw new RuntimeException("ثبت snapshot وزن رأی ممکن نیست.");
+        $weight_snapshot_insert->bind_param("iid",$topic_id,$user_id,$weight);
+        if(!$weight_snapshot_insert->execute()) throw new RuntimeException("ثبت snapshot وزن رأی انجام نشد.");
+        $weight_snapshot_insert->close();
+
+        $weight_snapshot_read = $conn->prepare(
+            "SELECT vote_weight FROM topic_expertise_voter_weight_snapshots
+             WHERE topic_id=? AND user_id=? LIMIT 1 FOR UPDATE"
+        );
+        if(!$weight_snapshot_read) throw new RuntimeException("خواندن snapshot وزن رأی ممکن نیست.");
+        $weight_snapshot_read->bind_param("ii",$topic_id,$user_id);
+        if(!$weight_snapshot_read->execute()) throw new RuntimeException("خواندن snapshot وزن رأی انجام نشد.");
+        $weight_snapshot_row=$weight_snapshot_read->get_result()->fetch_assoc();
+        $weight_snapshot_read->close();
+        if(!$weight_snapshot_row) throw new RuntimeException("snapshot وزن رأی برای این موضوع پیدا نشد.");
+        $weight=min(3.00,max(1.00,(float)$weight_snapshot_row['vote_weight']));
 
         $stmt = $conn->prepare("
             INSERT INTO topic_voting_ballots (topic_id, idea_id, user_id, vote_type, vote_weight)
             VALUES (?,?,?,?,?)
-            ON DUPLICATE KEY UPDATE vote_type=VALUES(vote_type), vote_weight=VALUES(vote_weight), created_at=CURRENT_TIMESTAMP
+            ON DUPLICATE KEY UPDATE vote_type=VALUES(vote_type), created_at=CURRENT_TIMESTAMP
         ");
+        if(!$stmt) throw new RuntimeException("آماده‌سازی ثبت برگهٔ رأی انجام نشد.");
         $stmt->bind_param("iiisd", $topic_id, $idea_id, $user_id, $vote_type, $weight);
-        $stmt->execute();
+        if(!$stmt->execute()) throw new RuntimeException("ثبت برگهٔ رأی انجام نشد.");
         $stmt->close();
 
         $counts = $conn->prepare("
@@ -192,10 +291,14 @@ if($_SERVER['REQUEST_METHOD'] === 'POST'){
               SUM(CASE WHEN vote_type='no' THEN GREATEST(vote_weight - 1, 0) ELSE 0 END) AS no_expertise_effect
             FROM topic_voting_ballots WHERE topic_id=? AND idea_id=?
         ");
+        if(!$counts) throw new RuntimeException("آماده‌سازی محاسبهٔ نتیجهٔ رأی‌ها انجام نشد.");
         $counts->bind_param("ii", $topic_id, $idea_id);
-        $counts->execute();
+        if(!$counts->execute()) throw new RuntimeException("محاسبهٔ نتیجهٔ رأی‌ها انجام نشد.");
         $result = $counts->get_result()->fetch_assoc();
         $counts->close();
+
+        if(!$result) throw new RuntimeException("نتیجهٔ رأی‌ها قابل خواندن نیست.");
+        $conn->commit();
 
         echo json_encode([
             'success'=>true,
@@ -204,6 +307,13 @@ if($_SERVER['REQUEST_METHOD'] === 'POST'){
             'expertise_effect'=>['yes'=>(float)$result['yes_expertise_effect'],'no'=>(float)$result['no_expertise_effect']]
         ]);
         exit;
+        } catch(Throwable $voteError) {
+            try { $conn->rollback(); } catch(Throwable $ignored) {}
+            error_log("Topic weighted vote transaction: ".$voteError->getMessage());
+            http_response_code(500);
+            echo json_encode(['success'=>false,'message'=>'ثبت رأی به‌طور کامل انجام نشد؛ لطفاً دوباره تلاش کنید.']);
+            exit;
+        }
     }
 
     // ---------- رأی لازم‌الاجرا / غیر لازم‌الاجرا ----------

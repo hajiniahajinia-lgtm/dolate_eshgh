@@ -545,9 +545,20 @@ $review_details = [];
 $publication_proposal = null;
 $publication_vote_counts = ['approve'=>0, 'reject'=>0];
 $my_publication_vote = null;
+$entry_decision_link = null;
+
+// در صورت نصب دفتر تصمیم، پیوند آن را فقط در محدودهٔ دسترسی به موضوع مرجع می‌خوانیم.
+$decision_ledger_ready = false;
+$decision_ledger_check = $conn->query("SELECT COUNT(*) AS total FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='community_decision_records'");
+if ($decision_ledger_check) {
+    $decision_ledger_ready = (int)($decision_ledger_check->fetch_assoc()['total'] ?? 0) === 1;
+    $decision_ledger_check->close();
+}
+if ($decision_ledger_ready) require_once __DIR__ . '/community_decision_ledger.php';
 
 if ($entry_id > 0) {
     $stmt = $conn->prepare("SELECT k.*, u.username, c.name AS community_name, t.title AS source_topic_title, t.community_id AS source_topic_community_id,
+        COALESCE(t.topic_intent, 'decision') AS source_topic_intent,
         i.content AS source_idea_content, it.id AS source_idea_topic_id, it.community_id AS source_idea_community_id
         FROM collective_knowledge_entries k
         JOIN users u ON u.id=k.created_by
@@ -567,6 +578,16 @@ if ($entry_id > 0) {
     $can_view_source_idea = false;
     if ($entry && !empty($entry['source_topic_id'])) {
         $can_view_source_topic = kl_member($conn, (int)$entry['source_topic_community_id'], $user_id);
+        if ($can_view_source_topic && $decision_ledger_ready) {
+            $candidate_decision_link = community_decision_get_knowledge_link($conn, (int)$entry['source_topic_id']);
+            if (
+                $candidate_decision_link &&
+                (int)$candidate_decision_link['community_id'] === (int)$entry['source_topic_community_id'] &&
+                (int)($candidate_decision_link['knowledge_entry_id'] ?? 0) === $entry_id
+            ) {
+                $entry_decision_link = $candidate_decision_link;
+            }
+        }
     }
     if ($entry && !empty($entry['source_idea_id'])) {
         $can_view_source_idea = kl_member($conn, (int)$entry['source_idea_community_id'], $user_id);
@@ -708,7 +729,8 @@ $entries = [];
 if ($entry_id === 0) {
     if ($selected_community_id > 0) {
         // در نمای یک جامعه، دانش اختصاصی همان جامعه به‌همراه دانش‌های عمومی نمایش داده می‌شود.
-        $stmt = $conn->prepare("SELECT k.id, k.title, k.entry_type, k.summary, k.visibility, k.community_id, k.status, k.created_at, u.username, c.name AS community_name, tc.name AS topic_category_name
+        $stmt = $conn->prepare("SELECT k.id, k.title, k.entry_type, k.summary, k.visibility, k.community_id, k.status, k.created_at, k.source_topic_id, u.username, c.name AS community_name, tc.name AS topic_category_name,
+                   COALESCE(st.topic_intent, 'decision') AS source_topic_intent
             FROM collective_knowledge_entries k
             JOIN users u ON u.id=k.created_by
             LEFT JOIN communities c ON c.id=k.community_id
@@ -726,7 +748,8 @@ if ($entry_id === 0) {
         }
     } else {
         // نمای همهٔ جوامع: دانش عمومی و دانش جوامعی که کاربر عضو آن‌هاست.
-        $stmt = $conn->prepare("SELECT k.id, k.title, k.entry_type, k.summary, k.visibility, k.community_id, k.status, k.created_at, u.username, c.name AS community_name, tc.name AS topic_category_name
+        $stmt = $conn->prepare("SELECT k.id, k.title, k.entry_type, k.summary, k.visibility, k.community_id, k.status, k.created_at, k.source_topic_id, u.username, c.name AS community_name, tc.name AS topic_category_name,
+                   COALESCE(st.topic_intent, 'decision') AS source_topic_intent
             FROM collective_knowledge_entries k
             JOIN users u ON u.id=k.created_by
             LEFT JOIN communities c ON c.id=k.community_id
@@ -812,7 +835,14 @@ textarea{resize:vertical}button,.button{display:inline-block;border:0;border-rad
 <h3>خلاصه</h3><p><?= nl2br(kl_h($entry['summary'])) ?></p>
 <h3>شرح و جزئیات</h3><div class="content"><?= kl_h($entry['content']) ?></div>
 <?php if (!empty($entry['evidence'])): ?><h3>شواهد و منابع</h3><div class="content"><?= kl_h($entry['evidence']) ?></div><?php endif; ?>
-<?php if (!empty($entry['source_topic_id']) && $can_view_source_topic): ?><p>موضوع مرتبط: <a href="community.php?id=<?= (int)($entry['source_topic_community_id'] ?? 0) ?>#topic-<?= (int)$entry['source_topic_id'] ?>">موضوع شمارهٔ <?= (int)$entry['source_topic_id'] ?></a> — <?= kl_h($entry['source_topic_title'] ?? '') ?></p><?php elseif (!empty($entry['source_topic_id'])): ?><p class="muted">موضوع مرجع در جامعهٔ دیگری است؛ برای مشاهده باید عضو آن جامعه باشید.</p><?php endif; ?>
+<?php if (!empty($entry['source_topic_id']) && $can_view_source_topic): ?><p>موضوع مرتبط: <a href="community.php?id=<?= (int)($entry['source_topic_community_id'] ?? 0) ?>#topic-<?= (int)$entry['source_topic_id'] ?>">موضوع شمارهٔ <?= (int)$entry['source_topic_id'] ?></a> — <?= kl_h($entry['source_topic_title'] ?? '') ?>
+<span class="tag">مسیر مبدأ: <?= ['knowledge'=>'دانش‌محور','decision'=>'تصمیم‌گیری','law'=>'قانون‌گذاری'][$entry['source_topic_intent'] ?? 'decision'] ?></span></p><?php elseif (!empty($entry['source_topic_id'])): ?><p class="muted">موضوع مرجع در جامعهٔ دیگری است؛ برای مشاهده باید عضو آن جامعه باشید.</p><?php endif; ?>
+<?php if ($entry_decision_link): ?>
+<p class="muted">📋 تصمیم جمعی مرتبط: شمارهٔ <?= (int)$entry_decision_link['decision_id'] ?> ·
+پذیرش: <?= $entry_decision_link['acceptance_status']==='accepted'?'پذیرفته‌شده':($entry_decision_link['acceptance_status']==='not_accepted'?'پذیرفته‌نشده':'بدون رأی') ?> ·
+وضعیت الزام: <?= $entry_decision_link['enforceability_status']==='enforceable'?'لازم‌الاجرا':($entry_decision_link['enforceability_status']==='not_enforceable'?'غیرلازم‌الاجرا':'تعیین‌نشده') ?> ·
+<a href="archived_topics.php?community_id=<?= (int)$entry_decision_link['community_id'] ?>#decision-<?= (int)$entry_decision_link['decision_id'] ?>">مشاهدهٔ تصمیم در آرشیو جامعه</a></p>
+<?php endif; ?>
 <?php if (!empty($entry['source_idea_id']) && $can_view_source_idea): ?><p>ایدهٔ مرتبط: <a href="community.php?id=<?= (int)($entry['source_idea_community_id'] ?? 0) ?>#topic-<?= (int)($entry['source_idea_topic_id'] ?? 0) ?>">مشاهدهٔ موضوع و ایدهٔ مرتبط</a> — <?= kl_h(mb_substr(strip_tags((string)($entry['source_idea_content'] ?? '')),0,180,'UTF-8')) ?></p><?php elseif (!empty($entry['source_idea_id'])): ?><p class="muted">ایدهٔ مرجع در جامعهٔ دیگری است؛ برای مشاهده باید عضو آن جامعه باشید.</p><?php endif; ?>
 
 <?php if ($entry['visibility'] === 'public' && (int)($entry['community_id'] ?? 0) > 0): ?>
@@ -950,6 +980,7 @@ textarea{resize:vertical}button,.button{display:inline-block;border:0;border-rad
 <div class="top"><a class="entry-title" href="knowledge_library.php?id=<?= (int)$item['id'] ?><?= $selected_community_id > 0 ? '&amp;community_id=' . (int)$selected_community_id : '' ?>"><?= kl_h($item['title']) ?></a><span class="tag"><?= kl_h(kl_type_label($item['entry_type'])) ?></span></div>
 <p class="summary"><?= nl2br(kl_h($item['summary'])) ?></p>
 <?php if (!empty($item['topic_category_name'])): ?><span class="tag"><?= kl_h($item['topic_category_name']) ?></span><?php endif; ?>
+<?php if (!empty($item['source_topic_id'])): ?><span class="tag">مسیر مبدأ: <?= ['knowledge'=>'دانش‌محور','decision'=>'تصمیم‌گیری','law'=>'قانون‌گذاری'][$item['source_topic_intent'] ?? 'decision'] ?></span><?php endif; ?>
 <div class="muted">ثبت‌کننده: <?= kl_h($item['username']) ?> · <?= $item['visibility']==='public'?'عمومی':'ویژهٔ '.kl_h($item['community_name'] ?? 'جامعه') ?> · <?= kl_h(kl_status_label($item['status'])) ?></div>
 </article><?php endforeach; ?>
 </section>

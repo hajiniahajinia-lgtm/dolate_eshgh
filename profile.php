@@ -249,6 +249,7 @@ document.addEventListener("DOMContentLoaded", function() {
 <h2 style="margin:0;">پروفایل</h2>
 <a href="expertise.php" style="display:inline-flex;align-items:center;justify-content:center;background:#287a55;color:#fff;text-decoration:none;padding:9px 13px;border-radius:8px;font-size:14px;font-weight:bold;white-space:nowrap;">شایستگی تخصصی</a>
 <a href="search.php" style="display:inline-flex;align-items:center;justify-content:center;gap:6px;background:#1769aa;color:#fff;text-decoration:none;padding:9px 13px;border-radius:8px;font-size:14px;font-weight:bold;white-space:nowrap;">🔎 سرچ</a>
+<a href="community_charter_amendments.php" style="display:inline-flex;align-items:center;justify-content:center;background:#6741a5;color:#fff;text-decoration:none;padding:9px 13px;border-radius:8px;font-size:14px;font-weight:bold;white-space:nowrap;">📜 منشور بنیادین</a>
 </div>
 <a href="knowledge_library.php" style="display:block;text-align:center;background:#176b56;color:#fff;text-decoration:none;padding:10px 13px;border-radius:8px;font-size:14px;font-weight:bold;margin:8px 0 12px;">📚 کتابخانهٔ دانش جمعی</a>
 <button type="button" class="edit" onclick="toggleEditForm()">تکمیل/ویرایش پروفایل</button>
@@ -310,14 +311,20 @@ document.addEventListener("DOMContentLoaded", function() {
 <details>
 <summary style="display:block;cursor:pointer;background:#2065d1;color:#fff;border-radius:7px;padding:12px;text-align:center;font-weight:bold;list-style:none;">🗳️ رأی‌گیری دربارهٔ جایگاه جوامع</summary>
 <div style="padding-top:10px;">
-<p style="font-size:13px;line-height:1.9;color:#596579;">هر کاربر می‌تواند برای هر جامعه یک رأی ثبت کند: جامعهٔ مستقل یا زیرمجموعهٔ یک جامعهٔ دیگر. هر رأی‌دهنده می‌تواند نظرش را تغییر دهد. جایگاه برنده فقط وقتی تغییر می‌کند که یک گزینه بیشترین رأی یکتا را داشته باشد؛ در تساوی، جایگاه فعلی حفظ می‌شود.</p>
+<p style="font-size:13px;line-height:1.9;color:#596579;">فقط اعضای هر جامعه حق رأی دارند. فهرست رأی‌دهندگان در آغاز هر دور ثابت می‌شود؛ مهلت هر دور ۷ روز است و رأی تا پایان مهلت قابل تغییر خواهد بود. تغییر جایگاه فقط با مشارکت حداقل نصف اعضا (و دست‌کم دو نفر) و موافقت حداقل دوسوم آرای معتبر انجام می‌شود.</p>
 <?php
-$hierarchy_schema_check = $conn->query("SHOW TABLES LIKE 'community_parent_votes'");
-$hierarchy_votes_ready = $hierarchy_schema_check && $hierarchy_schema_check->num_rows > 0;
-if ($hierarchy_schema_check) $hierarchy_schema_check->close();
-
+ $hierarchy_rounds_check = $conn->query("SHOW TABLES LIKE 'community_parent_vote_rounds'");
+$hierarchy_electorate_check = $conn->query("SHOW TABLES LIKE 'community_parent_vote_electorate'");
+$hierarchy_round_votes_check = $conn->query("SHOW TABLES LIKE 'community_parent_round_votes'");
+$hierarchy_votes_ready = $hierarchy_rounds_check && $hierarchy_rounds_check->num_rows > 0
+    && $hierarchy_electorate_check && $hierarchy_electorate_check->num_rows > 0
+    && $hierarchy_round_votes_check && $hierarchy_round_votes_check->num_rows > 0;
+foreach ([$hierarchy_rounds_check, $hierarchy_electorate_check, $hierarchy_round_votes_check] as $check_result) {
+    if ($check_result) $check_result->close();
+}
 $hierarchy_communities = [];
 $hierarchy_parent_map = [];
+$hierarchy_rounds = [];
 $hierarchy_vote_counts = [];
 $hierarchy_user_votes = [];
 if ($hierarchy_votes_ready) {
@@ -331,44 +338,94 @@ if ($hierarchy_votes_ready) {
         }
         $hres->free();
     }
-    $vc = $conn->query("SELECT community_id, parent_community_id, COUNT(*) AS vote_count FROM community_parent_votes GROUP BY community_id, parent_community_id");
+    $round_query = $conn->query("SELECT r.*, (r.deadline <= NOW()) AS is_expired FROM community_parent_vote_rounds r
+        INNER JOIN (SELECT community_id, MAX(id) AS latest_id FROM community_parent_vote_rounds GROUP BY community_id) latest
+        ON latest.latest_id = r.id");
+    if ($round_query) {
+        while ($rr = $round_query->fetch_assoc()) $hierarchy_rounds[(int)$rr['community_id']] = $rr;
+        $round_query->free();
+    }
+    $vc = $conn->query("SELECT v.round_id, v.parent_community_id, COUNT(*) AS vote_count
+        FROM community_parent_round_votes v
+        INNER JOIN (SELECT community_id, MAX(id) AS latest_id FROM community_parent_vote_rounds GROUP BY community_id) latest
+        ON latest.latest_id = v.round_id
+        GROUP BY v.round_id, v.parent_community_id");
     if ($vc) {
         while ($vr = $vc->fetch_assoc()) {
-            $cid = (int)$vr['community_id'];
+            $rid = (int)$vr['round_id'];
             $pid = $vr['parent_community_id'] === null ? 0 : (int)$vr['parent_community_id'];
-            $hierarchy_vote_counts[$cid][$pid] = (int)$vr['vote_count'];
+            $hierarchy_vote_counts[$rid][$pid] = (int)$vr['vote_count'];
         }
         $vc->free();
     }
-    $uv = $conn->prepare("SELECT community_id, parent_community_id FROM community_parent_votes WHERE user_id=?");
-    $uv->bind_param("i", $user_id);
-    $uv->execute();
-    $uvr = $uv->get_result();
-    while ($vr = $uvr->fetch_assoc()) {
-        $hierarchy_user_votes[(int)$vr['community_id']] = $vr['parent_community_id'] === null ? 0 : (int)$vr['parent_community_id'];
+    $uv = $conn->prepare("SELECT r.community_id, v.parent_community_id FROM community_parent_round_votes v
+        JOIN community_parent_vote_rounds r ON r.id=v.round_id
+        JOIN (SELECT community_id, MAX(id) AS latest_id FROM community_parent_vote_rounds GROUP BY community_id) latest
+          ON latest.latest_id=r.id WHERE v.user_id=?");
+    if ($uv) {
+        $uv->bind_param("i", $user_id);
+        if ($uv->execute()) {
+            $uvr = $uv->get_result();
+            while ($vr = $uvr->fetch_assoc()) $hierarchy_user_votes[(int)$vr['community_id']] = $vr['parent_community_id'] === null ? 0 : (int)$vr['parent_community_id'];
+        }
+        $uv->close();
     }
-    $uv->close();
 }
 ?>
 <?php if (!$hierarchy_votes_ready): ?>
-<p style="font-size:13px;line-height:1.9;color:#b42318;">برای فعال‌شدن رأی‌گیری، فایل <strong>community_parent_votes.sql</strong> را یک‌بار در پایگاه دادهٔ هاست اجرا کنید. این فایل فقط جدول رأی‌ها را اضافه می‌کند و داده‌های موجود را حذف نمی‌کند.</p>
+<p style="font-size:13px;line-height:1.9;color:#b42318;">ساختار دورهای رأی‌گیری هنوز در پایگاه داده نصب نشده است. پس از اجرای migration مربوط به رأی‌گیری جایگاه جوامع، این بخش فعال می‌شود.</p>
 <?php elseif (empty($hierarchy_communities)): ?>
 <p>هنوز جامعه‌ای برای رأی‌گیری وجود ندارد.</p>
 <?php else: ?>
 <?php if (($_GET['hierarchy_status'] ?? '') === 'voted'): ?>
-<p style="color:#18794e;font-size:13px;">رأی شما ثبت شد. جایگاه جامعه بر اساس بیشترین رأی یکتا به‌روزرسانی می‌شود.</p>
+<p style="color:#18794e;font-size:13px;">رأی شما در دور جاری ثبت شد. نتیجه فقط پس از پایان مهلت و بررسی حدنصاب اعمال می‌شود.</p>
 <?php elseif (($_GET['hierarchy_status'] ?? '') === 'cycle'): ?>
 <p style="color:#b42318;font-size:13px;">این گزینه می‌تواند چرخه در ساختار جوامع ایجاد کند و قابل رأی‌دادن نیست.</p>
+<?php elseif (in_array(($_GET['hierarchy_status'] ?? ''), ['insufficient', 'rejected'], true)): ?>
+<p style="color:#b42318;font-size:13px;">دور رأی‌گیری پایان یافت اما شرایط لازم برای تغییر جایگاه جامعه فراهم نشد؛ جایگاه فعلی حفظ شد.</p>
+<?php elseif (($_GET['hierarchy_status'] ?? '') === 'approved'): ?>
+<p style="color:#18794e;font-size:13px;">دور رأی‌گیری با شرایط مقرر تصویب شد و جایگاه جامعه به‌روزرسانی گردید.</p>
+<?php elseif (($_GET['hierarchy_status'] ?? '') === 'law_review_pending'): ?>
+<p style="color:#8a4b08;font-size:13px;">تغییر جایگاه فعلاً متوقف شد؛ بررسی حقوقی یک یا چند قانون مرتبط در جریان است. پس از تکمیل بررسی، می‌توانید دوباره رأی‌گیری جایگاه را نهایی کنید تا تعارض یا نقص در بررسی قوانین ایجاد نشود.</p>
+<?php elseif (($_GET['hierarchy_status'] ?? '') === 'already_finalized'): ?>
+<p style="color:#596579;font-size:13px;">این دور قبلاً نهایی شده است؛ صفحه را تازه‌سازی کنید تا وضعیت دور بعدی را ببینید.</p>
+<?php elseif (($_GET['hierarchy_status'] ?? '') === 'round_expired'): ?>
+<p style="color:#8a4b08;font-size:13px;">مهلت رأی‌گیری تمام شده است؛ صفحه را تازه‌سازی کنید تا نتیجه نهایی شود.</p>
+<?php elseif (($_GET['hierarchy_status'] ?? '') === 'not_expired'): ?>
+<p style="color:#8a4b08;font-size:13px;">مهلت رأی‌گیری هنوز تمام نشده است؛ فعلاً امکان نهایی‌سازی وجود ندارد.</p>
 <?php elseif (($_GET['hierarchy_status'] ?? '') === 'schema'): ?>
-<p style="color:#b42318;font-size:13px;">جدول رأی‌گیری هنوز در پایگاه داده آماده نیست.</p>
+<p style="color:#b42318;font-size:13px;">ساختار جدید رأی‌گیری در پایگاه داده نصب نشده است.</p>
 <?php endif; ?>
 <?php foreach ($hierarchy_communities as $hc): ?>
 <?php
 $cid = (int)$hc['id'];
-$counts_for_community = $hierarchy_vote_counts[$cid] ?? [];
+$round_info = $hierarchy_rounds[$cid] ?? null;
+$round_id = $round_info ? (int)$round_info['id'] : 0;
+$counts_for_community = $round_id > 0 ? ($hierarchy_vote_counts[$round_id] ?? []) : [];
 $total_community_votes = array_sum($counts_for_community);
-$current_vote = array_key_exists($cid, $hierarchy_user_votes) ? $hierarchy_user_votes[$cid] : $hc['parent_community_id'];
+$round_is_open = $round_info && $round_info['status'] === 'open' && (int)$round_info['is_expired'] === 0;
+$current_vote = ($round_is_open && array_key_exists($cid, $hierarchy_user_votes))
+    ? $hierarchy_user_votes[$cid] : $hc['parent_community_id'];
 $current_parent_id = $hc['parent_community_id'];
+$member_stmt = $conn->prepare("SELECT 1 FROM community_members WHERE community_id=? AND user_id=? LIMIT 1");
+$is_hierarchy_member = false;
+if ($member_stmt) {
+    $member_stmt->bind_param("ii", $cid, $user_id);
+    if ($member_stmt->execute()) $is_hierarchy_member = (bool)$member_stmt->get_result()->fetch_row();
+    $member_stmt->close();
+}
+$is_hierarchy_voter = $is_hierarchy_member;
+if ($round_info && $round_info['status'] === 'open' && (int)$round_info['is_expired'] === 0) {
+    $elector_check = $conn->prepare(
+        "SELECT 1 FROM community_parent_vote_electorate WHERE round_id=? AND user_id=? LIMIT 1"
+    );
+    $is_hierarchy_voter = false;
+    if ($elector_check) {
+        $elector_check->bind_param("ii", $round_id, $user_id);
+        if ($elector_check->execute()) $is_hierarchy_voter = (bool)$elector_check->get_result()->fetch_row();
+        $elector_check->close();
+    }
+}
 $current_parent_name = 'مستقل';
 foreach ($hierarchy_communities as $candidate_row) {
     if ((int)$candidate_row['id'] === $current_parent_id && $current_parent_id > 0) {
@@ -381,12 +438,24 @@ foreach ($hierarchy_communities as $candidate_row) {
 <strong><?= htmlspecialchars($hc['name'], ENT_QUOTES, 'UTF-8') ?></strong>
 <div style="font-size:12px;color:#596579;margin:4px 0 8px;line-height:1.8;">
 جایگاه فعلی: <strong><?= htmlspecialchars($current_parent_name, ENT_QUOTES, 'UTF-8') ?></strong>
-— مجموع رأی‌ها: <?= $total_community_votes ?>
+— رأی‌های ثبت‌شده در این دور: <?= $total_community_votes ?>
 </div>
+<?php if ($round_is_open): ?>
+<div style="font-size:12px;color:#596579;margin:4px 0 8px;line-height:1.8;">
+مهلت پایان: <?= htmlspecialchars($round_info['deadline'], ENT_QUOTES, 'UTF-8') ?> —
+مشارکت لازم: <?= (int)$round_info['quorum_required'] ?> از <?= (int)$round_info['electorate_count'] ?> عضو
+</div>
+<?php elseif ($round_info && $round_info['status'] === 'open'): ?>
+<p style="font-size:12px;color:#8a4b08;">مهلت این دور گذشته است؛ با نخستین درخواست بعدی، نتیجه نهایی می‌شود.</p>
+<?php else: ?>
+<p style="font-size:12px;color:#596579;">برای آغاز دور بعدی، یکی از اعضا می‌تواند رأی خود را ثبت کند؛ مهلت دور جدید ۷ روز خواهد بود.</p>
+<?php endif; ?>
+<?php if ($is_hierarchy_voter || ($round_info && $round_info['status'] === 'open' && (int)$round_info['is_expired'] === 1)): ?>
 <form method="post" action="set_community_parent.php" style="margin:0;">
 <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($community_hierarchy_csrf, ENT_QUOTES, 'UTF-8') ?>">
 <input type="hidden" name="community_id" value="<?= $cid ?>">
 <input type="hidden" name="return_to" value="profile">
+<input type="hidden" name="action" value="<?= ($round_info && $round_info['status'] === 'open' && (int)$round_info['is_expired'] === 1) ? 'finalize' : 'vote' ?>">
 <label style="font-size:13px;display:block;">نظر شما دربارهٔ جایگاه این جامعه</label>
 <select name="parent_community_id" required>
 <option value="0" <?= $current_vote === 0 ? 'selected' : '' ?>>جامعهٔ مستقل (<?= (int)($counts_for_community[0] ?? 0) ?> رأی)</option>
@@ -407,8 +476,17 @@ if ($is_descendant) continue;
 <option value="<?= $pid ?>" <?= $current_vote === $pid ? 'selected' : '' ?>>زیرمجموعهٔ <?= htmlspecialchars($candidate['name'], ENT_QUOTES, 'UTF-8') ?> (<?= (int)($counts_for_community[$pid] ?? 0) ?> رأی)</option>
 <?php endforeach; ?>
 </select>
-<button type="submit" style="margin-top:7px;background:#facc15;color:#3b2f00;">ثبت / تغییر رأی</button>
+<button type="submit" style="margin-top:7px;background:#facc15;color:#3b2f00;"><?= ($round_info && $round_info['status'] === 'open' && (int)$round_info['is_expired'] === 1) ? 'بررسی و نهایی‌کردن دور پایان‌یافته' : 'ثبت / تغییر رأی' ?></button>
 </form>
+<?php else: ?>
+<p style="font-size:12px;color:#8a4b08;">
+<?php if ($is_hierarchy_member && $round_info && $round_info['status'] === 'open'): ?>
+عضویت شما پس از آغاز این دور ثبت شده است؛ می‌توانید در دور بعدی رأی بدهید.
+<?php else: ?>
+ثبت رأی فقط برای اعضای جامعه امکان‌پذیر است.
+<?php endif; ?>
+</p>
+<?php endif; ?>
 </div>
 <?php endforeach; ?>
 <?php endif; ?>

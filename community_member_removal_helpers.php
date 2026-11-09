@@ -10,67 +10,104 @@ function community_removal_tables_ready($conn) {
 }
 
 function community_removal_finalize_expired($conn, $community_id = 0) {
-    $sql = "SELECT id, community_id, target_user_id, member_count_snapshot
+    $sql = "SELECT id, community_id
             FROM community_member_removal_requests
             WHERE status='open' AND deadline_at <= NOW()";
     if ($community_id > 0) $sql .= " AND community_id=" . (int)$community_id;
+    $sql .= " ORDER BY community_id, id";
     $result = $conn->query($sql);
     if (!$result) return;
+
     while ($request = $result->fetch_assoc()) {
         $request_id = (int)$request['id'];
-        $yes_stmt = $conn->prepare("SELECT
-            SUM(CASE WHEN vote='yes' THEN 1 ELSE 0 END) AS yes_count,
-            SUM(CASE WHEN vote='no' THEN 1 ELSE 0 END) AS no_count,
-            COUNT(*) AS total_count
-            FROM community_member_removal_votes WHERE request_id=?");
-        if (!$yes_stmt) continue;
-        $yes_stmt->bind_param("i", $request_id);
-        $yes_stmt->execute();
-        $counts = $yes_stmt->get_result()->fetch_assoc() ?: [];
-        $yes_stmt->close();
+        $community_id_value = (int)$request['community_id'];
 
-        $yes = (int)($counts['yes_count'] ?? 0);
-        $no = (int)($counts['no_count'] ?? 0);
-        $total = (int)($counts['total_count'] ?? 0);
-        $quorum = (int)ceil(((int)$request['member_count_snapshot']) / 3);
-        $approved = $quorum > 0 && $total >= $quorum && $yes > $no;
-        $status = $approved ? 'approved' : 'rejected';
+        if (!$conn->begin_transaction()) {
+            error_log("Community member removal finalization: transaction start failed");
+            continue;
+        }
 
-        $conn->begin_transaction();
         try {
-            $lock = $conn->prepare("SELECT status FROM community_member_removal_requests WHERE id=? FOR UPDATE");
-            $lock->bind_param("i", $request_id);
-            $lock->execute();
-            $current = $lock->get_result()->fetch_assoc();
-            $lock->close();
-            if (!$current || $current['status'] !== 'open') {
+            // ترتیب قفل در تمام مسیرهای عضویت یکسان است: ابتدا جامعه، سپس درخواست.
+            $community_lock = $conn->prepare("SELECT id FROM communities WHERE id=? FOR UPDATE");
+            if (!$community_lock) throw new RuntimeException("prepare removal community lock failed");
+            $community_lock->bind_param("i", $community_id_value);
+            if (!$community_lock->execute()) throw new RuntimeException("lock removal community failed");
+            $community_exists = (bool)$community_lock->get_result()->fetch_row();
+            $community_lock->close();
+            if (!$community_exists) throw new RuntimeException("removal community no longer exists");
+
+            $request_lock = $conn->prepare(
+                "SELECT status, (deadline_at <= NOW()) AS is_expired, target_user_id, member_count_snapshot
+                 FROM community_member_removal_requests WHERE id=? FOR UPDATE"
+            );
+            if (!$request_lock) throw new RuntimeException("prepare removal request lock failed");
+            $request_lock->bind_param("i", $request_id);
+            if (!$request_lock->execute()) throw new RuntimeException("lock removal request failed");
+            $current = $request_lock->get_result()->fetch_assoc();
+            $request_lock->close();
+
+            if (!$current || $current['status'] !== 'open' || (int)$current['is_expired'] !== 1) {
                 $conn->commit();
                 continue;
             }
 
+            // شمارش رأی‌ها پس از گرفتن قفل‌ها انجام می‌شود تا رأی هم‌زمانِ پیش از مهلت جا نماند.
+            $vote_rows = $conn->prepare(
+                "SELECT vote FROM community_member_removal_votes WHERE request_id=? FOR UPDATE"
+            );
+            if (!$vote_rows) throw new RuntimeException("prepare removal vote count failed");
+            $vote_rows->bind_param("i", $request_id);
+            if (!$vote_rows->execute()) throw new RuntimeException("read removal votes failed");
+            $vote_result = $vote_rows->get_result();
+            $yes = 0;
+            $no = 0;
+            $total = 0;
+            while ($vote_row = $vote_result->fetch_assoc()) {
+                $total++;
+                if ($vote_row['vote'] === 'yes') $yes++;
+                elseif ($vote_row['vote'] === 'no') $no++;
+            }
+            $vote_rows->close();
+
+            $quorum = (int)ceil(((int)$current['member_count_snapshot']) / 3);
+            $approved = $quorum > 0 && $total >= $quorum && $yes > $no;
+            $status = $approved ? 'approved' : 'rejected';
+
             if ($approved) {
-                $del = $conn->prepare("DELETE FROM community_members WHERE community_id=? AND user_id=?");
-                $community_id_value = (int)$request['community_id'];
-                $target_id = (int)$request['target_user_id'];
-                $del->bind_param("ii", $community_id_value, $target_id);
-                $del->execute();
-                $removed = $del->affected_rows;
-                $del->close();
+                $delete_member = $conn->prepare(
+                    "DELETE FROM community_members WHERE community_id=? AND user_id=?"
+                );
+                if (!$delete_member) throw new RuntimeException("prepare member removal failed");
+                $target_user_id = (int)$current['target_user_id'];
+                $delete_member->bind_param("ii", $community_id_value, $target_user_id);
+                if (!$delete_member->execute()) throw new RuntimeException("remove member failed");
+                $removed = $delete_member->affected_rows;
+                $delete_member->close();
+
                 if ($removed > 0) {
-                    $upd_members = $conn->prepare("UPDATE communities SET members_count=GREATEST(members_count-1,0) WHERE id=?");
-                    $upd_members->bind_param("i", $community_id_value);
-                    $upd_members->execute();
-                    $upd_members->close();
+                    $update_count = $conn->prepare(
+                        "UPDATE communities SET members_count=GREATEST(members_count-?,0) WHERE id=?"
+                    );
+                    if (!$update_count) throw new RuntimeException("prepare member count update failed");
+                    $update_count->bind_param("ii", $removed, $community_id_value);
+                    if (!$update_count->execute()) throw new RuntimeException("update member count failed");
+                    $update_count->close();
                 } else {
-                    // اگر فرد پیش‌تر خارج شده باشد، رأی‌گیری دیگر اخراج تازه‌ای انجام نمی‌دهد.
                     $status = 'rejected';
                 }
             }
-            $finish = $conn->prepare("UPDATE community_member_removal_requests SET status=?, decided_at=NOW() WHERE id=? AND status='open'");
+
+            $finish = $conn->prepare(
+                "UPDATE community_member_removal_requests
+                 SET status=?, decided_at=NOW() WHERE id=? AND status='open'"
+            );
+            if (!$finish) throw new RuntimeException("prepare removal finalization failed");
             $finish->bind_param("si", $status, $request_id);
-            $finish->execute();
+            if (!$finish->execute()) throw new RuntimeException("finalize removal request failed");
             $finish->close();
-            $conn->commit();
+
+            if (!$conn->commit()) throw new RuntimeException("commit member removal failed");
         } catch (Throwable $e) {
             $conn->rollback();
             error_log("Community member removal finalization failed: " . $e->getMessage());

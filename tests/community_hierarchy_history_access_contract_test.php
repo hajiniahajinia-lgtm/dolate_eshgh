@@ -19,7 +19,8 @@ $checks = [
         strpos($page, 'INNER JOIN community_members cm ON cm.community_id=c.id AND cm.user_id=?') !== false &&
         strpos($page, 'WHERE c.id=? LIMIT 1') !== false,
     'nonmembers are denied before any history query is executed' =>
-        strpos($page, "http_response_code($community_exists ? 403 : 404)") < strpos($page, 'FROM community_hierarchy_change_history'),
+        strpos($page, 'http_response_code($community_exists ? 403 : 404)') !== false &&
+        strpos($page, 'http_response_code($community_exists ? 403 : 404)') < strpos($page, 'FROM community_hierarchy_change_history'),
     'history query is scoped to the requested community with bound parameters' =>
         strpos($page, 'WHERE h.community_id=?') !== false &&
         strpos($page, 'bind_param(\'iii\', $community_id, $page_size, $offset)') !== false,

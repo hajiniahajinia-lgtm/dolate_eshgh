@@ -1,6 +1,7 @@
 <?php
 // منطق مشترک نهایی‌سازی رأی و ساخت پروندهٔ دانش.
 // این فایل از صفحات جامعه و رأی‌گیری فراخوانی می‌شود.
+require_once __DIR__ . '/community_decision_ledger.php';
 
 // ایجاد پروندهٔ دانش و snapshot تصمیم؛ این عملیات برای هر موضوع فقط یک‌بار انجام می‌شود.
 function create_collective_knowledge_decision($conn, $topic_id, $fallback_user_id) {
@@ -19,20 +20,79 @@ function create_collective_knowledge_decision($conn, $topic_id, $fallback_user_i
         $meta_stmt->close();
         if (!$meta_row) throw new Exception("topic voting metadata not found");
 
-        $existing_stmt = $conn->prepare("SELECT entry_id FROM collective_knowledge_decisions WHERE topic_id=? LIMIT 1");
-        if (!$existing_stmt) throw new Exception("decision check prepare: " . $conn->error);
-        $existing_stmt->bind_param("i", $topic_id);
-        if (!$existing_stmt->execute()) throw new Exception("decision check execute: " . $existing_stmt->error);
-        $existing = $existing_stmt->get_result()->fetch_assoc();
-        $existing_stmt->close();
-        if ($existing) {
-            $conn->commit();
-            return true;
+        // جدول snapshot قدیمی اختياری است؛ دفتر مستقل تصمیم مرجع جدید خواهد بود.
+        $legacy_table_check = $conn->query(
+            "SELECT 1 FROM information_schema.tables
+             WHERE table_schema=DATABASE() AND table_name='collective_knowledge_decisions'
+             LIMIT 1"
+        );
+        if (!$legacy_table_check) throw new Exception("legacy decision table check failed: " . $conn->error);
+        $legacy_decisions_available = (bool)$legacy_table_check->fetch_row();
+        $legacy_table_check->free();
+
+        if ($legacy_decisions_available) {
+            $existing_stmt = $conn->prepare(
+                "SELECT entry_id FROM collective_knowledge_decisions WHERE topic_id=? LIMIT 1"
+            );
+            if (!$existing_stmt) throw new Exception("decision check prepare: " . $conn->error);
+            $existing_stmt->bind_param("i", $topic_id);
+            if (!$existing_stmt->execute()) throw new Exception("decision check execute: " . $existing_stmt->error);
+            $existing = $existing_stmt->get_result()->fetch_assoc();
+            $existing_stmt->close();
+            if ($existing) {
+                // مهاجرت تدریجی: snapshotهای قدیمی هنگام مراجعه به دفتر مستقل منتقل می‌شوند.
+                $legacy_snapshot_stmt = $conn->prepare(
+                    "SELECT t.community_id, COALESCE(t.topic_intent, 'decision') AS topic_intent,
+                            d.selected_idea_id, d.selected_idea_content,
+                            d.topic_purpose_snapshot, d.acceptance_status, d.enforceability_status,
+                            d.yes_count, d.no_count, d.yes_weight, d.no_weight,
+                            d.yes_percent, d.weighted_yes_percent,
+                            d.enforce_yes_count, d.enforce_no_count, d.finalized_at
+                     FROM collective_knowledge_decisions d
+                     JOIN topics t ON t.id=d.topic_id
+                     WHERE d.topic_id=? LIMIT 1"
+                );
+                if (!$legacy_snapshot_stmt) throw new Exception("legacy snapshot lookup prepare: " . $conn->error);
+                $legacy_snapshot_stmt->bind_param("i", $topic_id);
+                if (!$legacy_snapshot_stmt->execute()) throw new Exception("legacy snapshot lookup execute: " . $legacy_snapshot_stmt->error);
+                $legacy_row = $legacy_snapshot_stmt->get_result()->fetch_assoc();
+                $legacy_snapshot_stmt->close();
+                if (!$legacy_row) throw new Exception("legacy decision exists but its source topic is missing");
+
+                $legacy_idea_id = (int)$legacy_row['selected_idea_id'] > 0
+                    ? (int)$legacy_row['selected_idea_id']
+                    : null;
+                $legacy_snapshot = [
+                    'community_id' => (int)$legacy_row['community_id'],
+                    'source_topic_id' => (int)$topic_id,
+                    'source_idea_id' => $legacy_idea_id,
+                    'topic_purpose_snapshot' => (string)$legacy_row['topic_purpose_snapshot'],
+                    'topic_intent' => in_array($legacy_row['topic_intent'], ['knowledge', 'decision', 'law'], true) ? (string)$legacy_row['topic_intent'] : 'decision',
+                    'selected_idea_content' => $legacy_row['selected_idea_content'],
+                    'acceptance_status' => (string)$legacy_row['acceptance_status'],
+                    'enforceability_status' => (string)$legacy_row['enforceability_status'],
+                    'yes_count' => (int)$legacy_row['yes_count'],
+                    'no_count' => (int)$legacy_row['no_count'],
+                    'yes_weight' => (float)$legacy_row['yes_weight'],
+                    'no_weight' => (float)$legacy_row['no_weight'],
+                    'yes_percent' => (float)$legacy_row['yes_percent'],
+                    'weighted_yes_percent' => (float)$legacy_row['weighted_yes_percent'],
+                    'enforce_yes_count' => (int)$legacy_row['enforce_yes_count'],
+                    'enforce_no_count' => (int)$legacy_row['enforce_no_count'],
+                    'decided_at' => (string)$legacy_row['finalized_at'],
+                ];
+                if (!community_decision_record_snapshot($conn, $legacy_snapshot)) {
+                    throw new Exception("legacy decision could not be copied to the independent ledger");
+                }
+                if (!$conn->commit()) throw new Exception("legacy decision migration commit failed");
+                return true;
+            }
         }
 
         $topic_stmt = $conn->prepare("
             SELECT t.title, t.description, t.user_id, t.community_id,
                    COALESCE(t.topic_purpose, 'mixed') AS topic_purpose,
+                   COALESCE(t.topic_intent, 'decision') AS topic_intent,
                    w.idea_id, i.content AS idea_content
             FROM topics t
             LEFT JOIN topic_winners w ON w.topic_id=t.id
@@ -90,18 +150,20 @@ function create_collective_knowledge_decision($conn, $topic_id, $fallback_user_i
         $enforceability_status = $enforce_yes > $enforce_no ? 'enforceable' : ($enforce_no > $enforce_yes ? 'not_enforceable' : 'undecided');
 
         $purpose = in_array($topic['topic_purpose'], ['knowledge', 'execution', 'mixed'], true) ? $topic['topic_purpose'] : 'mixed';
+        $topic_intent = in_array($topic['topic_intent'], ['knowledge', 'decision', 'law'], true) ? $topic['topic_intent'] : 'decision';
+        $intent_label = $topic_intent === 'knowledge' ? 'دانش‌محور' : ($topic_intent === 'law' ? 'قانون‌گذاری' : 'تصمیم‌گیری');
         $entry_type = $purpose === 'knowledge' ? 'research' : ($purpose === 'execution' ? 'solution' : 'lesson');
         $purpose_label = $purpose === 'knowledge' ? 'شناختی' : ($purpose === 'execution' ? 'اجرایی' : 'ترکیبی');
         $topic_title = trim((string)$topic['title']);
         $entry_title = mb_substr('پروندهٔ دانش: ' . $topic_title, 0, 180, 'UTF-8');
-        $summary = mb_substr('پروندهٔ دانش جمعی برای موضوع «' . $topic_title . '». ماهیت موضوع: ' . $purpose_label . '. ایدهٔ منتخب و نتیجهٔ پذیرش جمعی و لازم‌الاجرا بودن در بخش‌های جداگانه ثبت شده‌اند.', 0, 1000, 'UTF-8');
+        $summary = mb_substr('پروندهٔ دانش جمعی برای موضوع «' . $topic_title . '». مسیر موضوع: ' . $intent_label . '. ماهیت موضوع: ' . $purpose_label . '. ایدهٔ منتخب فقط موضوع بررسی است و شواهد و ارزیابی دانش باید جداگانه سنجیده شوند.', 0, 1000, 'UTF-8');
         $idea_content = $topic['idea_content'] !== null ? (string)$topic['idea_content'] : null;
         $content = "موضوع: " . $topic_title . "\n\n";
+        $content .= "مسیر موضوع: " . $intent_label . "\n\n";
         $content .= "ماهیت موضوع: " . $purpose_label . "\n\n";
         $content .= "شرح موضوع:\n" . trim((string)$topic['description']) . "\n\n";
-        $content .= "ایدهٔ منتخب بر اساس ارزیابی ثبت‌شده در سامانه:\n" . ($idea_content !== null && trim($idea_content) !== '' ? $idea_content : 'برای این موضوع ایده‌ای به‌عنوان منتخب ثبت نشده است.') . "\n\n";
-        $content .= "نتیجهٔ رأی پذیرش جمعی: " . $acceptance_status . "؛ موافق: " . $yes_count . "، مخالف: " . $no_count . "، درصد موافق خام: " . $yes_percent . "٪، درصد موافق وزنی: " . $weighted_yes_percent . "٪.\n";
-        $content .= "نتیجهٔ رأی لازم‌الاجرا بودن: " . $enforceability_status . "؛ موافق اجرا: " . $enforce_yes . "، مخالف اجرا: " . $enforce_no . ".\n\n";
+        $content .= "ایدهٔ منتخب در فرآیند جمعی (برای بررسی، نه اثبات صحت):\n" . ($idea_content !== null && trim($idea_content) !== '' ? $idea_content : 'برای این موضوع ایده‌ای به‌عنوان منتخب ثبت نشده است.') . "\n\n";
+        $content .= "یادداشت تفکیک: شمار رأی‌ها، نتیجهٔ تصمیم و وضعیت اجرای آن در دفتر مستقل تصمیم‌های جامعه نگهداری می‌شود و بخشی از محتوای دانش نیست.\n\n";
         $quality_notes = [];
         if (mb_strlen(trim($topic_title), 'UTF-8') < 10) $quality_notes[] = 'عنوان موضوع کوتاه است';
         if (trim((string)$topic['description']) === '') $quality_notes[] = 'شرح موضوع ثبت نشده است';
@@ -112,6 +174,64 @@ function create_collective_knowledge_decision($conn, $topic_id, $fallback_user_i
             $content .= "وضعیت کفایت اطلاعات اولیه: دارای عنوان، شرح و ایدهٔ منتخب؛ این موارد هنوز نیازمند بررسی و ارزیابی هستند.\n\n";
         }
         $content .= "یادآوری: انتخاب جمعی یا برتری یک ایده به‌تنهایی به معنای اثبات علمی یا تجربی آن نیست. شواهد و نتایج اجرا باید جداگانه بررسی و تکمیل شوند.";
+
+        // نخست نتیجهٔ جمعی در دفتر مستقل تصمیم ثبت و تثبیت می‌شود؛
+        // ساخت یا ارزیابی پروندهٔ دانش در تراکنش جداگانه انجام خواهد شد.
+        $decision_time_result = $conn->query("SELECT NOW() AS decided_at");
+        if (!$decision_time_result) throw new Exception("decision timestamp lookup failed: " . $conn->error);
+        $decision_time_row = $decision_time_result->fetch_assoc() ?: [];
+        $decision_time_result->free();
+        $decision_snapshot = [
+            'community_id' => (int)$topic['community_id'],
+            'source_topic_id' => (int)$topic_id,
+            'source_idea_id' => $source_idea_id,
+            'topic_purpose_snapshot' => $purpose,
+            'topic_intent' => $topic_intent,
+            'selected_idea_content' => $idea_content,
+            'acceptance_status' => $acceptance_status,
+            'enforceability_status' => $enforceability_status,
+            'yes_count' => $yes_count,
+            'no_count' => $no_count,
+            'yes_weight' => $yes_weight,
+            'no_weight' => $no_weight,
+            'yes_percent' => $yes_percent,
+            'weighted_yes_percent' => $weighted_yes_percent,
+            'enforce_yes_count' => $enforce_yes,
+            'enforce_no_count' => $enforce_no,
+            'decided_at' => (string)($decision_time_row['decided_at'] ?? ''),
+        ];
+        if (!community_decision_record_snapshot($conn, $decision_snapshot)) {
+            throw new Exception("independent community decision snapshot could not be recorded");
+        }
+        if (!$conn->commit()) throw new Exception("decision ledger commit failed");
+
+        // از این نقطه به بعد، شکست کتابخانهٔ دانش نباید نتیجهٔ تصمیم را حذف کند.
+        if (!$conn->begin_transaction()) throw new Exception("knowledge transaction could not start");
+        $relock_meta = $conn->prepare(
+            "SELECT finalized FROM topic_voting_meta WHERE topic_id=? LIMIT 1 FOR UPDATE"
+        );
+        if (!$relock_meta) throw new Exception("meta relock prepare: " . $conn->error);
+        $relock_meta->bind_param("i", $topic_id);
+        if (!$relock_meta->execute()) throw new Exception("meta relock execute: " . $relock_meta->error);
+        $relocked_meta = $relock_meta->get_result()->fetch_assoc();
+        $relock_meta->close();
+        if (!$relocked_meta) throw new Exception("topic voting metadata disappeared before knowledge creation");
+
+        // درخواست هم‌زمان دیگری ممکن است در فاصلهٔ دو تراکنش پروندهٔ سازگاری قدیمی را ساخته باشد.
+        if ($legacy_decisions_available) {
+            $legacy_existing_stmt = $conn->prepare(
+                "SELECT entry_id FROM collective_knowledge_decisions WHERE topic_id=? LIMIT 1"
+            );
+            if (!$legacy_existing_stmt) throw new Exception("legacy decision recheck prepare: " . $conn->error);
+            $legacy_existing_stmt->bind_param("i", $topic_id);
+            if (!$legacy_existing_stmt->execute()) throw new Exception("legacy decision recheck execute: " . $legacy_existing_stmt->error);
+            $legacy_existing = $legacy_existing_stmt->get_result()->fetch_assoc();
+            $legacy_existing_stmt->close();
+            if ($legacy_existing) {
+                if (!$conn->commit()) throw new Exception("knowledge retry commit failed");
+                return true;
+            }
+        }
 
         $creator_id = (int)$topic['user_id'] > 0 ? (int)$topic['user_id'] : (int)$fallback_user_id;
         $community_value = (int)$topic['community_id'];
@@ -155,22 +275,31 @@ function create_collective_knowledge_decision($conn, $topic_id, $fallback_user_i
             $entry_stmt->close();
         }
 
-        $decision_stmt = $conn->prepare("
-            INSERT INTO collective_knowledge_decisions
-                (topic_id, entry_id, selected_idea_id, selected_idea_content, topic_purpose_snapshot,
-                 yes_count, no_count, yes_weight, no_weight, yes_percent, weighted_yes_percent,
-                 enforce_yes_count, enforce_no_count, acceptance_status, enforceability_status, finalized_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
-        ");
-        if (!$decision_stmt) throw new Exception("decision insert prepare: " . $conn->error);
-        $decision_stmt->bind_param(
-            "iiissiiddddiiss",
-            $topic_id, $entry_id, $source_idea_id, $idea_content, $purpose,
-            $yes_count, $no_count, $yes_weight, $no_weight, $yes_percent, $weighted_yes_percent,
-            $enforce_yes, $enforce_no, $acceptance_status, $enforceability_status
-        );
-        if (!$decision_stmt->execute()) throw new Exception("decision insert execute: " . $decision_stmt->error);
-        $decision_stmt->close();
+        // پیوند ارجاعی دانش به تصمیم مستقل؛ تصمیم حتی بدون پروندهٔ دانش نیز معتبر می‌ماند.
+        if (!community_decision_attach_knowledge_entry($conn, (int)$topic_id, (int)$entry_id)) {
+            throw new Exception("knowledge entry could not be linked to its independent decision record");
+        }
+
+        // تا زمانی که مصرف‌کنندگان قدیمی به دفتر مستقل منتقل نشده‌اند،
+        // snapshot سازگاری فقط در صورت وجود جدول قدیمی نیز نوشته می‌شود.
+        if ($legacy_decisions_available) {
+            $decision_stmt = $conn->prepare("
+                INSERT INTO collective_knowledge_decisions
+                    (topic_id, entry_id, selected_idea_id, selected_idea_content, topic_purpose_snapshot,
+                     yes_count, no_count, yes_weight, no_weight, yes_percent, weighted_yes_percent,
+                     enforce_yes_count, enforce_no_count, acceptance_status, enforceability_status, finalized_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+            ");
+            if (!$decision_stmt) throw new Exception("decision insert prepare: " . $conn->error);
+            $decision_stmt->bind_param(
+                "iiissiiddddiiss",
+                $topic_id, $entry_id, $source_idea_id, $idea_content, $purpose,
+                $yes_count, $no_count, $yes_weight, $no_weight, $yes_percent, $weighted_yes_percent,
+                $enforce_yes, $enforce_no, $acceptance_status, $enforceability_status
+            );
+            if (!$decision_stmt->execute()) throw new Exception("decision insert execute: " . $decision_stmt->error);
+            $decision_stmt->close();
+        }
 
         if (!$conn->commit()) throw new Exception("transaction commit failed");
         return true;
@@ -398,7 +527,7 @@ function ensure_collective_knowledge_drafts_for_community($conn, $community_id, 
     foreach ($topic_ids as $topic_id) {
         if (!$conn->begin_transaction()) continue;
         try {
-            $lock = $conn->prepare("SELECT id, title, description, topic_purpose, user_id, community_id FROM topics WHERE id=? AND community_id=? AND closed=0 LIMIT 1 FOR UPDATE");
+            $lock = $conn->prepare("SELECT id, title, description, topic_purpose, topic_intent, user_id, community_id FROM topics WHERE id=? AND community_id=? AND closed=0 LIMIT 1 FOR UPDATE");
             if (!$lock) throw new Exception("topic lock prepare: " . $conn->error);
             $lock->bind_param("ii", $topic_id, $community_id);
             if (!$lock->execute()) throw new Exception("topic lock execute: " . $lock->error);
@@ -421,12 +550,15 @@ function ensure_collective_knowledge_drafts_for_community($conn, $community_id, 
             }
 
             $purpose = in_array($topic['topic_purpose'], ['knowledge', 'execution', 'mixed'], true) ? $topic['topic_purpose'] : 'mixed';
+            $topic_intent = in_array($topic['topic_intent'], ['knowledge', 'decision', 'law'], true) ? $topic['topic_intent'] : 'decision';
+            $intent_label = $topic_intent === 'knowledge' ? 'دانش‌محور' : ($topic_intent === 'law' ? 'قانون‌گذاری' : 'تصمیم‌گیری');
             $entry_type = $purpose === 'knowledge' ? 'research' : ($purpose === 'execution' ? 'solution' : 'lesson');
             $purpose_label = $purpose === 'knowledge' ? 'شناختی' : ($purpose === 'execution' ? 'اجرایی' : 'ترکیبی');
             $topic_title = trim((string)$topic['title']);
             $entry_title = mb_substr('پروندهٔ در حال شکل‌گیری: ' . $topic_title, 0, 180, 'UTF-8');
-            $summary = mb_substr('پروندهٔ دانشِ در حال شکل‌گیری برای موضوع «' . $topic_title . '». این پرونده تا پایان بررسی و رأی موضوع تکمیل می‌شود.', 0, 1000, 'UTF-8');
+            $summary = mb_substr('پروندهٔ دانشِ در حال شکل‌گیری برای موضوع «' . $topic_title . '». مسیر موضوع: ' . $intent_label . '. این پرونده تا پایان بررسی و رأی موضوع تکمیل می‌شود.', 0, 1000, 'UTF-8');
             $content = "موضوع: " . $topic_title . "\n\n";
+            $content .= "مسیر موضوع: " . $intent_label . "\n\n";
             $content .= "ماهیت موضوع: " . $purpose_label . "\n\n";
             $content .= "شرح موضوع:\n" . trim((string)$topic['description']) . "\n\n";
             $content .= "وضعیت: در حال شکل‌گیری؛ هنوز هیچ ایده‌ای به‌عنوان منتخب نهایی و هیچ نتیجه‌ای به‌عنوان رأی جمعی ثبت نشده است.\n\n";

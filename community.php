@@ -164,6 +164,7 @@ textarea{resize:vertical;}
 .final-voting-toggle{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;min-height:42px;background:#4A82DA;color:#fff;border-radius:9px;padding:10px 14px;font-weight:bold;text-align:center;}
 .archive-topics-toggle{background:#2065d1;color:#fff;border-radius:8px;padding:12px 14px;font-weight:bold;}
 .finance-bank-toggle{display:block;width:100%;background:#147d64;color:#fff;border-radius:8px;padding:12px 14px;font-weight:bold;margin:8px 0 12px;}
+.community-laws-toggle{display:block;width:100%;background:#5b4b9a;color:#fff;border-radius:8px;padding:12px 14px;font-weight:bold;margin:8px 0 12px;text-align:center;box-sizing:border-box;}
 .final-voting-toggle{margin:0 0 16px;}
 .final-voting-toggle>summary{display:block;list-style:none;background:#4A82DA;color:#fff;cursor:pointer;border-radius:9px;padding:10px 14px;text-align:center;font-weight:bold;}
 .final-voting-toggle>summary::-webkit-details-marker{display:none;}
@@ -695,6 +696,8 @@ document.addEventListener('DOMContentLoaded', function () {
   </div>
   <div class="community-mobile-actions" id="communityMobileActions" aria-label="دسترسی‌های جامعه"></div>
   <a class="finance-bank-toggle" id="finance-bank-toggle" href="finance.php?community_id=<?= (int)$community_id ?>">🏦 بانک مالی و اموال جامعه</a>
+  <a class="community-laws-toggle" href="community_laws.php?community_id=<?= (int)$community_id ?>">⚖️ قوانین جامعه و قوانین بالادستی</a>
+  <a class="community-laws-toggle" href="community_charter_amendments.php">📜 منشور بنیادین و اصلاح آن</a>
   <div style="margin:0 0 12px;text-align:right;">
     <a href="profile.php" style="display:inline-block;background:#2065d1;color:#fff;text-decoration:none;padding:9px 14px;border-radius:8px;font-weight:bold;font-size:14px;">↩ بازگشت به پروفایل</a>
   </div>
@@ -931,6 +934,11 @@ document.addEventListener('DOMContentLoaded', function () {
       <?php else: ?>
         <p style="font-size:13px;color:#667085;">درخت جایگاه جامعه فعلاً در دسترس نیست.</p>
       <?php endif; ?>
+    <?php endif; ?>
+    <?php if ($is_community_member): ?>
+      <p style="margin:10px 0 0;font-size:13px;">
+        <a href="community_hierarchy_history.php?community_id=<?= (int)$community['id'] ?>" style="display:inline-block;background:#eef4ff;color:#1d4ed8;padding:8px 12px;border-radius:7px;">📜 مشاهده تاریخچه تغییرات جایگاه این جامعه</a>
+      </p>
     <?php endif; ?>
   </section>
   </details>
@@ -1422,13 +1430,13 @@ try {
         ?>
       </select>
       <div class="topic-field-hint"><span>این انتخاب فقط پیشنهاد است؛ تا زمانی که جامعه آن را تأیید نکند، هیچ وزن تخصصی به رأی‌ها اضافه نمی‌شود.</span></div>
-      <label for="topic-purpose-select" style="display:block;margin-top:8px;font-size:13px;">ماهیت موضوع</label>
-      <select id="topic-purpose-select" name="topic_purpose">
-        <option value="mixed" selected>ترکیبی؛ شناخت و بررسی همراه با امکان اقدام</option>
-        <option value="knowledge">شناختی؛ برای فهم و تولید دانش، بدون الزام به اجرا</option>
-        <option value="execution">اجرایی؛ برای حل مسئله یا ایجاد تغییر عملی</option>
+      <label for="topic-intent-select" style="display:block;margin-top:8px;font-size:13px;">نوع موضوع <span style="color:#b42318;">*</span></label>
+      <select id="topic-intent-select" name="topic_intent" required>
+        <option value="decision" selected>تصمیم‌گیری؛ برای انتخاب راه‌حل یا اقدام جمعی</option>
+        <option value="knowledge">دانش‌محور؛ برای شناخت مسئله، بررسی شواهد و تولید دانش</option>
+        <option value="law">قانون‌گذاری؛ برای پیشنهاد و بررسی یک قاعدهٔ الزام‌آور</option>
       </select>
-      <div class="topic-field-hint"><span>این انتخاب هدف موضوع را مشخص می‌کند؛ دربارهٔ پذیرش ایده یا لازم‌الاجرا بودن آن تصمیم نمی‌گیرد.</span></div>
+      <div class="topic-field-hint"><span>نوع موضوع مسیر رسیدگی را مشخص می‌کند؛ هیچ ایده یا رأیی خودکار قانون نمی‌شود. قانون فقط پس از طی فرایند رسمی تصویب و ابلاغ معتبر خواهد بود.</span></div>
       <textarea id="topic-title-input" name="topic_title" rows="2" maxlength="100" placeholder="عنوان موضوع*" aria-label="عنوان موضوع" required></textarea>
       <div class="topic-field-hint"><span>عنوانی کوتاه و روشن برای مسئله یا چالش بنویسید.</span><span class="topic-char-count" data-for="topic-title-input">۰ از ۱۰۰ نویسه</span></div>
       <textarea id="topic-description" name="topic_description" rows="3" maxlength="500" placeholder="شرح موضوع (اختیاری)" aria-label="شرح موضوع (اختیاری)"></textarea>
@@ -1456,6 +1464,8 @@ try {
 <!-- موضوعات در حال بحث و ایده‌ها -->
 <?php
 $topic_category_filter_id = max(0, (int)($_GET['topic_category'] ?? 0));
+$topic_intent_filter = (string)($_GET['topic_intent'] ?? '');
+if (!in_array($topic_intent_filter, ['knowledge', 'decision', 'law'], true)) $topic_intent_filter = '';
 $topic_category_counts = [];
 $topic_category_query = $conn->prepare("
     SELECT c.id, c.name, COUNT(t.id) AS topic_count
@@ -1480,13 +1490,13 @@ if ($topic_category_filter_id > 0 && !in_array($topic_category_filter_id, $valid
     $topic_category_filter_id = 0;
 }
 
-if ($topic_category_filter_id > 0) {
-    $topics_count_q = $conn->prepare("SELECT COUNT(*) AS cnt FROM topics WHERE community_id=? AND closed=0 AND category_id=?");
-    $topics_count_q->bind_param("ii", $community['id'], $topic_category_filter_id);
-} else {
-    $topics_count_q = $conn->prepare("SELECT COUNT(*) AS cnt FROM topics WHERE community_id=? AND closed=0");
-    $topics_count_q->bind_param("i", $community['id']);
-}
+$topics_count_q = $conn->prepare("
+    SELECT COUNT(*) AS cnt FROM topics
+    WHERE community_id=? AND closed=0
+      AND (?='' OR COALESCE(topic_intent, 'decision')=?)
+      AND (?=0 OR category_id=?)
+");
+$topics_count_q->bind_param("issii", $community['id'], $topic_intent_filter, $topic_intent_filter, $topic_category_filter_id, $topic_category_filter_id);
 $topics_count_q->execute();
 $topics_count_res = $topics_count_q->get_result()->fetch_assoc();
 $topics_count_q->close();
@@ -1494,7 +1504,7 @@ $topics_count = (int)$topics_count_res['cnt'];
 ?>
 <div class="box" style="background:#fff3a6; padding:20px;">
 <?php if ($topics_count > 5): ?>
-<details class="community-topics-toggle"<?= ((isset($_GET['open_topic']) && (int)$_GET['open_topic'] > 0) || isset($_GET['topic_category'])) ? ' open' : '' ?>>
+<details class="community-topics-toggle"<?= ((isset($_GET['open_topic']) && (int)$_GET['open_topic'] > 0) || isset($_GET['topic_category']) || isset($_GET['topic_intent'])) ? ' open' : '' ?>>
   <summary>📘 نمایش موضوعات در حال بحث (<?= $topics_count ?>)</summary>
   <div id="topics-wrapper" style="max-height:540px; overflow-y:auto; padding:10px;">
 <?php else: ?>
@@ -1503,7 +1513,14 @@ $topics_count = (int)$topics_count_res['cnt'];
 <?php endif; ?>
 <form method="get" action="community.php" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:0 10px 8px;">
   <input type="hidden" name="id" value="<?= (int)$community['id'] ?>">
-  <label for="topic-category-filter" style="font-size:13px;font-weight:bold;">نمایش دسته:</label>
+  <label for="topic-intent-filter" style="font-size:13px;font-weight:bold;">مسیر موضوع:</label>
+  <select id="topic-intent-filter" name="topic_intent" onchange="this.form.submit()" style="flex:1;min-width:180px;max-width:360px;margin:0;">
+    <option value=""<?= $topic_intent_filter === '' ? ' selected' : '' ?>>همهٔ مسیرها</option>
+    <option value="knowledge"<?= $topic_intent_filter === 'knowledge' ? ' selected' : '' ?>>دانش‌محور</option>
+    <option value="decision"<?= $topic_intent_filter === 'decision' ? ' selected' : '' ?>>تصمیم‌گیری</option>
+    <option value="law"<?= $topic_intent_filter === 'law' ? ' selected' : '' ?>>قانون‌گذاری</option>
+  </select>
+  <label for="topic-category-filter" style="font-size:13px;font-weight:bold;">دسته:</label>
   <select id="topic-category-filter" name="topic_category" onchange="this.form.submit()" style="flex:1;min-width:180px;max-width:360px;margin:0;">
     <option value="0"<?= $topic_category_filter_id === 0 ? ' selected' : '' ?>>همهٔ دسته‌ها</option>
     <?php foreach ($topic_category_counts as $category_option): ?>
@@ -1520,16 +1537,17 @@ $topic_sql = "
     FROM topics t
     LEFT JOIN topic_categories tc ON tc.id=t.category_id
     LEFT JOIN topic_priority_votes tp ON t.id=tp.topic_id
-    WHERE t.community_id=? AND t.closed=0";
+    WHERE t.community_id=? AND t.closed=0
+      AND (?='' OR COALESCE(t.topic_intent, 'decision')=?)";
 if ($topic_category_filter_id > 0) {
     $topic_sql .= " AND t.category_id=?";
 }
 $topic_sql .= " GROUP BY t.id, tc.name ORDER BY total_priority DESC, t.id ASC";
 $topics_list = $conn->prepare($topic_sql);
 if ($topic_category_filter_id > 0) {
-    $topics_list->bind_param("ii", $community['id'], $topic_category_filter_id);
+    $topics_list->bind_param("issii", $community['id'], $topic_intent_filter, $topic_intent_filter, $topic_category_filter_id, $topic_category_filter_id);
 } else {
-    $topics_list->bind_param("i", $community['id']);
+    $topics_list->bind_param("iss", $community['id'], $topic_intent_filter, $topic_intent_filter);
 }
 $topics_list->execute();
 $topics_res2 = $topics_list->get_result();
@@ -1604,11 +1622,29 @@ if ($remaining_seconds < 0) $remaining_seconds = 0;
 <details class="topic community-topic-item" id="topic-<?= (int)$tid ?>"<?= (isset($_GET['open_topic']) && (int)$_GET['open_topic'] === (int)$tid) ? ' open' : '' ?> style="<?= $is_closed ? 'opacity:0.6;' : '' ?>">
   <summary>
     <span class="community-topic-title"><?= htmlspecialchars($t2['title'], ENT_QUOTES, 'UTF-8') ?></span>
-    <small style="flex:0 0 auto;padding:3px 7px;border-radius:12px;background:#dcecff;color:#2456a6;font-size:10px;font-weight:normal;">
-      <?= htmlspecialchars($t2['category_name'] ?? 'سایر موضوعات', ENT_QUOTES, 'UTF-8') ?>
-    </small>
+    <span style="display:flex;flex-wrap:wrap;gap:4px;justify-content:flex-end;">
+      <small style="padding:3px 7px;border-radius:12px;background:#dcecff;color:#2456a6;font-size:10px;font-weight:normal;">
+        <?= htmlspecialchars($t2['category_name'] ?? 'سایر موضوعات', ENT_QUOTES, 'UTF-8') ?>
+      </small>
+      <?php
+        $topic_intent_value = in_array((string)($t2['topic_intent'] ?? 'decision'), ['knowledge','decision','law'], true) ? (string)$t2['topic_intent'] : 'decision';
+        $topic_intent_labels = ['knowledge'=>'دانش‌محور','decision'=>'تصمیم‌گیری','law'=>'قانون‌گذاری'];
+      ?>
+      <small style="padding:3px 7px;border-radius:12px;background:#eee8ff;color:#563b86;font-size:10px;font-weight:normal;">
+        <?= $topic_intent_labels[$topic_intent_value] ?>
+      </small>
+    </span>
   </summary>
   <div class="community-topic-body">
+  <div style="margin:0 0 10px;padding:7px 10px;background:#f7f5fb;border-right:3px solid #7b6aa6;border-radius:6px;font-size:12px;line-height:1.8;">
+    <?php if ($topic_intent_value === 'knowledge'): ?>
+      <strong>مسیر پیش‌رو: </strong>گردآوری شواهد، مباحثه و ارزیابی برای تولید دانش جمعی؛ نتیجه به‌خودی‌خود الزام اجرایی ندارد.
+    <?php elseif ($topic_intent_value === 'law'): ?>
+      <strong>مسیر پیش‌رو: </strong>پس از جمع‌بندی موضوع، منشأ قابل‌ردیابی برای پیش‌نویس قانون و بررسی رسمی فراهم می‌شود؛ رأی این موضوع به‌تنهایی قانون نیست.
+    <?php else: ?>
+      <strong>مسیر پیش‌رو: </strong>انتخاب نتیجهٔ جمعی و ثبت آن در دفتر تصمیم‌ها؛ الزام‌آوری تابع وضعیت تصمیم و قواعد معتبر جامعه است.
+    <?php endif; ?>
+  </div>
   <?php if (trim((string)($t2['description'] ?? '')) !== ''): ?>
     <div style="margin:0 0 10px;padding:8px 10px;background:rgba(255,255,255,.75);border-radius:7px;line-height:1.8;font-size:13px;"><?= nl2br(htmlspecialchars($t2['description'], ENT_QUOTES, 'UTF-8')) ?></div>
   <?php endif; ?>

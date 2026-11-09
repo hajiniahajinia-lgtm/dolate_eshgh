@@ -106,21 +106,23 @@ if (!$valid_category) {
     exit("لطفاً یک دسته‌بندی معتبر برای موضوع انتخاب کنید.");
 }
 
-// ماهیت موضوع؛ مقدار پیش‌فرض برای سازگاری mixed است.
-$topic_purpose = (string)($_POST['topic_purpose'] ?? 'mixed');
-if (!in_array($topic_purpose, ['knowledge', 'execution', 'mixed'], true)) {
+// مسیر اصلی موضوع از ابتدا مشخص می‌شود؛ این انتخاب نتیجهٔ رأی را به قانون تبدیل نمی‌کند.
+$topic_intent = (string)($_POST['topic_intent'] ?? 'decision');
+if (!in_array($topic_intent, ['knowledge', 'decision', 'law'], true)) {
     http_response_code(400);
-    exit("ماهیت انتخاب‌شده برای موضوع معتبر نیست.");
+    exit("نوع موضوع معتبر نیست.");
 }
+// سازگاری با منطق قدیمیِ تولید پروندهٔ دانش حفظ می‌شود.
+$topic_purpose = $topic_intent === 'knowledge' ? 'knowledge' : 'execution';
 
 $stmt = $conn->prepare("
     INSERT INTO topics
-    (community_id, title, description, user_id, priority, urgency, urgency_minutes, urgency_default_minutes, deadline, created_at, urgency_updated_at, category_id, topic_purpose)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    (community_id, title, description, user_id, priority, urgency, urgency_minutes, urgency_default_minutes, deadline, created_at, urgency_updated_at, category_id, topic_purpose, topic_intent)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ");
 
 $stmt->bind_param(
-    "issiiiiisssis",
+    "issiiiiisssiss",
     $community_id,
     $title,
     $description,
@@ -133,7 +135,8 @@ $stmt->bind_param(
     $created_at,
     $urgency_updated_at,
     $topic_category_id,
-    $topic_purpose
+    $topic_purpose,
+    $topic_intent
 );
 
 if ($stmt->execute()) {

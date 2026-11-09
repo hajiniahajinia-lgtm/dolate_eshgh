@@ -1,6 +1,6 @@
 <?php
 session_start();
-include "db.php";
+require __DIR__ . "/db.php";
 
 if (!isset($_SESSION['user_id'])) {
     header("Location: login.php");
@@ -14,7 +14,6 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit("درخواست نامعتبر است.");
 }
 
-// بررسی توکن CSRF پیش از تغییر عضویت
 if (
     empty($_SESSION['community_duty_csrf']) ||
     !isset($_POST['csrf_token']) ||
@@ -26,33 +25,80 @@ if (
 }
 
 $community_id = (int)($_POST['community_id'] ?? 0);
-
 if ($community_id <= 0) {
-    die("شناسه جامعه نامعتبر است. <a href='profile.php'>بازگشت</a>");
+    http_response_code(400);
+    exit("شناسه جامعه نامعتبر است.");
 }
 
-// بررسی اینکه کاربر قبلاً عضو نشده باشد
-$check = $conn->prepare("SELECT 1 FROM community_members WHERE community_id=? AND user_id=?");
-$check->bind_param("ii", $community_id, $user_id);
-$check->execute();
-$res = $check->get_result();
-$check->close();
+try {
+    if (!$conn->begin_transaction()) {
+        throw new RuntimeException("begin membership transaction failed");
+    }
 
-if ($res->num_rows > 0) {
-    die("شما قبلاً عضو این جامعه هستید. <a href='profile.php'>بازگشت</a>");
-}
+    // همان ردیف جامعه‌ای که آغاز دور رأی‌گیری قفل می‌کند، اینجا نیز قفل می‌شود.
+    // در نتیجه snapshot اعضا با عضویت/خروج هم‌زمان تداخل پیدا نمی‌کند.
+    $community_lock = $conn->prepare("SELECT id FROM communities WHERE id=? FOR UPDATE");
+    if (!$community_lock) {
+        throw new RuntimeException("prepare community lock failed");
+    }
+    $community_lock->bind_param("i", $community_id);
+    if (!$community_lock->execute()) {
+        throw new RuntimeException("lock community failed");
+    }
+    $community_exists = (bool)$community_lock->get_result()->fetch_row();
+    $community_lock->close();
 
-// درج عضویت
-$stmt = $conn->prepare("INSERT INTO community_members (community_id, user_id) VALUES (?, ?)");
-if (!$stmt) die("خطا در آماده‌سازی کوئری: " . $conn->error);
-$stmt->bind_param("ii", $community_id, $user_id);
+    if (!$community_exists) {
+        throw new DomainException("community not found");
+    }
 
-if ($stmt->execute()) {
-    $stmt->close();
-    // افزایش شمارش اعضا در communities
-    $conn->query("UPDATE communities SET members_count = members_count + 1 WHERE id = $community_id");
+    $check = $conn->prepare("SELECT 1 FROM community_members WHERE community_id=? AND user_id=? LIMIT 1");
+    if (!$check) {
+        throw new RuntimeException("prepare membership lookup failed");
+    }
+    $check->bind_param("ii", $community_id, $user_id);
+    if (!$check->execute()) {
+        throw new RuntimeException("membership lookup failed");
+    }
+    $already_member = (bool)$check->get_result()->fetch_row();
+    $check->close();
+
+    if ($already_member) {
+        $conn->rollback();
+        header("Location: profile.php?msg=already_member");
+        exit;
+    }
+
+    $insert = $conn->prepare("INSERT INTO community_members (community_id, user_id) VALUES (?, ?)");
+    if (!$insert) {
+        throw new RuntimeException("prepare membership insert failed");
+    }
+    $insert->bind_param("ii", $community_id, $user_id);
+    if (!$insert->execute()) {
+        throw new RuntimeException("membership insert failed");
+    }
+    $insert->close();
+
+    $count_update = $conn->prepare("UPDATE communities SET members_count=members_count+1 WHERE id=?");
+    if (!$count_update) {
+        throw new RuntimeException("prepare member count update failed");
+    }
+    $count_update->bind_param("i", $community_id);
+    if (!$count_update->execute() || $count_update->affected_rows !== 1) {
+        throw new RuntimeException("member count update failed");
+    }
+    $count_update->close();
+
+    if (!$conn->commit()) {
+        throw new RuntimeException("commit membership transaction failed");
+    }
+
     header("Location: profile.php?msg=joined_community");
     exit;
-} else {
-    die("خطا در عضویت در جامعه: " . $stmt->error);
+} catch (Throwable $e) {
+    $conn->rollback();
+    error_log("Community join failed: " . $e->getMessage());
+    http_response_code(500);
+    exit("عضویت انجام نشد. لطفاً دوباره تلاش کنید.");
 }
+?>
