@@ -15,6 +15,8 @@ on:
       - 'tests/community_decision_ledger_backfill_integration_test.php'
       - 'tests/community_decision_knowledge_separation_integration_test.php'
       - 'tests/topic_intent_classification_integration_test.php'
+      - 'tests/community_law_origin_integration_test.php'
+      - 'community_law_helpers.php'
       - 'expertise.php'
       - 'expertise_action.php'
       - 'votes.php'
@@ -135,6 +137,8 @@ on:
       - 'migrations/20261109_z_community_decision_topic_intent.sql'
       - 'tests/topic_intent_classification_contract_test.php'
       - 'tests/topic_intent_classification_integration_test.php'
+      - 'tests/community_law_origin_integration_test.php'
+      - 'community_law_helpers.php'
       - 'tests/community_decision_ledger_integration_test.php'
       - 'tests/community_decision_ledger_backfill_integration_test.php'
       - 'tests/community_decision_knowledge_separation_integration_test.php'
@@ -242,6 +246,7 @@ jobs:
           php -l community_laws.php
           php -l tests/topic_intent_classification_contract_test.php
           php -l tests/topic_intent_classification_integration_test.php
+          php -l tests/community_law_origin_integration_test.php
           php -l community_decision_ledger.php
           php -l collective_knowledge_finalizer.php
           php -l tests/community_decision_ledger_integration_test.php
@@ -369,3 +374,4 @@ jobs:
           php tests/community_decision_ledger_backfill_integration_test.php
           php tests/community_decision_knowledge_separation_integration_test.php
           php tests/topic_intent_classification_integration_test.php
+          php tests/community_law_origin_integration_test.php

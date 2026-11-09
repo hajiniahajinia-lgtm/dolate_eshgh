@@ -129,4 +129,24 @@ topic_intent_contract_check(
 );
 
 
+topic_intent_contract_check(
+    is_string($law = file_get_contents(__DIR__ . '/../community_laws.php')) &&
+    str_contains($law, 'community_law_resolve_accepted_lawmaking_origin') &&
+    str_contains($law, "d.topic_intent_snapshot='law'") &&
+    !str_contains($law, 'name="source_topic_id"') &&
+    !str_contains($law, 'name="source_idea_id"'),
+    'initial law drafts require a single accepted lawmaking decision and do not accept manually mixed source identifiers'
+);
+
+topic_intent_contract_check(
+    is_string($lawHelpers = file_get_contents(__DIR__ . '/../community_law_helpers.php')) &&
+    str_contains($lawHelpers, 'community_law_resolve_accepted_lawmaking_origin') &&
+    str_contains($lawHelpers, "d.acceptance_status='accepted'") &&
+    str_contains($lawHelpers, "d.record_status='recorded'") &&
+    str_contains($lawHelpers, "d.topic_intent_snapshot='law'") &&
+    str_contains($lawHelpers, 'i.topic_id=d.source_topic_id') &&
+    str_contains($lawHelpers, "t.community_id=d.community_id"),
+    'backend origin resolver enforces accepted status, immutable lawmaking intent, community ownership, and idea-topic consistency'
+);
+
 fwrite(STDOUT, "PASS: topic intent classification contract checks passed.\n");

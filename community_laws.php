@@ -75,12 +75,15 @@ if ($schema_ready) {
 
     if ($decision_ledger_ready) {
         $source_decision_stmt = $conn->prepare(
-            "SELECT d.id, d.source_topic_id, t.title, t.topic_intent, d.decided_at
+            "SELECT d.id, d.source_topic_id, d.source_idea_id, t.title, t.topic_intent, d.decided_at
              FROM community_decision_records d
-             JOIN topics t ON t.id=d.source_topic_id
+             JOIN topics t ON t.id=d.source_topic_id AND t.community_id=d.community_id
+             JOIN ideas i ON i.id=d.source_idea_id AND i.topic_id=d.source_topic_id
              WHERE d.community_id=? AND d.record_status='recorded'
                AND d.acceptance_status='accepted'
-               AND t.topic_intent = 'law'
+               AND d.topic_intent_snapshot='law'
+               AND t.topic_intent='law'
+               AND d.source_idea_id IS NOT NULL
              ORDER BY d.decided_at DESC, d.id DESC
              LIMIT 100"
         );
@@ -116,16 +119,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $title = trim((string)($_POST['title'] ?? ''));
         $law_text = trim((string)($_POST['law_text'] ?? ''));
         $implementation_plan = trim((string)($_POST['implementation_plan'] ?? ''));
-        $source_topic_id = (int)($_POST['source_topic_id'] ?? 0);
-        $source_idea_id = (int)($_POST['source_idea_id'] ?? 0);
         $source_decision_id = (int)($_POST['source_decision_id'] ?? 0);
-        $source_topic_id = $source_topic_id > 0 ? $source_topic_id : null;
-        $source_idea_id = $source_idea_id > 0 ? $source_idea_id : null;
-        $source_decision_id = $source_decision_id > 0 ? $source_decision_id : null;
-        // هر پیش‌نویس قانون باید منشأ قابل‌ردیابی از مسیر قانون‌گذاری داشته باشد.
-        if ($source_decision_id === null && $source_topic_id === null && $source_idea_id === null) {
-            community_laws_redirect($community_id, 'invalid_source');
-        }
+        // پیش‌نویس اولیه فقط از تصمیم پذیرفته‌شده‌ای منشأ می‌گیرد که موضوع قانون‌گذاری و ایدهٔ منتخب آن دقیقاً منطبق باشند.
+        if ($source_decision_id <= 0) community_laws_redirect($community_id, 'invalid_source');
+        $source_origin = community_law_resolve_accepted_lawmaking_origin(
+            $conn,
+            $community_id,
+            $source_decision_id
+        );
+        if (!$source_origin) community_laws_redirect($community_id, 'invalid_source');
+        $source_topic_id = (int)$source_origin['source_topic_id'];
+        $source_idea_id = (int)$source_origin['source_idea_id'];
         // قانون مصوب هر جامعه، در صورت احراز صلاحیت، برای همه زیرشاخه‌های آن نیز لازم‌الرعایه است.
         $include_descendants = 1;
 
@@ -133,59 +137,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             community_laws_redirect($community_id, 'invalid');
         }
 
-        // اگر پیش‌نویس از یک تصمیم جمعی منشأ گرفته باشد، پیوند باید به تصمیم ثبت‌شدهٔ همین جامعه باشد.
-        if ($source_decision_id !== null) {
-            $decision_source_stmt = $conn->prepare(
-                "SELECT d.source_topic_id, d.source_idea_id
-                 FROM community_decision_records d
-                 JOIN topics t ON t.id=d.source_topic_id
-                 WHERE d.id=? AND d.community_id=? AND d.record_status='recorded'
-                   AND d.acceptance_status='accepted'
-                   AND t.topic_intent = 'law'
-                 LIMIT 1"
-            );
-            if (!$decision_source_stmt) community_laws_redirect($community_id, 'invalid_source');
-            $decision_source_stmt->bind_param('ii', $source_decision_id, $community_id);
-            if (!$decision_source_stmt->execute()) community_laws_redirect($community_id, 'invalid_source');
-            $decision_source = $decision_source_stmt->get_result()->fetch_assoc();
-            $decision_source_stmt->close();
-            if (
-                !$decision_source ||
-                ($source_topic_id !== null && $source_topic_id !== (int)$decision_source['source_topic_id']) ||
-                ($source_idea_id !== null && (int)($decision_source['source_idea_id'] ?? 0) !== $source_idea_id)
-            ) {
-                community_laws_redirect($community_id, 'invalid_source');
-            }
-            $source_topic_id = (int)$decision_source['source_topic_id'];
-            $source_idea_id = $decision_source['source_idea_id'] !== null
-                ? (int)$decision_source['source_idea_id']
-                : null;
-        }
-
-        if ($source_idea_id !== null) {
-            $source_stmt = $conn->prepare(
-                "SELECT t.id AS topic_id
-                 FROM ideas i
-                 JOIN topics t ON t.id=i.topic_id
-                 WHERE i.id=? AND t.community_id=? AND t.topic_intent='law' LIMIT 1"
-            );
-            $source_stmt->bind_param('ii', $source_idea_id, $community_id);
-            $source_stmt->execute();
-            $source_row = $source_stmt->get_result()->fetch_assoc();
-            $source_stmt->close();
-            if (!$source_row || ($source_topic_id !== null && $source_topic_id !== (int)$source_row['topic_id'])) {
-                community_laws_redirect($community_id, 'invalid_source');
-            }
-            $source_topic_id = (int)$source_row['topic_id'];
-        } elseif ($source_topic_id !== null) {
-            $source_stmt = $conn->prepare("SELECT id FROM topics WHERE id=? AND community_id=? AND topic_intent='law' LIMIT 1");
-            $source_stmt->bind_param('ii', $source_topic_id, $community_id);
-            $source_stmt->execute();
-            $source_exists = (bool)$source_stmt->get_result()->fetch_row();
-            $source_stmt->close();
-            if (!$source_exists) community_laws_redirect($community_id, 'invalid_source');
-        }
-
+        // شناسه‌های موضوع و ایده فقط از نتیجهٔ اعتبارسنجی‌شدهٔ دفتر تصمیم استخراج می‌شوند.
         $law_code = 'LAW-' . strtoupper(bin2hex(random_bytes(8)));
         if (!$conn->begin_transaction()) community_laws_redirect($community_id, 'save_error');
 
@@ -6008,15 +5960,11 @@ details>summary{cursor:pointer;font-weight:bold}
         <?php if (!$decision_ledger_ready): ?>
             <p class="muted">دفتر تصمیم‌ها هنوز در این پایگاه داده نصب نشده است؛ می‌توانید شناسهٔ موضوع یا ایده را به‌عنوان منشأ ثبت کنید.</p>
         <?php elseif (!$source_decisions): ?>
-            <p class="muted">در این جامعه تصمیم پذیرفته‌شده‌ای برای انتخاب وجود ندارد؛ در صورت نیاز، منشأ موضوع را جداگانه مشخص کنید.</p>
+            <p class="muted">در این جامعه هنوز تصمیم پذیرفته‌شده‌ای با موضوع قانون‌گذاری و ایدهٔ منتخبِ منطبق وجود ندارد؛ ابتدا باید فرایند موضوع و تصمیم کامل شود.</p>
         <?php else: ?>
-            <p class="muted">فقط تصمیم‌های پذیرفته‌شده از موضوعات «تصمیم‌گیری» یا «قانون‌گذاری» نمایش داده می‌شوند. با انتخاب تصمیم، موضوع و ایدهٔ مرتبط خودکار پیوند می‌خورند. این پیوند به‌تنهایی قانون را تصویب یا لازم‌الاجرا نمی‌کند.</p>
+            <p class="muted">فقط تصمیم‌های پذیرفته‌شده از موضوعات «قانون‌گذاری» که ایدهٔ منتخبشان به همان موضوع تعلق دارد نمایش داده می‌شوند. موضوع و ایده از روی دفتر تصمیم استخراج و کنترل می‌شوند؛ این پیوند به‌تنهایی قانون را تصویب یا لازم‌الاجرا نمی‌کند.</p>
         <?php endif; ?>
-        <p class="muted">ثبت منشأ الزامی است: یک تصمیم پذیرفته‌شده یا شناسهٔ موضوع/ایده‌ای که از مسیر قانون‌گذاری ایجاد شده باشد. صرف ثبت منشأ به معنی تصویب قانون نیست.</p>
-        <label>شناسه موضوع مرتبط (در صورت نداشتن شناسه تصمیم)</label>
-        <input type="number" name="source_topic_id" min="1">
-        <label>شناسه ایده مرتبط (اختیاری، در صورت نداشتن شناسه تصمیم)</label>
-        <input type="number" name="source_idea_id" min="1">
+        <p class="muted">انتخاب تصمیم پذیرفته‌شده الزامی است. فقط تصمیمی قابل انتخاب است که از موضوع قانون‌گذاری همین جامعه و ایدهٔ منتخب همان موضوع منشأ گرفته باشد. شناسهٔ موضوع و ایده به‌صورت خودکار و قابل‌ردیابی ثبت می‌شوند. ثبت پیش‌نویس به معنی تصویب قانون نیست.</p>
         <div class="notice">
             در صورت تصویب و پس از طی بررسی صلاحیت و مراحل نهایی، این قانون برای همه جوامع زیرشاخه نیز لازم‌الرعایه خواهد بود. دامنه شمول به‌صورت خودکار با تغییرات معتبر سلسله‌مراتب به‌روزرسانی و تاریخچه آن ثبت می‌شود.
         </div>

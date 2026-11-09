@@ -2358,3 +2358,47 @@ if (!function_exists('community_law_register_hierarchy_conformity_reviews')) {
         return true;
     }
 }
+
+
+/**
+ * بازیابی منشأ معتبر برای ایجاد پیش‌نویس اولیهٔ قانون.
+ * تصمیم باید پذیرفته‌شده و ثبت‌شده، متعلق به همین جامعه و متصل به
+ * موضوعی با مسیر قانون‌گذاری باشد؛ ایدهٔ منتخب نیز باید متعلق به همان موضوع باشد.
+ */
+if (!function_exists('community_law_resolve_accepted_lawmaking_origin')) {
+    function community_law_resolve_accepted_lawmaking_origin(
+        mysqli $conn,
+        int $community_id,
+        int $decision_id
+    ): ?array {
+        if ($community_id <= 0 || $decision_id <= 0) return null;
+
+        $stmt = $conn->prepare(
+            "SELECT d.id AS decision_id, d.source_topic_id, d.source_idea_id
+             FROM community_decision_records d
+             JOIN topics t
+               ON t.id=d.source_topic_id
+              AND t.community_id=d.community_id
+              AND t.topic_intent='law'
+             JOIN ideas i
+               ON i.id=d.source_idea_id
+              AND i.topic_id=d.source_topic_id
+             WHERE d.id=?
+               AND d.community_id=?
+               AND d.record_status='recorded'
+               AND d.acceptance_status='accepted'
+               AND d.topic_intent_snapshot='law'
+               AND d.source_idea_id IS NOT NULL
+             LIMIT 1"
+        );
+        if (!$stmt) return null;
+        $stmt->bind_param('ii', $decision_id, $community_id);
+        if (!$stmt->execute()) {
+            $stmt->close();
+            return null;
+        }
+        $origin = $stmt->get_result()->fetch_assoc() ?: null;
+        $stmt->close();
+        return $origin;
+    }
+}
