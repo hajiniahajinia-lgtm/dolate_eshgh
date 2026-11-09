@@ -10,13 +10,13 @@ if($start===false||$end===false||$end<=$start){fwrite(STDERR,"FAIL: appeal submi
 $handler=substr($source,$start,$end-$start);
 $checks=[
  'a second appeal remains admissible while the first appeal has paused enactment' =>
-     strpos($handler,"!in_array($law['final_status'],['appeal_period','appeal_hold'],true)")!==false,
+     strpos($handler,'!in_array($law[\'final_status\'],[\'appeal_period\',\'appeal_hold\'],true)')!==false,
  'the original appeal deadline still governs every additional appeal' =>
-     strpos($handler,"empty($law['appeal_deadline']) || strtotime($law['appeal_deadline']) < time()")!==false,
+     strpos($handler,'empty($law[\'appeal_deadline\']) || strtotime($law[\'appeal_deadline\']) < time()')!==false,
  'submitting another appeal preserves the shared appeal hold' =>
      strpos($handler,"status IN ('appeal_period','appeal_hold')")!==false,
  'an already-held appeal case does not fail merely because its status was unchanged' =>
-     strpos($handler,"if (!$hold->execute()) throw new Exception('appeal hold update failed');")!==false,
+     strpos($handler,'if (!$hold->execute()) throw new Exception(\'appeal hold update failed\');')!==false,
  'each appeal keeps its own electorate and independent assessment record' =>
      strpos($handler,"INSERT IGNORE INTO community_law_appeal_electorate (appeal_id, user_id)")!==false &&
      strpos($handler,"INSERT INTO community_law_appeals")!==false,
