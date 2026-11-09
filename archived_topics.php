@@ -240,7 +240,9 @@ function get_winner_idea($conn, $topic_id) {
 // گرفتن موضوعات نهایی شده
 // =====================
 $sql = "
-    SELECT t.id, t.title, t.description, t.created_at, t.user_id, m.finalized_at, t.community_id, COALESCE(t.topic_purpose, 'mixed') AS topic_purpose
+    SELECT t.id, t.title, t.description, t.created_at, t.user_id, m.finalized_at, t.community_id,
+           COALESCE(t.topic_purpose, 'mixed') AS topic_purpose,
+           COALESCE(t.topic_intent, 'decision') AS topic_intent
     FROM topics t
     JOIN topic_voting_meta m ON m.topic_id=t.id
     WHERE t.community_id=? AND m.finalized=1 AND m.finalized_at IS NOT NULL
