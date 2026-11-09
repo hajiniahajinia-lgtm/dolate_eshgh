@@ -191,6 +191,38 @@ try {
         throw new RuntimeException('Interrupted migration requires documented manual recovery: ' . (string)$existing_recovery['migration_name']);
     }
 
+    // Validate every already-applied checksum before executing ANY pending migration.
+    // This prevents an explicit apply request from partially progressing before
+    // discovering a changed historical migration later in the list.
+    $preflight_rows = $conn->query('SELECT migration_name, checksum FROM app_schema_migrations');
+    if (!$preflight_rows) {
+        throw new RuntimeException('Could not preflight migration registry');
+    }
+    $preflight_registry = [];
+    while ($preflight_row = $preflight_rows->fetch_assoc()) {
+        $preflight_registry[(string)$preflight_row['migration_name']] = (string)$preflight_row['checksum'];
+    }
+    $preflight_rows->free();
+
+    $preflight_mismatches = [];
+    foreach ($files as $preflight_file) {
+        $preflight_name = basename($preflight_file);
+        if (!preg_match('/^[0-9]{8}_[A-Za-z0-9_-]+\\.sql$/', $preflight_name)) continue;
+        $preflight_sql = file_get_contents($preflight_file);
+        if ($preflight_sql === false) {
+            throw new RuntimeException('Could not read migration during preflight: ' . $preflight_name);
+        }
+        $preflight_sql = trim($preflight_sql);
+        if ($preflight_sql === '' || !array_key_exists($preflight_name, $preflight_registry)) continue;
+        $preflight_checksum = hash('sha256', $preflight_sql);
+        if (!hash_equals($preflight_registry[$preflight_name], $preflight_checksum)) {
+            $preflight_mismatches[] = $preflight_name;
+        }
+    }
+    if ($preflight_mismatches) {
+        throw new RuntimeException('Preflight blocked: applied migration checksum mismatch: ' . implode(', ', $preflight_mismatches));
+    }
+
     $applied = [];
     $skipped = [];
 
