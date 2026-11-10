@@ -50,7 +50,10 @@ jobs:
 
           for file in "${files[@]}"; do
             case "$file" in
-              .git*|.github/*|*/.git*|*/.github/*|node_modules/*|*/node_modules/*|migrations/*.sql|*.sql|README*|db.php|migration_config.php|.env|.env.*|dolate_eshgh1.sql|*backup*.php|full_backup.php|test.php|test1.php|test_enforce_stats.php|deployment-test/*|ftp-test/*|deploy-test.txt|deployment_test.txt)
+              migrations/*.sql)
+                # The protected migration runner needs these scripts; generic SQL dumps remain excluded below.
+                ;;
+              .git*|.github/*|*/.git*|*/.github/*|node_modules/*|*/node_modules/*|*.sql|README*|db.php|migration_config.php|.env|.env.*|dolate_eshgh1.sql|*backup*.php|full_backup.php|test.php|test1.php|test_enforce_stats.php|deployment-test/*|ftp-test/*|deploy-test.txt|deployment_test.txt)
                 echo "SKIP protected/excluded path: $file"
                 skipped=$((skipped + 1))
                 continue
