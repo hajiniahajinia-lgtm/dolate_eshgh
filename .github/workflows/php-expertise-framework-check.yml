@@ -1,7 +1,6 @@
 name: PHP syntax check - expertise and community laws
 
 on:
-  workflow_dispatch:
   pull_request:
     branches:
       - main
@@ -11,7 +10,9 @@ on:
       - '.github/workflows/php-expertise-framework-check.yml'
   push:
     branches:
-      - '**'
+      - feature/community-law-framework
+      - fix/corrective-completion-migration-order
+      - fix/initial-charter-adoption-workflow
     paths:
       - 'docs/live-database-preflight-2026-11-10.md'
       - '.github/workflows/deploy.yml'
@@ -35,6 +36,7 @@ on:
       - 'expertise_action.php'
       - 'votes.php'
       - 'community_laws.php'
+      - 'tests/community_law_voting_rule_threshold_contract_test.php'
       - 'archived_topics.php'
       - 'knowledge_library.php'
       - 'community.php'
@@ -195,7 +197,6 @@ on:
       - 'community_law_conformity_action.php'
       - 'community_law_conformity_cases.php'
       - 'community_laws.php'
-      - 'tests/community_law_voting_rule_threshold_contract_test.php'
       - 'migrations/20261108_community_law_change_control.sql'
       - 'migrations/20261108_community_law_change_review.sql'
       - 'migrations/20261108_community_law_change_voting.sql'
