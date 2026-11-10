@@ -110,3 +110,29 @@ Before any approved apply operation:
 6. Apply only after explicit approval, in the corrected dependency order, with post-migration checks.
 
 This checklist does not authorize migration execution, registry edits, deployment, or changes to the live host.
+
+
+## 7. Recorded live-host results (user-run, read-only checks)
+
+The user ran the checks above against the active database on 2026-11-10. The reported active database and registry matched the supplied backup: `if0_43167600_dolateeshgh`, 25 registered migrations, 25 unique names and 25 unique checksums.
+
+The live schema query reported these three knowledge-library tables as present:
+- `collective_knowledge_entries`
+- `collective_knowledge_revisions`
+- `collective_knowledge_reviews`
+
+The supplied SQL backup was independently inspected earlier: these tables have 16, 15 and 8 columns respectively, with primary keys and the expected named indexes matching `20261106_collective_knowledge_library.sql`. The live query in this preflight confirmed table presence, not a fresh live column/index comparison. The migration file uses `CREATE TABLE IF NOT EXISTS` only; it does not insert, update or delete knowledge rows. The registry discrepancy remains: this migration is not among the 25 registered names even though its tables exist. Do not alter the registry manually; any reconciliation must be reviewed as a separate controlled step.
+
+The live schema query reported the following target objects as missing, consistently with the supplied backup:
+- Charter foundation: `community_charter_versions`, `community_charter_articles`, `community_law_charter_references`, `community_law_charter_assessments`.
+- Expertise ballot snapshots: `topic_expertise_voter_weight_snapshots`.
+- Decision ledger: `community_decision_records`.
+- Corrective completion workflow: `community_law_outcome_corrective_actions`, `community_law_outcome_corrective_completion_reviews`.
+- Added columns: `topics.topic_intent`, `community_decision_records.topic_intent_snapshot`, `community_law_outcome_corrective_actions.completion_status`, `community_law_outcome_corrective_actions.completion_review_round`, and `community_law_outcome_corrective_completion_reviews.review_round`. Missing columns whose parent tables are missing are expected consequences, not separate defects.
+
+The user also confirmed all 13 legacy prerequisite objects/columns checked earlier were present. The live data checks returned:
+- 99 finalized decisions; all 99 have matching source topics; 0 reference a missing selected idea.
+- 64 ballots, 64 distinct topic/user pairs, across 41 topics.
+- Topic-purpose distribution: 1 `knowledge`, 2 `execution`, 108 `mixed`, with no NULL values.
+
+These checks support the migration preconditions and match the supplied backup. They do not constitute a migration-runner plan, a restore test, or authorization to apply migrations. No live database, host files, `main`, or deployment were changed during these checks.
