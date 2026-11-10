@@ -182,7 +182,7 @@ try {
     )->fetch_all(MYSQLI_ASSOC);
     integration_check($initialCandidateStates[0]['status'] === 'conflict' &&
         $initialCandidateStates[1]['status'] === 'recused' &&
-        $initialCandidateStates[6]['status'] === 'invited' &&
+        $initialCandidateStates[6]['status'] === 'assigned' &&
         $initialCandidateStates[7]['status'] === 'invited',
         'conflict and recusal decisions remain auditable while reserve candidates remain available');
     $initialCaseAfterScreening = $db->query(
