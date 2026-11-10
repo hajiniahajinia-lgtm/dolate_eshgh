@@ -1939,8 +1939,8 @@ if (!function_exists('community_charter_start_initial_adoption')) {
             $user_rows = $users->get_result();
             while ($row = $user_rows->fetch_assoc()) $candidates[] = (int)$row['id'];
             $users->close();
-            if (count($candidates) < 8) {
-                throw new RuntimeException('برای آغاز بررسی مستقل دست‌کم پنج ارزیاب و سه رأی‌دهنده دیگر لازم است.');
+            if (count($candidates) < 14) {
+                throw new RuntimeException('برای اعلام تعارض، رسیدگی مستقل و رأی‌گیری، دست‌کم ۱۴ کاربر مستقل از پیشنهاددهنده لازم است.');
             }
             for ($i = count($candidates) - 1; $i > 0; $i--) {
                 $j = random_int(0, $i);
@@ -1962,8 +1962,16 @@ if (!function_exists('community_charter_start_initial_adoption')) {
             $amendment_id = (int)$insert->insert_id;
             $insert->close();
 
-            community_charter_assign_review_panel($conn, $amendment_id, $candidates);
-            community_charter_start_independent_review($conn, $amendment_id);
+            if (count($candidates) < 14) {
+                throw new RuntimeException('برای اعلام تعارض، رسیدگی مستقل و رأی‌گیری، دست‌کم ۱۴ کاربر مستقل از پیشنهاددهنده لازم است.');
+            }
+            $candidate_ids = array_slice($candidates, 0, 8);
+            $adjudicator_ids = array_slice($candidates, 8, 3);
+            $electorate_ids = array_slice($candidates, 11);
+            community_charter_prepare_conflict_review_pool(
+                $conn, $amendment_id, $proposer_user_id,
+                $candidate_ids, $adjudicator_ids, $electorate_ids
+            );
             if (!$conn->commit()) throw new RuntimeException('آغاز بررسی مستقل منشور نهایی نشد.');
             return $amendment_id;
         } catch (Throwable $error) {
@@ -2660,3 +2668,6 @@ if (!function_exists('community_law_resolve_accepted_lawmaking_origin')) {
         return $origin;
     }
 }
+
+
+require_once __DIR__ . '/community_charter_conflict_helpers.php';
