@@ -19,8 +19,8 @@ function cam_page_h($value): string {
 function cam_page_status(string $status): string {
     $labels = [
         'draft_created' => 'پیش‌نویس اصلاح منشور ثبت شد.',
-        'initial_review_started' => 'منشور آغازین برای بررسی مستقل و سپس رأی عمومی ارسال شد.',
-        'review_started' => 'پیشنهاد برای بررسی مستقل ارسال شد.',
+        'initial_review_started' => 'نامزدهای ارزیابی منشور آغازین برای اعلام تعارض دعوت شدند؛ بررسی پس از تکمیل هیئت آغاز می‌شود.',
+        'review_started' => 'نامزدهای ارزیابی برای اعلام تعارض دعوت شدند؛ بررسی پس از تکمیل هیئت آغاز می‌شود.',
         'assessment_saved' => 'ارزیابی مستقل ثبت شد.',
         'public_voting_started' => 'بررسی مستقل موفق بود؛ رأی‌گیری عمومی آغاز شد.',
         'vote_saved' => 'رأی شما ثبت شد.',
@@ -270,7 +270,7 @@ button.secondary{background:#58677a}button.danger{background:#8a3940}.grid{displ
 <form method="post" action="community_charter_amendment_action.php">
 <input type="hidden" name="csrf_token" value="<?= cam_page_h($csrf) ?>">
 <input type="hidden" name="action" value="start_initial_adoption">
-<button type="submit">ارسال منشور آغازین برای بررسی مستقل و رأی عمومی</button>
+<button type="submit">دعوت نامزدها برای اعلام تعارض و تشکیل هیئت بررسی</button>
 </form>
 <?php endif; ?>
 <?php elseif ($initial_case): ?>
