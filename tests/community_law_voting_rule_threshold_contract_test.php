@@ -7,8 +7,8 @@ if (!is_string($page)) {
     exit(1);
 }
 
-$start = strpos($page, "if (isset($_POST['finalize_law_voting_rules']))");
-$end = $start === false ? false : strpos($page, "if (isset($_POST['start_law_vote']))", $start);
+$start = strpos($page, 'if (isset($_POST[\'finalize_law_voting_rules\']))');
+$end = $start === false ? false : strpos($page, 'if (isset($_POST[\'start_law_vote\']))', $start);
 $finalizer = ($start !== false && $end !== false)
     ? substr($page, $start, $end - $start)
     : '';
