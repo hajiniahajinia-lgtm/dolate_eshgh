@@ -173,6 +173,16 @@ if ($ready) {
         }
     }
 }
+$charter_case_status_labels = [
+    'draft' => 'پیش‌نویس',
+    'independent_review' => 'بررسی مستقل',
+    'public_voting' => 'رأی‌گیری عمومی',
+    'appeal_period' => 'مهلت اعتراض',
+    'approved_pending_activation' => 'آماده فعال‌سازی',
+    'activated' => 'لازم‌الاجرا',
+    'rejected' => 'رد شده',
+    'withdrawn' => 'پس‌گرفته‌شده'
+];
 $group_labels = [
     'human_dignity' => 'کرامت انسانی','equality' => 'برابری','freedom' => 'آزادی',
     'justice' => 'عدالت','peace' => 'صلح','living_beings' => 'موجودات زنده',
@@ -225,6 +235,7 @@ button.secondary{background:#58677a}button.danger{background:#8a3940}.grid{displ
 <h1>اصلاح منشور بنیادین</h1>
 <p>منشور، مرجع حقوقی برتر همه جوامع است. اصلاح آن تنها پس از بررسی مستقل، رأی مستقیم کاربران، مهلت اعتراض و رسیدگی به اعتراض‌ها امکان‌پذیر است.</p>
 <div class="notice">قواعد این فرایند: دست‌کم ۵ ارزیاب مستقل و حمایت ۴ نفر؛ مشارکت دست‌کم دوسوم رأی‌دهندگان؛ موافقت دست‌کم سه‌چهارم آرای موافق و مخالف؛ سپس ۷ روز مهلت اعتراض.</div>
+<div class="notice">ارزیابان مستقل و رأی‌دهندگان از میان کاربران ثبت‌نام‌شده به‌صورت تصادفی انتخاب می‌شوند؛ پیشنهاددهنده در این فهرست‌ها قرار نمی‌گیرد و ارزیابان نیز از رأی‌دهندگان جدا هستند. در نسخه فعلی، اطلاعات روابط شخصی یا تعارض منافع کاربران ثبت نمی‌شود؛ بنابراین این موضوع باید پیش از گسترش فرایند با سازوکار اعلام و رسیدگی مستقل تکمیل شود.</div>
 <?php if ($message = cam_page_status((string)($_GET['status'] ?? ''))): ?>
 <div class="notice"><?= cam_page_h($message) ?></div>
 <?php endif; ?>
@@ -247,7 +258,7 @@ button.secondary{background:#58677a}button.danger{background:#8a3940}.grid{displ
 </div>
 <?php endforeach; ?>
 <?php if ($initial_case): ?>
-<p>پروندهٔ تصویب اولیه ثبت شده است. وضعیت فعلی: <strong><?= cam_page_h($initial_case['status']) ?></strong>. جزئیات بررسی، رأی‌گیری و اعتراض در پروندهٔ پایین نمایش داده می‌شود.</p>
+<p>پروندهٔ تصویب اولیه ثبت شده است. وضعیت فعلی: <strong><?= cam_page_h($charter_case_status_labels[$initial_case['status']] ?? 'وضعیت نامشخص') ?></strong>. جزئیات بررسی، رأی‌گیری و اعتراض در پروندهٔ پایین نمایش داده می‌شود.</p>
 <?php else: ?>
 <form method="post" action="community_charter_amendment_action.php">
 <input type="hidden" name="csrf_token" value="<?= cam_page_h($csrf) ?>">
@@ -256,7 +267,7 @@ button.secondary{background:#58677a}button.danger{background:#8a3940}.grid{displ
 </form>
 <?php endif; ?>
 <?php elseif ($initial_case): ?>
-<p>پروندهٔ تصویب اولیه ثبت شده است. وضعیت فعلی: <strong><?= cam_page_h($initial_case['status']) ?></strong>.</p>
+<p>پروندهٔ تصویب اولیه ثبت شده است. وضعیت فعلی: <strong><?= cam_page_h($charter_case_status_labels[$initial_case['status']] ?? 'وضعیت نامشخص') ?></strong>.</p>
 <?php else: ?>
 <div class="warning">پیش‌نویس آغازین یکتا با ۱۲ مادهٔ بنیادین کامل پیدا نشد؛ فرایند تصویب متوقف است.</div>
 <?php endif; ?>
@@ -324,11 +335,7 @@ button.secondary{background:#58677a}button.danger{background:#8a3940}.grid{displ
 <?php if (!$amendments): ?><p class="muted">هنوز پیشنهادی ثبت نشده است.</p><?php endif; ?>
 <?php foreach ($amendments as $a):
     $aid = (int)$a['id'];
-    $status_labels = [
-        'draft'=>'پیش‌نویس','independent_review'=>'بررسی مستقل','public_voting'=>'رأی‌گیری عمومی',
-        'appeal_period'=>'مهلت اعتراض','approved_pending_activation'=>'آماده فعال‌سازی',
-        'activated'=>'لازم‌الاجرا','rejected'=>'رد شده','withdrawn'=>'پس‌گرفته‌شده'
-    ];
+    $status_labels = $charter_case_status_labels;
     $is_reviewer = false; $has_assessment = false; $is_elector = false; $my_vote = '';
     $q = $conn->prepare("SELECT 1 FROM community_charter_amendment_reviewers WHERE amendment_id=? AND reviewer_user_id=? LIMIT 1");
     if ($q) { $q->bind_param('ii',$aid,$user_id); $q->execute(); $is_reviewer=(bool)$q->get_result()->fetch_row(); $q->close(); }
