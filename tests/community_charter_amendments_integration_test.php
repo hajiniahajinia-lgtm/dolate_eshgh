@@ -74,14 +74,25 @@ try {
     )->fetch_assoc();
     integration_check((int)$tables['total'] === count($requiredTables), 'all charter tables were created');
 
-    $baseline = $db->query(
-        "SELECT id, version_number FROM community_charter_versions WHERE status='effective'"
+    $initial = $db->query(
+        "SELECT id, version_number, status, approved_at, effective_at
+         FROM community_charter_versions WHERE id=1"
+    )->fetch_assoc();
+    integration_check(
+        (int)$initial['version_number'] === 1
+        && $initial['status'] === 'draft'
+        && $initial['approved_at'] === null
+        && $initial['effective_at'] === null,
+        'the initial charter version remains a draft until valid collective approval'
     );
-    $activeRows = [];
-    while ($row = $baseline->fetch_assoc()) $activeRows[] = $row;
-    $baseline->free();
-    integration_check(count($activeRows) === 1 && (int)$activeRows[0]['version_number'] === 1,
-        'the initial charter version is the single effective version');
+
+    // The isolated integration fixture activates a simulated ratified baseline
+    // so amendment lifecycle tests can exercise replacement of an effective charter.
+    $db->query(
+        "UPDATE community_charter_versions
+         SET status='effective', approved_at=NOW(), effective_at=NOW()
+         WHERE id=1"
+    );
 
     $articleCount = (int)$db->query(
         "SELECT COUNT(*) AS total FROM community_charter_articles WHERE charter_version_id=1"
