@@ -37,7 +37,7 @@ $checks['revisions force the originating community scope to include descendants'
     strpos($revision_block, '$scope_row[\'include_descendants\'] = 1;') !== false;
 $checks['revisions restore the originating scope if it is missing'] =
     strpos($revision_block, '$scope_rows[] = [') !== false &&
-    strpos($revision_block, "'scope_community_id' => $origin_community_id") !== false &&
+    strpos($revision_block, "'scope_community_id' => " . '$origin_community_id') !== false &&
     strpos($revision_block, "'include_descendants' => 1") !== false;
 $checks['scope evaluation applies descendant inclusion through the validated hierarchy'] =
     strpos($helpers, '$scope[\'include_descendants\'] &&') !== false &&
