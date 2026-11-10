@@ -114,8 +114,8 @@ try {
     integration_check($initialCase && $initialCase['case_type'] === 'initial_adoption' &&
         $initialCase['base_charter_version_id'] === null &&
         (int)$initialCase['proposed_charter_version_id'] === 1 &&
-        $initialCase['status'] === 'independent_review',
-        'the initial draft enters independent review without requiring an existing effective charter');
+        $initialCase['status'] === 'draft',
+        'the initial draft remains pending until reviewer conflict disclosures are completed');
 
     $initialCandidates = $db->query(
         "SELECT candidate_user_id FROM community_charter_amendment_reviewer_candidates
