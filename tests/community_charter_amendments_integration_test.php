@@ -162,8 +162,10 @@ try {
     }
 
     $initialReviewers = $db->query(
-        "SELECT reviewer_user_id FROM community_charter_amendment_reviewers
-         WHERE amendment_id=" . (int)$initialCaseId . " ORDER BY reviewer_user_id"
+        "SELECT r.reviewer_user_id FROM community_charter_amendment_reviewers r
+         JOIN community_charter_amendment_reviewer_candidates c
+           ON c.amendment_id=r.amendment_id AND c.candidate_user_id=r.reviewer_user_id
+         WHERE r.amendment_id=" . (int)$initialCaseId . " ORDER BY c.candidate_order"
     )->fetch_all(MYSQLI_ASSOC);
     $initialReviewerIds = array_map('intval', array_column($initialReviewers, 'reviewer_user_id'));
     integration_check(count($initialReviewerIds) === 5 &&
