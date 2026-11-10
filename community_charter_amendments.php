@@ -344,6 +344,7 @@ button.secondary{background:#58677a}button.danger{background:#8a3940}.grid{displ
     $aid = (int)$a['id'];
     $status_labels = $charter_case_status_labels;
     $is_reviewer = false; $has_assessment = false; $is_elector = false; $my_vote = '';
+    $is_adjudicator = false; $candidate_status = '';
     $q = $conn->prepare("SELECT 1 FROM community_charter_amendment_reviewers WHERE amendment_id=? AND reviewer_user_id=? LIMIT 1");
     if ($q) { $q->bind_param('ii',$aid,$user_id); $q->execute(); $is_reviewer=(bool)$q->get_result()->fetch_row(); $q->close(); }
     if ($is_reviewer) {
@@ -419,6 +420,17 @@ foreach ($conflict_categories as $category_key=>$category_label):
 <?php if ($a['status']==='draft' && $is_adjudicator): ?>
 <div class="item">
 <strong>رسیدگی محرمانه به اعلام تعارض</strong>
+<?php
+$conflict_categories = [
+ 'family_personal'=>'رابطه خانوادگی یا شخصی نزدیک',
+ 'financial'=>'رابطه مالی یا قراردادی',
+ 'employment'=>'وابستگی استخدامی یا سازمانی مستقیم',
+ 'professional'=>'همکاری حرفه‌ای نزدیک یا رابطه استاد/شاگردی',
+ 'personal_dispute'=>'اختلاف شخصی مؤثر یا دعوای جاری',
+ 'direct_involvement'=>'نقش مستقیم در تهیه، اجرا یا تصمیم مورد بررسی',
+ 'other'=>'سایر شرایط مؤثر بر بی‌طرفی'
+];
+?>
 <?php
 $pending_conflicts = $conn->prepare(
     "SELECT c.candidate_user_id,c.conflict_categories,c.private_details,u.username
