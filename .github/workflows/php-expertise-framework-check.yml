@@ -205,6 +205,7 @@ on:
       - 'community_charter_amendments.php'
       - 'migrations/20261107_community_charter_foundation.sql'
       - 'migrations/20261107_community_charter_amendments.sql'
+      - 'migrations/20261110_community_charter_initial_adoption.sql'
       - 'migrations/20261108_community_charter_amendment_appeal_assignments.sql'
       - 'community.php'
       - 'collective_knowledge_finalizer.php'
