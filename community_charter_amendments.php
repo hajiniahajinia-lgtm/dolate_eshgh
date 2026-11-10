@@ -69,12 +69,23 @@ if ($ready) {
 }
 
 $active_version = null;
+$effective_version_total = 0;
 $articles = [];
 $amendments = [];
 $initial_draft = null;
 $initial_articles = [];
 $initial_case = null;
 if ($ready) {
+    $effective_count_result = $conn->query(
+        "SELECT COUNT(*) AS total FROM community_charter_versions WHERE status='effective'"
+    );
+    if ($effective_count_result) {
+        $effective_version_total = (int)$effective_count_result->fetch_assoc()['total'];
+        $effective_count_result->free();
+    } else {
+        $ready = false;
+    }
+
     $active_result = $conn->query(
         "SELECT id,version_number,title FROM community_charter_versions
          WHERE status='effective' AND effective_at<=NOW()"
@@ -209,6 +220,9 @@ button.secondary{background:#58677a}button.danger{background:#8a3940}.grid{displ
 <div class="warning">ساختار پایگاه داده اصلاح منشور هنوز کامل نیست. این صفحه هیچ migrationای را اجرا نمی‌کند.</div>
 </section>
 <?php elseif (!$active_version): ?>
+<?php if ($effective_version_total !== 0): ?>
+<div class="warning">وضعیت نسخه‌های منشور یکتا و روشن نیست؛ تا رفع این وضعیت، تصویب اولیه یا اصلاح منشور متوقف است.</div>
+<?php else: ?>
 <div class="warning">هنوز نسخهٔ لازم‌الاجرای منشور وجود ندارد؛ قوانین عادی تا تصویب جمعی منشور آغازین نباید لازم‌الاجرا شوند.</div>
 <h2>تصویب نخستین منشور بنیادین</h2>
 <?php if ($initial_case): ?>
@@ -228,6 +242,7 @@ button.secondary{background:#58677a}button.danger{background:#8a3940}.grid{displ
 </form>
 <?php else: ?>
 <div class="warning">پیش‌نویس آغازین یکتا با ۱۲ مادهٔ بنیادین کامل پیدا نشد؛ فرایند تصویب متوقف است.</div>
+<?php endif; ?>
 <?php endif; ?>
 </section>
 <?php else: ?>
