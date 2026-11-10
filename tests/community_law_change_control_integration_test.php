@@ -980,6 +980,34 @@ try {
     $change_read=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_community_notices WHERE id=".(int)$change_notice['id']." AND read_at IS NOT NULL")->fetch_assoc()['n'];
     change_case_check($change_read===1,'change notice read status is updated in the change-notice table');
 
+    // A missing approved rule for the exact law version must fail closed.
+    $db->query("INSERT INTO community_laws (id,law_code,originating_community_id,created_by,status,current_version_id,effective_at)
+        VALUES (9505,'LAW-CHANGE-NO-RULE-TEST',90010,90100,'approved',99005,NOW())");
+    $db->query("INSERT INTO community_law_versions (id,law_id,version_number,title,law_text,proposed_by,status,approved_at)
+        VALUES (99005,9505,1,'قانون بدون قاعدهٔ رأی‌گیری','متن قانون',90100,'approved',NOW())");
+    $db->query("INSERT INTO community_law_scopes (law_version_id,scope_community_id,include_descendants)
+        VALUES (99005,90010,1)");
+    $missing_rule_case=community_law_open_change_case($db,9505,90200,90020,'suspend','آزمون نبودن قاعدهٔ رأی‌گیری','شواهد آزمایشی',false);
+    change_case_check(is_int($missing_rule_case) && $missing_rule_case>0,'a change request can enter independent review when its law version has no approved voting rule');
+    $missing_rule_reviewers=$db->query('SELECT reviewer_user_id FROM community_law_change_reviewers WHERE case_id='.(int)$missing_rule_case.' ORDER BY reviewer_user_id')->fetch_all(MYSQLI_ASSOC);
+    change_case_check(count($missing_rule_reviewers)===5,'the missing-rule test receives five independent reviewers');
+    foreach ($missing_rule_reviewers as $index=>$reviewer) {
+        $verdict=$index<4?'uphold':'dismiss';
+        change_case_check(
+            community_law_submit_change_assessment($db,$missing_rule_case,(int)$reviewer['reviewer_user_id'],$verdict,'بررسی مستقل آزمون نبودن قاعده انجام شد.')!==false,
+            'missing-rule reviewer assessment is accepted'
+        );
+    }
+    $missing_rule_result=$db->query('SELECT status,review_result,review_summary,electorate_count FROM community_law_change_cases WHERE id='.(int)$missing_rule_case)->fetch_assoc();
+    $missing_rule_summary=json_decode((string)$missing_rule_result['review_summary'],true);
+    change_case_check(
+        $missing_rule_result && $missing_rule_result['status']==='review_complete' &&
+        $missing_rule_result['review_result']==='inconclusive' &&
+        (int)$missing_rule_result['electorate_count']===4 &&
+        ($missing_rule_summary['block_reason']??null)==='missing_or_invalid_parent_voting_rule',
+        'missing or invalid approved rules block the vote and record the exact reason without opening an electorate vote'
+    );
+
     fwrite(STDOUT,"OK: community law change-control integration checks passed.\n");
 } finally { $db->close(); }
 ?>
