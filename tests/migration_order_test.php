@@ -21,7 +21,6 @@ $dependencies=[
     '20261108_community_law_change_control.sql'=>['20261108_community_law_change_review.sql'],
     '20261108_community_law_change_review.sql'=>['20261108_community_law_change_voting.sql'],
     '20261108_community_law_change_voting.sql'=>['20261108_community_law_change_effects.sql'],
-    '20261108_community_law_change_effects.sql'=>['20261110_community_law_change_reinstate_request_type.sql'],
     '20261109_community_law_corrective_completion_reviews.sql'=>['20261109_community_law_corrective_completion_retries.sql'],
     '20261031_topic_expertise_proposals.sql'=>['20261031_topic_expertise_proposal_voting.sql']
 ];
@@ -62,7 +61,6 @@ $assertBefore('20261108_community_decision_ledger.sql','20261108_community_decis
 $assertBefore('20261108_community_law_change_control.sql','20261108_community_law_change_review.sql');
 $assertBefore('20261108_community_law_change_review.sql','20261108_community_law_change_voting.sql');
 $assertBefore('20261108_community_law_change_voting.sql','20261108_community_law_change_effects.sql');
-$assertBefore('20261108_community_law_change_effects.sql','20261110_community_law_change_reinstate_request_type.sql');
 $assertBefore('20261109_community_law_corrective_completion_reviews.sql','20261109_community_law_corrective_completion_retries.sql');
 $assertBefore('20261031_topic_expertise_proposals.sql','20261031_topic_expertise_proposal_voting.sql');
 
