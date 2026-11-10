@@ -136,3 +136,15 @@ The user also confirmed all 13 legacy prerequisite objects/columns checked earli
 - Topic-purpose distribution: 1 `knowledge`, 2 `execution`, 108 `mixed`, with no NULL values.
 
 These checks support the migration preconditions and match the supplied backup. They do not constitute a migration-runner plan, a restore test, or authorization to apply migrations. No live database, host files, `main`, or deployment were changed during these checks.
+
+
+## 8. Deployment and protected runner prerequisites
+
+The InfinityFree deployment workflow is manual-only and uploads files without deleting remote files. When dispatching it:
+- Set `deploy_all=true` to upload the full tracked, non-excluded branch. The default uploads only files changed in the latest commit.
+- Files under `migrations/*.sql` are required by `migration_runner.php` and are explicitly allowed for upload. Other SQL files (including database dumps) remain excluded.
+- `db.php`, `migration_config.php`, and environment files remain excluded so database credentials and runner secrets are not overwritten or published.
+
+The host must have a private `migration_config.php` beside `migration_runner.php`, returning an array with a random token of at least 32 characters. This file must be created/provisioned securely on the host and must never be committed to GitHub or sent in chat. If it is absent, the runner returns HTTP 503 and performs no migration. The runner accepts POST only, requires the token in the `X-Migration-Token` header, and defaults to read-only `plan`; `apply` requires an explicit request.
+
+The ordinary page-request migration hook remains disabled. Uploading files does not run migrations. No deployment has been triggered as part of this audit.
