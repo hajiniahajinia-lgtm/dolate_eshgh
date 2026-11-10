@@ -6,6 +6,7 @@ on:
       - feature/community-law-framework
       - fix/corrective-completion-migration-order
     paths:
+      - 'docs/live-database-preflight-2026-11-10.md'
       - '.github/workflows/deploy.yml'
       - 'tests/deploy_workflow_migration_upload_test.php'
       - 'migration_runner.php'
@@ -150,6 +151,7 @@ on:
       - 'tests/migration_order_test.php'
   pull_request:
     paths:
+      - 'docs/live-database-preflight-2026-11-10.md'
       - '.github/workflows/deploy.yml'
       - 'tests/deploy_workflow_migration_upload_test.php'
       - 'migration_runner.php'
