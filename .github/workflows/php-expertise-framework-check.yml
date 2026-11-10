@@ -1,6 +1,7 @@
 name: PHP syntax check - expertise and community laws
 
 on:
+  workflow_dispatch:
   pull_request:
     branches:
       - main
