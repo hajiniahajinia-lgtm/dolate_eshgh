@@ -1,6 +1,13 @@
 name: PHP syntax check - expertise and community laws
 
 on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '**.php'
+      - 'migrations/**/*.sql'
+      - '.github/workflows/php-expertise-framework-check.yml'
   push:
     branches:
       - feature/community-law-framework
