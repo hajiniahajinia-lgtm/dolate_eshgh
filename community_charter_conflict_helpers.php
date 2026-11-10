@@ -157,7 +157,9 @@ if (!function_exists('community_charter_record_conflict_declaration')) {
         if ($declaration === 'no_conflict' && ($categories || $private_details !== '')) {
             throw new RuntimeException('برای اعلام نبود تعارض، جزئیات تعارض نباید ارسال شود.');
         }
-        if ($declaration === 'recuse') $categories = [];
+        if ($declaration === 'recuse' && ($categories || $private_details !== '')) {
+            throw new RuntimeException('برای کناره‌گیری داوطلبانه، ارائه جزئیات تعارض لازم نیست و ذخیره نمی‌شود.');
+        }
 
         if (!$conn->begin_transaction()) throw new RuntimeException('شروع ثبت اعلام تعارض ممکن نیست.');
         try {
