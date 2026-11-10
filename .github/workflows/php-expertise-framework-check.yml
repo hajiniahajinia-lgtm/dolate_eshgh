@@ -44,6 +44,7 @@ on:
       - 'migrations/20261107_community_law_framework.sql'
       - 'migrations/20261107_community_law_voting_rules.sql'
       - 'migrations/20261107_community_charter_amendments.sql'
+      - 'migrations/20261110_community_charter_initial_adoption.sql'
       - 'migrations/20261108_community_charter_amendment_appeal_assignments.sql'
       - 'migrations/20261108_community_law_change_control.sql'
       - 'migrations/20261108_community_law_change_review.sql'
