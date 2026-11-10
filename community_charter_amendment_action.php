@@ -35,7 +35,10 @@ function cam_tables_ready(mysqli $conn): bool {
         'community_charter_amendment_reviewers', 'community_charter_amendment_assessments',
         'community_charter_amendment_electorate', 'community_charter_amendment_votes',
         'community_charter_amendment_appeals', 'community_charter_amendment_appeal_reviewers',
-        'community_charter_amendment_appeal_reviewer_assignments'
+        'community_charter_amendment_appeal_reviewer_assignments',
+        'community_charter_amendment_reviewer_candidates',
+        'community_charter_amendment_conflict_adjudicators',
+        'community_charter_amendment_conflict_decisions'
     ];
     $marks = implode(',', array_fill(0, count($required), '?'));
     $stmt = $conn->prepare(
@@ -124,6 +127,29 @@ if (!cam_tables_ready($conn)) {
 $action = (string)($_POST['action'] ?? '');
 
 try {
+    if ($action === 'declare_reviewer_conflict') {
+        $amendment_id = (int)($_POST['amendment_id'] ?? 0);
+        $declaration = (string)($_POST['declaration'] ?? '');
+        $categories = $_POST['conflict_categories'] ?? [];
+        $details = trim((string)($_POST['private_details'] ?? ''));
+        if (!is_array($categories)) throw new RuntimeException('دسته‌های تعارض معتبر نیستند.');
+        community_charter_record_conflict_declaration(
+            $conn, $amendment_id, $user_id, $declaration, $categories, $details
+        );
+        cam_redirect($declaration === 'no_conflict' ? 'conflict_disclosed_clear' :
+            ($declaration === 'recuse' ? 'reviewer_recused' : 'conflict_referred'));
+    }
+
+    if ($action === 'decide_reviewer_conflict') {
+        $amendment_id = (int)($_POST['amendment_id'] ?? 0);
+        $candidate_user_id = (int)($_POST['candidate_user_id'] ?? 0);
+        $verdict = (string)($_POST['verdict'] ?? '');
+        $reasoning = trim((string)($_POST['reasoning'] ?? ''));
+        community_charter_record_conflict_decision(
+            $conn, $amendment_id, $candidate_user_id, $user_id, $verdict, $reasoning
+        );
+        cam_redirect('conflict_decision_saved');
+    }
     if ($action === 'start_initial_adoption') {
         community_charter_start_initial_adoption($conn, $user_id);
         cam_redirect('initial_review_started');
@@ -400,13 +426,16 @@ try {
         $candidates = [];
         while ($row = $users->fetch_assoc()) $candidates[] = (int)$row['id'];
         $users->free();
-        if (count($candidates) < 8) {
-            throw new RuntimeException('برای آغاز بررسی مستقل دست‌کم پنج ارزیاب و سه رأی‌دهنده دیگر لازم است.');
+        if (count($candidates) < 14) {
+            throw new RuntimeException('برای اعلام تعارض، رسیدگی مستقل و رأی‌گیری، دست‌کم ۱۴ کاربر مستقل از پیشنهاددهنده لازم است.');
         }
         cam_secure_shuffle($candidates);
-        community_charter_assign_review_panel($conn, $amendment_id, $candidates);
-
-        community_charter_start_independent_review($conn, $amendment_id);
+        community_charter_prepare_conflict_review_pool(
+            $conn, $amendment_id, $user_id,
+            array_slice($candidates, 0, 8),
+            array_slice($candidates, 8, 3),
+            array_slice($candidates, 11)
+        );
         if (!$conn->commit()) throw new RuntimeException('ثبت آغاز بررسی مستقل نهایی نشد.');
         cam_redirect('review_started');
     }
