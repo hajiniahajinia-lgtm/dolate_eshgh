@@ -47,6 +47,8 @@ on:
       - 'migrations/20261107_community_law_voting_rules.sql'
       - 'migrations/20261107_community_charter_amendments.sql'
       - 'migrations/20261110_community_charter_initial_adoption.sql'
+      - 'migrations/20261111_community_charter_reviewer_conflicts.sql'
+      - 'community_charter_conflict_helpers.php'
       - 'migrations/20261108_community_charter_amendment_appeal_assignments.sql'
       - 'migrations/20261108_community_law_change_control.sql'
       - 'migrations/20261108_community_law_change_review.sql'
@@ -211,6 +213,8 @@ on:
       - 'migrations/20261107_community_charter_foundation.sql'
       - 'migrations/20261107_community_charter_amendments.sql'
       - 'migrations/20261110_community_charter_initial_adoption.sql'
+      - 'migrations/20261111_community_charter_reviewer_conflicts.sql'
+      - 'community_charter_conflict_helpers.php'
       - 'migrations/20261108_community_charter_amendment_appeal_assignments.sql'
       - 'community.php'
       - 'collective_knowledge_finalizer.php'
@@ -301,6 +305,7 @@ jobs:
           php -l community_charter_amendment_action.php
           php -l community_charter_amendments.php
           php -l community_law_helpers.php
+          php -l community_charter_conflict_helpers.php
           php -l community_law_change_helpers.php
           php -l tests/community_law_change_voter_eligibility_contract_test.php
           php -l community_law_change_action.php
