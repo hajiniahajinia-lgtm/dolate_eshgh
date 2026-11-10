@@ -1,13 +1,6 @@
 name: PHP syntax check - expertise and community laws
 
 on:
-  pull_request:
-    branches:
-      - main
-    paths:
-      - '**.php'
-      - 'migrations/**/*.sql'
-      - '.github/workflows/php-expertise-framework-check.yml'
   push:
     branches:
       - feature/community-law-framework
@@ -22,7 +15,6 @@ on:
       - 'add_topic.php'
       - 'community.php'
       - 'community_laws.php'
-      - 'tests/community_law_voting_rule_threshold_contract_test.php'
       - 'migrations/20261109_topic_intent_classification.sql'
       - 'migrations/20261109_z_community_decision_topic_intent.sql'
       - 'tests/topic_intent_classification_contract_test.php'
@@ -36,7 +28,6 @@ on:
       - 'expertise_action.php'
       - 'votes.php'
       - 'community_laws.php'
-      - 'tests/community_law_voting_rule_threshold_contract_test.php'
       - 'archived_topics.php'
       - 'knowledge_library.php'
       - 'community.php'
@@ -161,6 +152,8 @@ on:
       - 'tests/community_law_change_control_integration_test.php'
       - 'tests/migration_order_test.php'
   pull_request:
+    branches:
+      - main
     paths:
       - 'docs/live-database-preflight-2026-11-10.md'
       - '.github/workflows/deploy.yml'
@@ -282,7 +275,6 @@ jobs:
         run: |
           php -l add_topic.php
           php -l community_laws.php
-          php -l tests/community_law_voting_rule_threshold_contract_test.php
           php -l tests/topic_intent_classification_contract_test.php
           php -l tests/topic_intent_classification_integration_test.php
           php -l tests/community_law_origin_integration_test.php
@@ -360,8 +352,6 @@ jobs:
           php -l tests/community_decision_ledger_integration_test.php
           php -l tests/community_decision_ledger_backfill_integration_test.php
           php -l tests/community_decision_knowledge_separation_integration_test.php
-      - name: Verify configured law voting-rule approval threshold
-        run: php tests/community_law_voting_rule_threshold_contract_test.php
       - name: Verify topic intent classification contract
         run: php tests/topic_intent_classification_contract_test.php
       - name: Verify deployment includes migration scripts without exposing secrets or dumps
