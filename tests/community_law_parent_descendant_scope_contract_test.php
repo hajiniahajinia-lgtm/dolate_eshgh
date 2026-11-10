@@ -14,7 +14,9 @@ if ($source === false || $helpers === false) {
 
 $checks = [];
 $create_start = strpos($source, "// قانون مصوب هر جامعه، در صورت احراز صلاحیت، برای همه زیرشاخه‌های آن نیز لازم‌الرعایه است.");
-$create_end = $create_start === false ? false : strpos($source, "if ($title === ''", $create_start);
+$create_end = $create_start === false
+    ? false
+    : strpos($source, 'if (' . '$title === ' . "''", $create_start);
 $create_block = ($create_start !== false && $create_end !== false)
     ? substr($source, $create_start, $create_end - $create_start)
     : '';
@@ -38,7 +40,7 @@ $checks['revisions restore the originating scope if it is missing'] =
     strpos($revision_block, "'scope_community_id' => $origin_community_id") !== false &&
     strpos($revision_block, "'include_descendants' => 1") !== false;
 $checks['scope evaluation applies descendant inclusion through the validated hierarchy'] =
-    strpos($helpers, "if ($scope['include_descendants']") !== false &&
+    strpos($helpers, '$scope[\'include_descendants\'] &&') !== false &&
     strpos($helpers, 'community_law_is_descendant_or_same(') !== false &&
     strpos($helpers, 'community_law_parent_map_is_valid($parent_map)') !== false;
 
