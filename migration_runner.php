@@ -63,8 +63,29 @@ try {
 
     // Respect explicit schema prerequisites where filename order is insufficient.
     $migration_dependencies = [
+        '20261106_community_law_objections_schema_repair.sql' => [
+            '20261107_community_law_framework.sql'
+        ],
+        '20261107_community_law_framework.sql' => [
+            '20261107_community_law_final_review_appeals.sql'
+        ],
+        '20261107_community_charter_foundation.sql' => [
+            '20261107_community_charter_amendments.sql'
+        ],
+        '20261107_community_law_voting_rules.sql' => [
+            '20261107_community_law_voting_rule_approval.sql'
+        ],
         '20261108_community_decision_ledger.sql' => [
             '20261108_community_decision_knowledge_link.sql'
+        ],
+        '20261108_community_law_change_control.sql' => [
+            '20261108_community_law_change_review.sql'
+        ],
+        '20261108_community_law_change_review.sql' => [
+            '20261108_community_law_change_voting.sql'
+        ],
+        '20261108_community_law_change_voting.sql' => [
+            '20261108_community_law_change_effects.sql'
         ],
         '20261109_community_law_corrective_completion_reviews.sql' => [
             '20261109_community_law_corrective_completion_retries.sql'
