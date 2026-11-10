@@ -26,7 +26,7 @@ $checks['approval uses the configured percentage with documented two-decimal rou
     strpos($finalizer, "round((\$approvals / \$total_votes) * 100, 2)") !== false &&
     strpos($finalizer, "\$approval_percent >= (float)\$approval_threshold_percent") !== false;
 $checks['the former hard-coded two-thirds comparison is absent'] =
-    strpos($finalizer, '(\$approvals * 3) >= (\$total_votes * 2)') === false;
+    strpos($finalizer, '($approvals * 3) >= ($total_votes * 2)') === false;
 $checks['the separately configured reviewer quorum remains enforced'] =
     strpos($finalizer, "\$total_votes < (int)\$proposal['reviewer_quorum']") !== false;
 
