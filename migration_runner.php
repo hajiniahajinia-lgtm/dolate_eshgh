@@ -32,7 +32,17 @@ if (!is_file($config_path)) {
 
 $config = require $config_path;
 $expected_token = is_array($config) ? (string)($config['token'] ?? '') : '';
-$provided_token = (string)($_SERVER['HTTP_X_MIGRATION_TOKEN'] ?? '');
+$provided_token = '';
+$encoded_token = (string)($_SERVER['HTTP_X_MIGRATION_TOKEN_BASE64'] ?? '');
+if ($encoded_token !== '') {
+    $decoded_token = base64_decode($encoded_token, true);
+    if ($decoded_token !== false) {
+        $provided_token = $decoded_token;
+    }
+} else {
+    // Backward compatibility for existing ASCII-only clients.
+    $provided_token = (string)($_SERVER['HTTP_X_MIGRATION_TOKEN'] ?? '');
+}
 
 if (strlen($expected_token) < 32 || $provided_token === '' || !hash_equals($expected_token, $provided_token)) {
     migration_response(403, ['success' => false, 'message' => 'Forbidden']);
