@@ -138,7 +138,7 @@ if ($ready) {
                 $initial_draft = $draft_rows[0];
                 $draft_id = (int)$initial_draft['id'];
                 $initial_article_stmt = $conn->prepare(
-                    "SELECT id,article_code,title,is_core FROM community_charter_articles
+                    "SELECT id,article_code,title,article_text,is_core FROM community_charter_articles
                      WHERE charter_version_id=? ORDER BY display_order,id"
                 );
                 if ($initial_article_stmt) {
@@ -225,21 +225,26 @@ button.secondary{background:#58677a}button.danger{background:#8a3940}.grid{displ
 <?php else: ?>
 <div class="warning">هنوز نسخهٔ لازم‌الاجرای منشور وجود ندارد؛ قوانین عادی تا تصویب جمعی منشور آغازین نباید لازم‌الاجرا شوند.</div>
 <h2>تصویب نخستین منشور بنیادین</h2>
+<?php if ($initial_draft && count($initial_articles) === 12): ?>
+<p>نسخهٔ آغازین هنوز پیش‌نویس است و ۱۲ مادهٔ آن برای بررسی عمومی آماده‌اند. فعال‌سازی فقط پس از بررسی مستقل، رأی عمومی و مهلت اعتراض انجام می‌شود.</p>
+<p><strong><?= cam_page_h($initial_draft['title']) ?></strong></p>
+<?php foreach ($initial_articles as $article): ?>
+<div class="item">
+<strong><?= cam_page_h($article['article_code'] . ' — ' . $article['title']) ?><?= (int)$article['is_core'] === 1 ? ' (ماده بنیادین)' : '' ?></strong>
+<p><?= nl2br(cam_page_h($article['article_text'])) ?></p>
+</div>
+<?php endforeach; ?>
 <?php if ($initial_case): ?>
 <p>پروندهٔ تصویب اولیه ثبت شده است. وضعیت فعلی: <strong><?= cam_page_h($initial_case['status']) ?></strong>. جزئیات بررسی، رأی‌گیری و اعتراض در پروندهٔ پایین نمایش داده می‌شود.</p>
-<?php elseif ($initial_draft && count($initial_articles) === 12): ?>
-<p>نسخهٔ آغازین هنوز پیش‌نویس است و ۱۲ مادهٔ آن برای بررسی عمومی آماده‌اند. ارسال برای بررسی، منشور را فعال نمی‌کند؛ فعال‌سازی فقط پس از بررسی مستقل، رأی عمومی و مهلت اعتراض انجام می‌شود.</p>
-<p><strong><?= cam_page_h($initial_draft['title']) ?></strong></p>
-<ul>
-<?php foreach ($initial_articles as $article): ?>
-<li><?= cam_page_h($article['article_code'] . ' — ' . $article['title']) ?><?= (int)$article['is_core'] === 1 ? ' (بنیادین)' : '' ?></li>
-<?php endforeach; ?>
-</ul>
+<?php else: ?>
 <form method="post" action="community_charter_amendment_action.php">
 <input type="hidden" name="csrf_token" value="<?= cam_page_h($csrf) ?>">
 <input type="hidden" name="action" value="start_initial_adoption">
 <button type="submit">ارسال منشور آغازین برای بررسی مستقل و رأی عمومی</button>
 </form>
+<?php endif; ?>
+<?php elseif ($initial_case): ?>
+<p>پروندهٔ تصویب اولیه ثبت شده است. وضعیت فعلی: <strong><?= cam_page_h($initial_case['status']) ?></strong>.</p>
 <?php else: ?>
 <div class="warning">پیش‌نویس آغازین یکتا با ۱۲ مادهٔ بنیادین کامل پیدا نشد؛ فرایند تصویب متوقف است.</div>
 <?php endif; ?>
