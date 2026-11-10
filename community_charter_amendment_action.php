@@ -54,7 +54,20 @@ function cam_tables_ready(mysqli $conn): bool {
     }
     $count = (int)$stmt->get_result()->fetch_assoc()['total'];
     $stmt->close();
-    return $count === count($required);
+    if ($count !== count($required)) return false;
+
+    $case_type_check = $conn->prepare(
+        "SELECT COUNT(*) AS total FROM information_schema.columns
+         WHERE table_schema=DATABASE() AND table_name='community_charter_amendments'
+           AND column_name='case_type'"
+    );
+    if (!$case_type_check || !$case_type_check->execute()) {
+        if ($case_type_check) $case_type_check->close();
+        return false;
+    }
+    $case_type_ready = (int)$case_type_check->get_result()->fetch_assoc()['total'] === 1;
+    $case_type_check->close();
+    return $case_type_ready;
 }
 
 function cam_secure_shuffle(array &$values): void {
@@ -111,6 +124,11 @@ if (!cam_tables_ready($conn)) {
 $action = (string)($_POST['action'] ?? '');
 
 try {
+    if ($action === 'start_initial_adoption') {
+        community_charter_start_initial_adoption($conn, $user_id);
+        cam_redirect('initial_review_started');
+    }
+
     if ($action === 'create_draft') {
         $title = trim((string)($_POST['title'] ?? ''));
         $justification = trim((string)($_POST['justification'] ?? ''));
@@ -361,7 +379,7 @@ try {
         if (count($active_ids) !== 1) throw new RuntimeException('نسخه جاری منشور یکتا نیست.');
 
         $lock = $conn->prepare(
-            "SELECT id,base_charter_version_id,proposed_charter_version_id,
+            "SELECT id,case_type,base_charter_version_id,proposed_charter_version_id,
                     proposer_user_id,status
              FROM community_charter_amendments WHERE id=? FOR UPDATE"
         );
@@ -370,7 +388,8 @@ try {
         if (!$lock->execute()) throw new RuntimeException('خواندن پرونده اصلاح انجام نشد.');
         $amendment = $lock->get_result()->fetch_assoc();
         $lock->close();
-        if (!$amendment || (int)$amendment['proposer_user_id'] !== $user_id ||
+        if (!$amendment || ($amendment['case_type'] ?? 'amendment') !== 'amendment' ||
+            (int)$amendment['proposer_user_id'] !== $user_id ||
             $amendment['status'] !== 'draft' ||
             (int)$amendment['base_charter_version_id'] !== $active_ids[0]) {
             throw new RuntimeException('پیش‌نویس متعلق به شما نیست یا منشور پایه آن دیگر جاری نیست.');

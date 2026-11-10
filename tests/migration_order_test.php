@@ -16,6 +16,7 @@ $dependencies=[
     '20261106_community_law_objections_schema_repair.sql'=>['20261107_community_law_framework.sql'],
     '20261107_community_law_framework.sql'=>['20261107_community_law_final_review_appeals.sql'],
     '20261107_community_charter_foundation.sql'=>['20261107_community_charter_amendments.sql'],
+    '20261107_community_charter_amendments.sql'=>['20261110_community_charter_initial_adoption.sql'],
     '20261107_community_law_voting_rules.sql'=>['20261107_community_law_voting_rule_approval.sql'],
     '20261108_community_decision_ledger.sql'=>['20261108_community_decision_knowledge_link.sql'],
     '20261108_community_law_change_control.sql'=>['20261108_community_law_change_review.sql'],
@@ -56,6 +57,7 @@ $assertBefore=function(string $first,string $second) use (&$effectiveNames): voi
 $assertBefore('20261106_community_law_objections_schema_repair.sql','20261107_community_law_framework.sql');
 $assertBefore('20261107_community_law_framework.sql','20261107_community_law_final_review_appeals.sql');
 $assertBefore('20261107_community_charter_foundation.sql','20261107_community_charter_amendments.sql');
+$assertBefore('20261107_community_charter_amendments.sql','20261110_community_charter_initial_adoption.sql');
 $assertBefore('20261107_community_law_voting_rules.sql','20261107_community_law_voting_rule_approval.sql');
 $assertBefore('20261108_community_decision_ledger.sql','20261108_community_decision_knowledge_link.sql');
 $assertBefore('20261108_community_law_change_control.sql','20261108_community_law_change_review.sql');

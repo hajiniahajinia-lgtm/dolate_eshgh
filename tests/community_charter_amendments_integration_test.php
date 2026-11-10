@@ -50,6 +50,7 @@ try {
 
     apply_sql_file($db, __DIR__ . '/../migrations/20261107_community_charter_foundation.sql');
     apply_sql_file($db, __DIR__ . '/../migrations/20261107_community_charter_amendments.sql');
+    apply_sql_file($db, __DIR__ . '/../migrations/20261110_community_charter_initial_adoption.sql');
     apply_sql_file($db, __DIR__ . '/../migrations/20261108_community_charter_amendment_appeal_assignments.sql');
 
     require_once __DIR__ . '/../community_law_helpers.php';
@@ -73,6 +74,12 @@ try {
          implode("','", $requiredTables) . "')"
     )->fetch_assoc();
     integration_check((int)$tables['total'] === count($requiredTables), 'all charter tables were created');
+    $caseTypeColumn = $db->query(
+        "SELECT COUNT(*) AS total FROM information_schema.columns
+         WHERE table_schema=DATABASE() AND table_name='community_charter_amendments'
+           AND column_name='case_type'"
+    )->fetch_assoc();
+    integration_check((int)$caseTypeColumn['total'] === 1, 'initial adoption case type is available');
 
     $initial = $db->query(
         "SELECT id, version_number, status, approved_at, effective_at
@@ -86,19 +93,6 @@ try {
         'the initial charter version remains a draft until valid collective approval'
     );
 
-    // The isolated integration fixture activates a simulated ratified baseline
-    // so amendment lifecycle tests can exercise replacement of an effective charter.
-    $db->query(
-        "UPDATE community_charter_versions
-         SET status='effective', approved_at=NOW(), effective_at=NOW()
-         WHERE id=1"
-    );
-
-    $articleCount = (int)$db->query(
-        "SELECT COUNT(*) AS total FROM community_charter_articles WHERE charter_version_id=1"
-    )->fetch_assoc()['total'];
-    integration_check($articleCount === 12, 'the initial charter contains all twelve foundation articles');
-
     $insertUser = $db->prepare("INSERT INTO users (id, username) VALUES (?, ?)");
     for ($id = 1; $id <= 16; $id++) {
         $username = 'charter_test_' . $id;
@@ -106,6 +100,110 @@ try {
         $insertUser->execute();
     }
     $insertUser->close();
+
+    // Exercise the real first-adoption path before any charter version is effective.
+    $initialCaseId = community_charter_start_initial_adoption($db, 1);
+    $initialCase = $db->query(
+        "SELECT case_type,base_charter_version_id,proposed_charter_version_id,status
+         FROM community_charter_amendments WHERE id=" . (int)$initialCaseId
+    )->fetch_assoc();
+    integration_check($initialCase && $initialCase['case_type'] === 'initial_adoption' &&
+        $initialCase['base_charter_version_id'] === null &&
+        (int)$initialCase['proposed_charter_version_id'] === 1 &&
+        $initialCase['status'] === 'independent_review',
+        'the initial draft enters independent review without requiring an existing effective charter');
+
+    $initialReviewers = $db->query(
+        "SELECT reviewer_user_id FROM community_charter_amendment_reviewers
+         WHERE amendment_id=" . (int)$initialCaseId . " ORDER BY reviewer_user_id"
+    )->fetch_all(MYSQLI_ASSOC);
+    $initialElectorate = $db->query(
+        "SELECT user_id FROM community_charter_amendment_electorate
+         WHERE amendment_id=" . (int)$initialCaseId . " ORDER BY user_id"
+    )->fetch_all(MYSQLI_ASSOC);
+    $initialReviewerIds = array_map('intval', array_column($initialReviewers, 'reviewer_user_id'));
+    $initialElectorIds = array_map('intval', array_column($initialElectorate, 'user_id'));
+    integration_check(count($initialReviewerIds) === 5 && count($initialElectorIds) === 10 &&
+        !in_array(1, $initialReviewerIds, true) && !in_array(1, $initialElectorIds, true) &&
+        !array_intersect($initialReviewerIds, $initialElectorIds),
+        'initial adoption snapshots five independent reviewers and a separate electorate excluding the proposer');
+
+    $initialAssessmentInsert = $db->prepare(
+        "INSERT INTO community_charter_amendment_assessments
+         (amendment_id,reviewer_user_id,verdict,rights_protection,
+          equality_and_non_discrimination,living_beings_and_environment,
+          power_and_accountability,future_generations,reasoning,evidence)
+         VALUES (?,?,?,'maintained','maintained','maintained','maintained',
+                 'maintained','ارزیابی مستقل منشور آغازین برای آزمون یکپارچه.','شاهد آزمایشی')"
+    );
+    foreach ($initialReviewerIds as $index => $reviewerId) {
+        $verdict = $index < 4 ? 'supports' : 'unclear';
+        $initialAssessmentInsert->bind_param('iis', $initialCaseId, $reviewerId, $verdict);
+        $initialAssessmentInsert->execute();
+    }
+    $initialAssessmentInsert->close();
+    $initialAssessments = $db->query(
+        "SELECT reviewer_user_id,verdict,rights_protection,equality_and_non_discrimination,
+                living_beings_and_environment,power_and_accountability,future_generations
+         FROM community_charter_amendment_assessments
+         WHERE amendment_id=" . (int)$initialCaseId . " ORDER BY reviewer_user_id"
+    )->fetch_all(MYSQLI_ASSOC);
+    integration_check(community_charter_amendment_reviewer_result($initialAssessments) === 'approved',
+        'the initial charter passes the same five-reviewer and four-support constitutional safeguards');
+
+    $db->query(
+        "UPDATE community_charter_amendments
+         SET review_closes_at=DATE_SUB(NOW(),INTERVAL 1 SECOND)
+         WHERE id=" . (int)$initialCaseId
+    );
+    $db->begin_transaction();
+    community_charter_advance_to_public_voting($db, $initialCaseId);
+    $db->commit();
+    $initialVoteInsert = $db->prepare(
+        "INSERT INTO community_charter_amendment_votes (amendment_id,user_id,vote) VALUES (?,?,?)"
+    );
+    foreach ($initialElectorIds as $index => $voterId) {
+        if ($index >= 9) continue;
+        $vote = $index < 7 ? 'yes' : ($index === 7 ? 'no' : 'abstain');
+        $initialVoteInsert->bind_param('iis', $initialCaseId, $voterId, $vote);
+        $initialVoteInsert->execute();
+    }
+    $initialVoteInsert->close();
+    integration_check(community_charter_amendment_vote_result(10, 7, 1, 1) === 'approved',
+        'the initial charter meets the two-thirds participation and three-quarters valid-vote approval thresholds');
+    $db->query(
+        "UPDATE community_charter_amendments
+         SET voting_closes_at=DATE_SUB(NOW(),INTERVAL 1 SECOND)
+         WHERE id=" . (int)$initialCaseId
+    );
+    $db->begin_transaction();
+    community_charter_advance_to_appeal_period($db, $initialCaseId);
+    $db->commit();
+    integration_check(!try_activate_amendment($db, $initialCaseId),
+        'the initial charter cannot activate before the seven-day appeal period closes');
+    $db->query(
+        "UPDATE community_charter_amendments
+         SET appeal_closes_at=DATE_SUB(NOW(),INTERVAL 1 SECOND)
+         WHERE id=" . (int)$initialCaseId
+    );
+    integration_check(try_activate_amendment($db, $initialCaseId),
+        'the initial charter becomes effective only after independent review, public approval and the appeal period');
+    $initialFinal = $db->query(
+        "SELECT v.status AS version_status,v.approved_at,v.effective_at,a.status AS case_status,
+                (SELECT COUNT(*) FROM community_charter_versions WHERE status='effective') AS effective_versions
+         FROM community_charter_versions v
+         JOIN community_charter_amendments a ON a.proposed_charter_version_id=v.id
+         WHERE v.id=1 AND a.id=" . (int)$initialCaseId
+    )->fetch_assoc();
+    integration_check($initialFinal && $initialFinal['version_status'] === 'effective' &&
+        $initialFinal['approved_at'] !== null && $initialFinal['effective_at'] !== null &&
+        $initialFinal['case_status'] === 'activated' && (int)$initialFinal['effective_versions'] === 1,
+        'initial collective adoption activates exactly one charter version and permanently records approval');
+
+    $articleCount = (int)$db->query(
+        "SELECT COUNT(*) AS total FROM community_charter_articles WHERE charter_version_id=1"
+    )->fetch_assoc()['total'];
+    integration_check($articleCount === 12, 'the initial charter contains all twelve foundation articles');
 
     $db->begin_transaction();
     $version = $db->prepare(

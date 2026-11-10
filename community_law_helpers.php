@@ -1786,7 +1786,7 @@ if (!function_exists('community_charter_record_appeal_assessment')) {
             $version_id = (int)$amendment_row['proposed_charter_version_id'];
             $reject_version = $conn->prepare(
                 "UPDATE community_charter_versions SET status='rejected'
-                 WHERE id=? AND status='draft'"
+                 WHERE id=? AND status='draft' AND approved_at IS NULL AND effective_at IS NULL"
             );
             if (!$reject_version) throw new RuntimeException('بستن نسخه پیشنهادی ممکن نیست.');
             $reject_version->bind_param('i', $version_id);
@@ -1870,6 +1870,109 @@ if (!function_exists('community_charter_advance_to_appeal_period')) {
     }
 }
 
+if (!function_exists('community_charter_start_initial_adoption')) {
+    /**
+     * آغاز تصویب نخستین منشور با همان هیئت مستقل، رأی عمومی و مهلت اعتراض.
+     * این مسیر فقط وقتی فعال است که هنوز هیچ نسخهٔ لازم‌الاجرایی وجود ندارد.
+     */
+    function community_charter_start_initial_adoption(mysqli $conn, int $proposer_user_id): int {
+        if ($proposer_user_id <= 0) throw new RuntimeException('شناسه پیشنهاددهنده معتبر نیست.');
+        if (!$conn->begin_transaction()) throw new RuntimeException('شروع فرایند تصویب منشور ممکن نیست.');
+        try {
+            $effective = $conn->query(
+                "SELECT id FROM community_charter_versions WHERE status='effective' FOR UPDATE"
+            );
+            if (!$effective) throw new RuntimeException('بررسی نسخه‌های لازم‌الاجرای منشور ممکن نیست.');
+            $effective_rows = [];
+            while ($row = $effective->fetch_assoc()) $effective_rows[] = $row;
+            $effective->free();
+            if ($effective_rows) throw new RuntimeException('منشور اولیه فقط زمانی قابل طرح است که هنوز نسخه لازم‌الاجرا وجود نداشته باشد.');
+
+            $drafts = $conn->query(
+                "SELECT id,version_number,title FROM community_charter_versions
+                 WHERE status='draft' AND approved_at IS NULL AND effective_at IS NULL
+                 ORDER BY id FOR UPDATE"
+            );
+            if (!$drafts) throw new RuntimeException('خواندن پیش‌نویس منشور ممکن نیست.');
+            $draft_rows = [];
+            while ($row = $drafts->fetch_assoc()) $draft_rows[] = $row;
+            $drafts->free();
+            if (count($draft_rows) !== 1 || (int)$draft_rows[0]['version_number'] !== 1) {
+                throw new RuntimeException('برای تصویب اولیه باید دقیقاً یک پیش‌نویس آغازین معتبر وجود داشته باشد.');
+            }
+            $version_id = (int)$draft_rows[0]['id'];
+
+            $article_stmt = $conn->prepare(
+                "SELECT COUNT(*) AS total,COUNT(DISTINCT article_code) AS unique_codes,
+                        COALESCE(SUM(is_core=1),0) AS core_total,
+                        COALESCE(SUM(TRIM(title)='' OR TRIM(article_text)=''),0) AS invalid_content
+                 FROM community_charter_articles WHERE charter_version_id=?"
+            );
+            if (!$article_stmt) throw new RuntimeException('بررسی مواد منشور ممکن نیست.');
+            $article_stmt->bind_param('i', $version_id);
+            if (!$article_stmt->execute()) throw new RuntimeException('بررسی مواد منشور انجام نشد.');
+            $article_stats = $article_stmt->get_result()->fetch_assoc();
+            $article_stmt->close();
+            if ((int)$article_stats['total'] !== 12 ||
+                (int)$article_stats['unique_codes'] !== 12 ||
+                (int)$article_stats['core_total'] !== 12 ||
+                (int)$article_stats['invalid_content'] !== 0) {
+                throw new RuntimeException('منشور آغازین باید دقیقاً ۱۲ ماده بنیادین کامل و یکتا داشته باشد.');
+            }
+
+            $existing = $conn->prepare(
+                "SELECT id FROM community_charter_amendments
+                 WHERE proposed_charter_version_id=? LIMIT 1 FOR UPDATE"
+            );
+            if (!$existing) throw new RuntimeException('بررسی پرونده قبلی منشور ممکن نیست.');
+            $existing->bind_param('i', $version_id);
+            if (!$existing->execute()) throw new RuntimeException('بررسی پرونده قبلی انجام نشد.');
+            $has_case = (bool)$existing->get_result()->fetch_row();
+            $existing->close();
+            if ($has_case) throw new RuntimeException('برای این نسخه قبلاً پرونده تصویب ثبت شده است.');
+
+            $users = $conn->prepare('SELECT id FROM users WHERE id<>? ORDER BY id');
+            if (!$users) throw new RuntimeException('خواندن کاربران برای رأی‌گیری منشور ممکن نیست.');
+            $users->bind_param('i', $proposer_user_id);
+            if (!$users->execute()) throw new RuntimeException('خواندن کاربران انجام نشد.');
+            $candidates = [];
+            $user_rows = $users->get_result();
+            while ($row = $user_rows->fetch_assoc()) $candidates[] = (int)$row['id'];
+            $users->close();
+            if (count($candidates) < 8) {
+                throw new RuntimeException('برای آغاز بررسی مستقل دست‌کم پنج ارزیاب و سه رأی‌دهنده دیگر لازم است.');
+            }
+            for ($i = count($candidates) - 1; $i > 0; $i--) {
+                $j = random_int(0, $i);
+                [$candidates[$i], $candidates[$j]] = [$candidates[$j], $candidates[$i]];
+            }
+
+            $title = 'تصویب نخستین منشور بنیادین دولت عشق';
+            $justification = 'درخواست بررسی و تصویب جمعی نخستین منشور بنیادین پیش از لازم‌الاجرا شدن قوانین عادی.';
+            $impact = 'این منشور مرجع حقوقی بالادستی جوامع خواهد بود؛ بررسی باید آثار آن بر حقوق انسان‌ها، جانداران، محیط زیست، عدالت، خودگردانی و نسل‌های آینده را پوشش دهد.';
+            $insert = $conn->prepare(
+                "INSERT INTO community_charter_amendments
+                    (case_type,base_charter_version_id,proposed_charter_version_id,
+                     proposer_user_id,title,justification,impact_assessment,status)
+                 VALUES ('initial_adoption',NULL,?,?,?,?,?,'draft')"
+            );
+            if (!$insert) throw new RuntimeException('ثبت پرونده تصویب اولیه منشور ممکن نیست.');
+            $insert->bind_param('iisss', $version_id, $proposer_user_id, $title, $justification, $impact);
+            if (!$insert->execute()) throw new RuntimeException('ثبت پرونده تصویب اولیه انجام نشد.');
+            $amendment_id = (int)$insert->insert_id;
+            $insert->close();
+
+            community_charter_assign_review_panel($conn, $amendment_id, $candidates);
+            community_charter_start_independent_review($conn, $amendment_id);
+            if (!$conn->commit()) throw new RuntimeException('آغاز بررسی مستقل منشور نهایی نشد.');
+            return $amendment_id;
+        } catch (Throwable $error) {
+            try { $conn->rollback(); } catch (Throwable $ignored) {}
+            throw $error;
+        }
+    }
+}
+
 if (!function_exists('community_charter_amendment_activate')) {
     /**
      * اجرای تراکنشی فعال‌سازی منشور؛ این تابع هم در endpoint و هم در آزمون یکپارچه استفاده می‌شود.
@@ -1882,16 +1985,14 @@ if (!function_exists('community_charter_amendment_activate')) {
         try {
             $active = $conn->query(
                 "SELECT id FROM community_charter_versions
-                 WHERE status='effective' AND effective_at<=NOW() FOR UPDATE"
+                 WHERE status='effective' FOR UPDATE"
             );
             if (!$active) throw new RuntimeException('قفل منشور جاری ممکن نیست.');
             $active_ids = [];
             while ($row = $active->fetch_assoc()) $active_ids[] = (int)$row['id'];
             $active->free();
-            if (count($active_ids) !== 1) throw new RuntimeException('نسخه جاری منشور یکتا نیست.');
-
             $lock = $conn->prepare(
-                "SELECT base_charter_version_id,proposed_charter_version_id,status,appeal_closes_at,
+                "SELECT case_type,base_charter_version_id,proposed_charter_version_id,status,appeal_closes_at,
                         (appeal_closes_at IS NOT NULL AND appeal_closes_at<=NOW()) AS appeal_closed
                  FROM community_charter_amendments WHERE id=? FOR UPDATE"
             );
@@ -1900,10 +2001,16 @@ if (!function_exists('community_charter_amendment_activate')) {
             if (!$lock->execute()) throw new RuntimeException('خواندن اصلاحیه انجام نشد.');
             $amendment = $lock->get_result()->fetch_assoc();
             $lock->close();
+            $case_type = (string)($amendment['case_type'] ?? 'amendment');
+            $base_version_id = $amendment && $amendment['base_charter_version_id'] !== null
+                ? (int)$amendment['base_charter_version_id'] : null;
+            $valid_base = $case_type === 'initial_adoption'
+                ? (count($active_ids) === 0 && $base_version_id === null)
+                : ($case_type === 'amendment' && count($active_ids) === 1 && $base_version_id === $active_ids[0]);
             if (!$amendment || $amendment['status'] !== 'appeal_period' ||
-                (int)$amendment['base_charter_version_id'] !== $active_ids[0] ||
-                empty($amendment['appeal_closes_at']) || (int)$amendment['appeal_closed'] !== 1) {
-                throw new RuntimeException('فعال‌سازی فقط پس از پایان مهلت اعتراض و در صورت جاری بودن منشور پایه ممکن است.');
+                !$valid_base || empty($amendment['appeal_closes_at']) ||
+                (int)$amendment['appeal_closed'] !== 1) {
+                throw new RuntimeException('فعال‌سازی فقط پس از پایان مهلت اعتراض و با وضعیت معتبر منشور پایه ممکن است.');
             }
 
             $open_appeals = $conn->prepare(
@@ -1981,55 +2088,89 @@ if (!function_exists('community_charter_amendment_activate')) {
                 throw new RuntimeException('حدنصاب مشارکت دوسوم و موافقت سه‌چهارم آرای معتبر باید دوباره تأیید شود.');
             }
 
-            $items_stmt = $conn->prepare(
-                "SELECT i.action,i.target_article_id,i.article_code,i.proposed_title,
-                        i.proposed_text,i.principle_group,COALESCE(base.is_core,0) AS is_core,
-                        base.article_code AS base_article_code
-                 FROM community_charter_amendment_items i
-                 LEFT JOIN community_charter_articles base
-                   ON base.id=i.target_article_id
-                  AND base.charter_version_id=?
-                 WHERE i.amendment_id=? ORDER BY i.id"
-            );
-            if (!$items_stmt) throw new RuntimeException('بازبینی مواد اصلاح‌شده منشور ممکن نیست.');
-            $base_version_id = (int)$amendment['base_charter_version_id'];
-            $items_stmt->bind_param('ii', $base_version_id, $amendment_id);
-            if (!$items_stmt->execute()) throw new RuntimeException('خواندن مواد اصلاح‌شده انجام نشد.');
-            $items = [];
-            $item_result = $items_stmt->get_result();
-            while ($item = $item_result->fetch_assoc()) {
-                if (in_array($item['action'], ['replace','remove'], true) &&
-                    ($item['base_article_code'] === null ||
-                     $item['base_article_code'] !== $item['article_code'])) {
-                    $items_stmt->close();
-                    throw new RuntimeException('ماده هدف اصلاحیه با نسخه پایه منشور منطبق نیست.');
-                }
-                $items[] = $item;
-            }
-            $items_stmt->close();
-            if (!community_charter_amendment_items_are_valid($items)) {
-                throw new RuntimeException('مواد اصلاح‌شده معتبر نیستند یا حذف ماده بنیادین را شامل می‌شوند.');
-            }
-
-            $core_check = $conn->prepare(
-                "SELECT COUNT(*) AS missing
-                 FROM community_charter_articles base
-                 WHERE base.charter_version_id=? AND base.is_core=1
-                   AND NOT EXISTS (
-                       SELECT 1 FROM community_charter_articles proposed
-                       WHERE proposed.charter_version_id=?
-                         AND proposed.article_code=base.article_code
-                         AND proposed.is_core=1
-                   )"
-            );
-            if (!$core_check) throw new RuntimeException('بررسی حفظ مواد بنیادین ممکن نیست.');
             $proposed_version_id = (int)$amendment['proposed_charter_version_id'];
-            $core_check->bind_param('ii', $base_version_id, $proposed_version_id);
-            if (!$core_check->execute()) throw new RuntimeException('بررسی حفظ مواد بنیادین انجام نشد.');
-            $missing_core = (int)$core_check->get_result()->fetch_assoc()['missing'];
-            $core_check->close();
-            if ($missing_core !== 0) {
-                throw new RuntimeException('هیچ ماده بنیادینی در نسخه پیشنهادی قابل حذف یا تنزل به ماده غیربنیادین نیست.');
+            if ($case_type === 'initial_adoption') {
+                $version_check = $conn->prepare(
+                    "SELECT version_number,status,approved_at,effective_at
+                     FROM community_charter_versions WHERE id=? FOR UPDATE"
+                );
+                if (!$version_check) throw new RuntimeException('بررسی نسخه آغازین منشور ممکن نیست.');
+                $version_check->bind_param('i', $proposed_version_id);
+                if (!$version_check->execute()) throw new RuntimeException('خواندن نسخه آغازین منشور انجام نشد.');
+                $version_row = $version_check->get_result()->fetch_assoc();
+                $version_check->close();
+                if (!$version_row || (int)$version_row['version_number'] !== 1 ||
+                    $version_row['status'] !== 'draft' || $version_row['approved_at'] !== null ||
+                    $version_row['effective_at'] !== null) {
+                    throw new RuntimeException('نسخه آغازین باید پیش‌نویس تأییدنشده باشد.');
+                }
+                $initial_articles = $conn->prepare(
+                    "SELECT COUNT(*) AS total,COUNT(DISTINCT article_code) AS unique_codes,
+                            COALESCE(SUM(is_core=1),0) AS core_total,
+                            COALESCE(SUM(TRIM(title)='' OR TRIM(article_text)=''),0) AS invalid_content
+                     FROM community_charter_articles WHERE charter_version_id=?"
+                );
+                if (!$initial_articles) throw new RuntimeException('بازبینی مواد منشور آغازین ممکن نیست.');
+                $initial_articles->bind_param('i', $proposed_version_id);
+                if (!$initial_articles->execute()) throw new RuntimeException('خواندن مواد منشور آغازین انجام نشد.');
+                $initial_stats = $initial_articles->get_result()->fetch_assoc();
+                $initial_articles->close();
+                if ((int)$initial_stats['total'] !== 12 ||
+                    (int)$initial_stats['unique_codes'] !== 12 ||
+                    (int)$initial_stats['core_total'] !== 12 ||
+                    (int)$initial_stats['invalid_content'] !== 0) {
+                    throw new RuntimeException('تصویب اولیه فقط برای ۱۲ ماده بنیادین کامل و یکتا ممکن است.');
+                }
+            } else {
+                $items_stmt = $conn->prepare(
+                    "SELECT i.action,i.target_article_id,i.article_code,i.proposed_title,
+                            i.proposed_text,i.principle_group,COALESCE(base.is_core,0) AS is_core,
+                            base.article_code AS base_article_code
+                     FROM community_charter_amendment_items i
+                     LEFT JOIN community_charter_articles base
+                       ON base.id=i.target_article_id
+                      AND base.charter_version_id=?
+                     WHERE i.amendment_id=? ORDER BY i.id"
+                );
+                if (!$items_stmt) throw new RuntimeException('بازبینی مواد اصلاح‌شده منشور ممکن نیست.');
+                $base_version_id = (int)$amendment['base_charter_version_id'];
+                $items_stmt->bind_param('ii', $base_version_id, $amendment_id);
+                if (!$items_stmt->execute()) throw new RuntimeException('خواندن مواد اصلاح‌شده انجام نشد.');
+                $items = [];
+                $item_result = $items_stmt->get_result();
+                while ($item = $item_result->fetch_assoc()) {
+                    if (in_array($item['action'], ['replace','remove'], true) &&
+                        ($item['base_article_code'] === null ||
+                         $item['base_article_code'] !== $item['article_code'])) {
+                        $items_stmt->close();
+                        throw new RuntimeException('ماده هدف اصلاحیه با نسخه پایه منشور منطبق نیست.');
+                    }
+                    $items[] = $item;
+                }
+                $items_stmt->close();
+                if (!community_charter_amendment_items_are_valid($items)) {
+                    throw new RuntimeException('مواد اصلاح‌شده معتبر نیستند یا حذف ماده بنیادین را شامل می‌شوند.');
+                }
+
+                $core_check = $conn->prepare(
+                    "SELECT COUNT(*) AS missing
+                     FROM community_charter_articles base
+                     WHERE base.charter_version_id=? AND base.is_core=1
+                       AND NOT EXISTS (
+                           SELECT 1 FROM community_charter_articles proposed
+                           WHERE proposed.charter_version_id=?
+                             AND proposed.article_code=base.article_code
+                             AND proposed.is_core=1
+                       )"
+                );
+                if (!$core_check) throw new RuntimeException('بررسی حفظ مواد بنیادین ممکن نیست.');
+                $core_check->bind_param('ii', $base_version_id, $proposed_version_id);
+                if (!$core_check->execute()) throw new RuntimeException('بررسی حفظ مواد بنیادین انجام نشد.');
+                $missing_core = (int)$core_check->get_result()->fetch_assoc()['missing'];
+                $core_check->close();
+                if ($missing_core !== 0) {
+                    throw new RuntimeException('هیچ ماده بنیادینی در نسخه پیشنهادی قابل حذف یا تنزل به ماده غیربنیادین نیست.');
+                }
             }
 
             $pending = $conn->prepare(
@@ -2041,22 +2182,24 @@ if (!function_exists('community_charter_amendment_activate')) {
             if (!$pending->execute() || $pending->affected_rows !== 1) throw new RuntimeException('آماده‌سازی فعال‌سازی انجام نشد.');
             $pending->close();
 
-            $supersede = $conn->prepare(
-                "UPDATE community_charter_versions SET status='superseded'
-                 WHERE id=? AND status='effective'"
-            );
-            if (!$supersede) throw new RuntimeException('بستن نسخه قبلی منشور ممکن نیست.');
-            $supersede->bind_param('i', $active_ids[0]);
-            if (!$supersede->execute() || $supersede->affected_rows !== 1) {
-                throw new RuntimeException('بستن نسخه قبلی منشور انجام نشد.');
+            if ($active_ids) {
+                $supersede = $conn->prepare(
+                    "UPDATE community_charter_versions SET status='superseded'
+                     WHERE id=? AND status='effective'"
+                );
+                if (!$supersede) throw new RuntimeException('بستن نسخه قبلی منشور ممکن نیست.');
+                $supersede->bind_param('i', $active_ids[0]);
+                if (!$supersede->execute() || $supersede->affected_rows !== 1) {
+                    throw new RuntimeException('بستن نسخه قبلی منشور انجام نشد.');
+                }
+                $supersede->close();
             }
-            $supersede->close();
 
             $new_version_id = (int)$amendment['proposed_charter_version_id'];
             $activate_version = $conn->prepare(
                 "UPDATE community_charter_versions
                  SET status='effective',approved_at=NOW(),effective_at=NOW()
-                 WHERE id=? AND status='draft'"
+                 WHERE id=? AND status='draft' AND approved_at IS NULL AND effective_at IS NULL"
             );
             if (!$activate_version) throw new RuntimeException('فعال‌سازی نسخه تازه ممکن نیست.');
             $activate_version->bind_param('i', $new_version_id);

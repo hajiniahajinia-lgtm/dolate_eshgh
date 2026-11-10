@@ -19,6 +19,7 @@ function cam_page_h($value): string {
 function cam_page_status(string $status): string {
     $labels = [
         'draft_created' => 'پیش‌نویس اصلاح منشور ثبت شد.',
+        'initial_review_started' => 'منشور آغازین برای بررسی مستقل و سپس رأی عمومی ارسال شد.',
         'review_started' => 'پیشنهاد برای بررسی مستقل ارسال شد.',
         'assessment_saved' => 'ارزیابی مستقل ثبت شد.',
         'public_voting_started' => 'بررسی مستقل موفق بود؛ رأی‌گیری عمومی آغاز شد.',
@@ -57,11 +58,34 @@ if ($check) {
     if ($check->execute()) $ready = (int)$check->get_result()->fetch_assoc()['total'] === count($required);
     $check->close();
 }
+if ($ready) {
+    $case_type_check = $conn->query(
+        "SELECT COUNT(*) AS total FROM information_schema.columns
+         WHERE table_schema=DATABASE() AND table_name='community_charter_amendments'
+           AND column_name='case_type'"
+    );
+    $ready = $case_type_check && (int)$case_type_check->fetch_assoc()['total'] === 1;
+    if ($case_type_check) $case_type_check->free();
+}
 
 $active_version = null;
+$effective_version_total = 0;
 $articles = [];
 $amendments = [];
+$initial_draft = null;
+$initial_articles = [];
+$initial_case = null;
 if ($ready) {
+    $effective_count_result = $conn->query(
+        "SELECT COUNT(*) AS total FROM community_charter_versions WHERE status='effective'"
+    );
+    if ($effective_count_result) {
+        $effective_version_total = (int)$effective_count_result->fetch_assoc()['total'];
+        $effective_count_result->free();
+    } else {
+        $ready = false;
+    }
+
     $active_result = $conn->query(
         "SELECT id,version_number,title FROM community_charter_versions
          WHERE status='effective' AND effective_at<=NOW()"
@@ -97,6 +121,55 @@ if ($ready) {
         if ($list) {
             while ($row = $list->fetch_assoc()) $amendments[] = $row;
             $list->free();
+        }
+    }
+
+    if (!$active_version) {
+        $list = $conn->query(
+            "SELECT a.*,v.version_number AS proposed_version_number,u.username AS proposer_name
+             FROM community_charter_amendments a
+             JOIN community_charter_versions v ON v.id=a.proposed_charter_version_id
+             LEFT JOIN users u ON u.id=a.proposer_user_id
+             ORDER BY a.created_at DESC,a.id DESC LIMIT 50"
+        );
+        if ($list) {
+            while ($row = $list->fetch_assoc()) $amendments[] = $row;
+            $list->free();
+        }
+
+        $draft_result = $conn->query(
+            "SELECT id,version_number,title FROM community_charter_versions
+             WHERE status='draft' AND approved_at IS NULL AND effective_at IS NULL
+             ORDER BY id"
+        );
+        if ($draft_result) {
+            $draft_rows = [];
+            while ($row = $draft_result->fetch_assoc()) $draft_rows[] = $row;
+            $draft_result->free();
+            if (count($draft_rows) === 1 && (int)$draft_rows[0]['version_number'] === 1) {
+                $initial_draft = $draft_rows[0];
+                $draft_id = (int)$initial_draft['id'];
+                $initial_article_stmt = $conn->prepare(
+                    "SELECT id,article_code,title,article_text,is_core FROM community_charter_articles
+                     WHERE charter_version_id=? ORDER BY display_order,id"
+                );
+                if ($initial_article_stmt) {
+                    $initial_article_stmt->bind_param('i', $draft_id);
+                    if ($initial_article_stmt->execute()) {
+                        $initial_article_result = $initial_article_stmt->get_result();
+                        while ($row = $initial_article_result->fetch_assoc()) $initial_articles[] = $row;
+                    }
+                    $initial_article_stmt->close();
+                }
+            }
+        }
+        $initial_case_stmt = $conn->prepare(
+            "SELECT id,status FROM community_charter_amendments
+             WHERE case_type='initial_adoption' ORDER BY id DESC LIMIT 1"
+        );
+        if ($initial_case_stmt) {
+            if ($initial_case_stmt->execute()) $initial_case = $initial_case_stmt->get_result()->fetch_assoc() ?: null;
+            $initial_case_stmt->close();
         }
     }
 }
@@ -157,8 +230,38 @@ button.secondary{background:#58677a}button.danger{background:#8a3940}.grid{displ
 <?php endif; ?>
 <?php if (!$ready): ?>
 <div class="warning">ساختار پایگاه داده اصلاح منشور هنوز کامل نیست. این صفحه هیچ migrationای را اجرا نمی‌کند.</div>
+</section>
 <?php elseif (!$active_version): ?>
-<div class="warning">نسخه لازم‌الاجرای منشور یکتا نیست؛ برای جلوگیری از اصلاح روی مبنای نامعلوم، ثبت پیشنهاد متوقف است.</div>
+<?php if ($effective_version_total !== 0): ?>
+<div class="warning">وضعیت نسخه‌های منشور یکتا و روشن نیست؛ تا رفع این وضعیت، تصویب اولیه یا اصلاح منشور متوقف است.</div>
+<?php else: ?>
+<div class="warning">هنوز نسخهٔ لازم‌الاجرای منشور وجود ندارد؛ قوانین عادی تا تصویب جمعی منشور آغازین نباید لازم‌الاجرا شوند.</div>
+<h2>تصویب نخستین منشور بنیادین</h2>
+<?php if ($initial_draft && count($initial_articles) === 12): ?>
+<p>نسخهٔ آغازین هنوز پیش‌نویس است و ۱۲ مادهٔ آن برای بررسی عمومی آماده‌اند. فعال‌سازی فقط پس از بررسی مستقل، رأی عمومی و مهلت اعتراض انجام می‌شود.</p>
+<p><strong><?= cam_page_h($initial_draft['title']) ?></strong></p>
+<?php foreach ($initial_articles as $article): ?>
+<div class="item">
+<strong><?= cam_page_h($article['article_code'] . ' — ' . $article['title']) ?><?= (int)$article['is_core'] === 1 ? ' (ماده بنیادین)' : '' ?></strong>
+<p><?= nl2br(cam_page_h($article['article_text'])) ?></p>
+</div>
+<?php endforeach; ?>
+<?php if ($initial_case): ?>
+<p>پروندهٔ تصویب اولیه ثبت شده است. وضعیت فعلی: <strong><?= cam_page_h($initial_case['status']) ?></strong>. جزئیات بررسی، رأی‌گیری و اعتراض در پروندهٔ پایین نمایش داده می‌شود.</p>
+<?php else: ?>
+<form method="post" action="community_charter_amendment_action.php">
+<input type="hidden" name="csrf_token" value="<?= cam_page_h($csrf) ?>">
+<input type="hidden" name="action" value="start_initial_adoption">
+<button type="submit">ارسال منشور آغازین برای بررسی مستقل و رأی عمومی</button>
+</form>
+<?php endif; ?>
+<?php elseif ($initial_case): ?>
+<p>پروندهٔ تصویب اولیه ثبت شده است. وضعیت فعلی: <strong><?= cam_page_h($initial_case['status']) ?></strong>.</p>
+<?php else: ?>
+<div class="warning">پیش‌نویس آغازین یکتا با ۱۲ مادهٔ بنیادین کامل پیدا نشد؛ فرایند تصویب متوقف است.</div>
+<?php endif; ?>
+<?php endif; ?>
+</section>
 <?php else: ?>
 <p class="muted">نسخه جاری: <?= cam_page_h($active_version['version_number']) ?> — <?= cam_page_h($active_version['title']) ?></p>
 </section>
@@ -214,8 +317,10 @@ button.secondary{background:#58677a}button.danger{background:#8a3940}.grid{displ
 </form>
 </section>
 
+<?php endif; ?>
+
 <section class="panel">
-<h2>پیشنهادهای اصلاح منشور</h2>
+<h2>پرونده‌های منشور بنیادین</h2>
 <?php if (!$amendments): ?><p class="muted">هنوز پیشنهادی ثبت نشده است.</p><?php endif; ?>
 <?php foreach ($amendments as $a):
     $aid = (int)$a['id'];
@@ -237,7 +342,8 @@ button.secondary{background:#58677a}button.danger{background:#8a3940}.grid{displ
 ?>
 <div class="amendment">
 <h3><?= cam_page_h($a['title']) ?></h3>
-<p><span class="tag"><?= cam_page_h($status_labels[$a['status']] ?? $a['status']) ?></span>
+<p><span class="tag"><?= ($a['case_type'] ?? 'amendment') === 'initial_adoption' ? 'تصویب اولیه' : 'اصلاح منشور' ?></span>
+<span class="tag"><?= cam_page_h($status_labels[$a['status']] ?? $a['status']) ?></span>
 <span class="muted">پیشنهاددهنده: <?= cam_page_h($a['proposer_name'] ?? 'کاربر') ?> — نسخه پیشنهادی: <?= cam_page_h($a['proposed_version_number']) ?></span></p>
 <p><strong>دلیل:</strong> <?= nl2br(cam_page_h($a['justification'])) ?></p>
 <p><strong>ارزیابی پیامدها:</strong> <?= nl2br(cam_page_h($a['impact_assessment'])) ?></p>
@@ -445,7 +551,6 @@ $appeal_verdict_labels=['uphold'=>'اعتراض وارد است','dismiss'=>'ا�
 </div>
 <?php endforeach; ?>
 </section>
-<?php endif; ?>
 </div>
 <script>
 (function(){

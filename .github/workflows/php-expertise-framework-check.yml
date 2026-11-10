@@ -5,6 +5,7 @@ on:
     branches:
       - feature/community-law-framework
       - fix/corrective-completion-migration-order
+      - fix/initial-charter-adoption-workflow
     paths:
       - 'docs/live-database-preflight-2026-11-10.md'
       - '.github/workflows/deploy.yml'
@@ -44,6 +45,7 @@ on:
       - 'migrations/20261107_community_law_framework.sql'
       - 'migrations/20261107_community_law_voting_rules.sql'
       - 'migrations/20261107_community_charter_amendments.sql'
+      - 'migrations/20261110_community_charter_initial_adoption.sql'
       - 'migrations/20261108_community_charter_amendment_appeal_assignments.sql'
       - 'migrations/20261108_community_law_change_control.sql'
       - 'migrations/20261108_community_law_change_review.sql'
@@ -204,6 +206,7 @@ on:
       - 'community_charter_amendments.php'
       - 'migrations/20261107_community_charter_foundation.sql'
       - 'migrations/20261107_community_charter_amendments.sql'
+      - 'migrations/20261110_community_charter_initial_adoption.sql'
       - 'migrations/20261108_community_charter_amendment_appeal_assignments.sql'
       - 'community.php'
       - 'collective_knowledge_finalizer.php'
