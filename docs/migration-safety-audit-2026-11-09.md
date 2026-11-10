@@ -48,3 +48,53 @@ Before any real apply:
 ## Status
 
 This is a source-code audit, not proof of the live database state. The host's migration registry and actual schema were not queried. No production changes were made.
+
+## Backup and dependency review — 2026-11-10
+
+This supplement reviews the supplied phpMyAdmin database export and the 70 SQL migration files on the development branch. It does not represent a live connection to the host. No SQL was executed against the host, and the backup was not restored into a test server.
+
+### Registry and schema reconciliation
+
+- The backup contains 68 tables and 25 rows in `app_schema_migrations`.
+- All 25 registered migration names exist in the branch, and all 25 SHA-256 checksums match the exact migration contents after the runner's `trim()` behavior.
+- There are 45 branch migrations not represented in the registry. This count includes `20261106_collective_knowledge_library.sql`.
+- The three tables created by the knowledge-library migration already exist in the backup. Their column sets, primary keys and named indexes match that migration. The migration is nevertheless absent from the registry; do not treat this as permission to run it or to edit the registry directly.
+- The backup does not contain the law framework, charter foundation, decision ledger, hierarchy-change history, or corrective-completion review tables. It also does not contain `app_schema_migration_recovery`.
+
+### Classification of the 45 unregistered migrations
+
+- 26 are additive table-creation migrations.
+- 16 contain schema alterations; this includes guarded additions, enum changes, and three migrations that replace unique indexes to support independent review rounds.
+- Five touch existing or seed data; two of those also alter schema. No `DROP TABLE`, `DELETE`, or `TRUNCATE` statement was found in this set. The three `DROP INDEX` statements change uniqueness constraints; they do not delete rows.
+
+Data-touching cases requiring preflight:
+
+- `20261107_community_charter_foundation.sql` seeds the initial charter version and its 12 articles using `INSERT IGNORE`.
+- `20261107_topic_expertise_voter_weight_snapshots.sql` captures the earliest ballot weight for each voter/topic pair. Its unique key makes repeated inserts idempotent.
+- `20261108_community_decision_ledger_backfill.sql` copies finalized historical decisions. The supplied backup has 99 finalized decision rows, all 99 matching an existing topic. The destination ledger has a unique key on `source_topic_id`, so `INSERT IGNORE` protects against duplicate source topics.
+- `20261109_topic_intent_classification.sql` classifies 111 existing topics: 1 with `topic_purpose='knowledge'` becomes `knowledge`; 2 `execution` and 108 `mixed` topics become `decision`. No historical topic is automatically classified as a law.
+- `20261109_z_community_decision_topic_intent.sql` backfills the topic-intent snapshot in the new decision ledger.
+
+### Dependency defects found and corrected in the development branch
+
+The runner previously sorted several files lexically even though their schema dependencies required another order. The dependency map and its contract test now enforce:
+
+- objections schema repair → law framework → final-review/appeal schema;
+- charter foundation → charter amendments;
+- voting rules → voting-rule approval workflow;
+- decision ledger → decision/knowledge link;
+- law change control → independent review → voting → effects;
+- corrective-completion reviews → retry-round schema;
+- expertise proposal schema → proposal voting.
+
+The law-change chain is especially important: the review and voting migrations modify the allowed notice-event enum values. The effects migration must run last so the final enum retains the full set, including `change_vote_result` and `expiry_updated`.
+
+Commit: `1d3fb88c32a7433c37583c8f30ca83f181614afc`.
+
+### Verification and release boundary
+
+- Migration dependency-order workflow: success.
+- PHP syntax/contract workflow: success.
+- Isolated MySQL charter/law integration workflow: success.
+- PR #38 remains open and unmerged.
+- No host, live database, deployment, or main-branch changes were made. The read-only backup review does not replace a live runner plan and partial-schema reconciliation immediately before any approved apply.
