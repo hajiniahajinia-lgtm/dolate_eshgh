@@ -94,6 +94,11 @@ $checks['change requests require five independent reviewers and four supporting 
     strpos($change_source, "status='approved'") !== false &&
     strpos($change_source, 'turnout_required') !== false &&
     strpos($change_source, 'approval_required') !== false;
+$change_request_migration = file_get_contents(__DIR__ . '/../migrations/20261110_community_law_change_reinstate_request_type.sql');
+$checks['reinstatement request type is supported by the database schema'] =
+    is_string($change_request_migration) &&
+    strpos($change_source, "'suspend','repeal','review_expiry','reinstate'") !== false &&
+    strpos($change_request_migration, "'suspend','repeal','review_expiry','reinstate'") !== false;
 $checks['approved suspension, reinstatement and repeal effects are idempotent and audited'] =
     strpos($change_source, "\$row['effect_applied_at']!==null") !== false &&
     strpos($change_source, 'community_law_record_history(') !== false &&
