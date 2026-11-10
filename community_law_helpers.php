@@ -1985,14 +1985,12 @@ if (!function_exists('community_charter_amendment_activate')) {
         try {
             $active = $conn->query(
                 "SELECT id FROM community_charter_versions
-                 WHERE status='effective' AND effective_at<=NOW() FOR UPDATE"
+                 WHERE status='effective' FOR UPDATE"
             );
             if (!$active) throw new RuntimeException('قفل منشور جاری ممکن نیست.');
             $active_ids = [];
             while ($row = $active->fetch_assoc()) $active_ids[] = (int)$row['id'];
             $active->free();
-            if (count($active_ids) !== 1) throw new RuntimeException('نسخه جاری منشور یکتا نیست.');
-
             $lock = $conn->prepare(
                 "SELECT case_type,base_charter_version_id,proposed_charter_version_id,status,appeal_closes_at,
                         (appeal_closes_at IS NOT NULL AND appeal_closes_at<=NOW()) AS appeal_closed
@@ -2201,7 +2199,7 @@ if (!function_exists('community_charter_amendment_activate')) {
             $activate_version = $conn->prepare(
                 "UPDATE community_charter_versions
                  SET status='effective',approved_at=NOW(),effective_at=NOW()
-                 WHERE id=? AND status='draft'"
+                 WHERE id=? AND status='draft' AND approved_at IS NULL AND effective_at IS NULL"
             );
             if (!$activate_version) throw new RuntimeException('فعال‌سازی نسخه تازه ممکن نیست.');
             $activate_version->bind_param('i', $new_version_id);
