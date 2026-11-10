@@ -87,6 +87,9 @@ try {
         '20261108_community_law_change_voting.sql' => [
             '20261108_community_law_change_effects.sql'
         ],
+        '20261108_community_law_change_effects.sql' => [
+            '20261110_community_law_change_reinstate_request_type.sql'
+        ],
         '20261109_community_law_corrective_completion_reviews.sql' => [
             '20261109_community_law_corrective_completion_retries.sql'
         ],
