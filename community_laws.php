@@ -757,11 +757,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $tally->close();
             $total_votes = (int)$votes['total'];
             $approvals = (int)$votes['approvals'];
-            if ($total_votes < (int)$proposal['reviewer_quorum']) {
+            if ($total_votes < (int)$proposal['reviewer_quorum'] || $total_votes <= 0) {
                 throw new RuntimeException('insufficient_rule_votes');
             }
-            // نسبت دقیق دوسوم؛ از خطای گردکردن 66.67 جلوگیری می‌شود.
-            $approved = ($approvals * 3) >= ($total_votes * 2);
+            $approval_threshold_percent = $proposal['approval_threshold_percent'] ?? null;
+            if (!is_numeric($approval_threshold_percent) ||
+                (float)$approval_threshold_percent < 50.01 ||
+                (float)$approval_threshold_percent > 100) {
+                throw new RuntimeException('invalid_rule_approval_threshold');
+            }
+            // آستانهٔ ذخیره‌شده ملاک است؛ درصد مشارکت تا دو رقم اعشار گرد می‌شود.
+            $approval_percent = round(($approvals / $total_votes) * 100, 2);
+            $approved = $approval_percent >= (float)$approval_threshold_percent;
             $new_status = $approved ? 'approved' : 'rejected';
 
             $decision_update = $conn->prepare(
