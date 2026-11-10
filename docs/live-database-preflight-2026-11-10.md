@@ -121,7 +121,7 @@ The live schema query reported these three knowledge-library tables as present:
 - `collective_knowledge_revisions`
 - `collective_knowledge_reviews`
 
-The supplied SQL backup was independently inspected earlier: these tables have 16, 15 and 8 columns respectively, with primary keys and the expected named indexes matching `20261106_collective_knowledge_library.sql`. The live query in this preflight confirmed table presence, not a fresh live column/index comparison. The migration file uses `CREATE TABLE IF NOT EXISTS` only; it does not insert, update or delete knowledge rows. The registry discrepancy remains: this migration is not among the 25 registered names even though its tables exist. Do not alter the registry manually; any reconciliation must be reviewed as a separate controlled step.
+The supplied SQL backup was independently inspected earlier: these tables have 16, 15 and 8 columns respectively, with primary keys and the expected named indexes matching `20261106_collective_knowledge_library.sql`. The live query confirmed table presence, not a fresh live column/index comparison. The migration file uses `CREATE TABLE IF NOT EXISTS` only; it does not insert, update or delete knowledge rows. The registry discrepancy remains: this migration is not among the 25 registered names even though its tables exist. Do not alter the registry manually; any reconciliation must be reviewed as a separate controlled step.
 
 The live schema query reported the following target objects as missing, consistently with the supplied backup:
 - Charter foundation: `community_charter_versions`, `community_charter_articles`, `community_law_charter_references`, `community_law_charter_assessments`.

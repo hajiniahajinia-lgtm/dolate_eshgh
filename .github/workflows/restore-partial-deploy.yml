@@ -1,0 +1,87 @@
+name: Restore files from interrupted deployment
+
+on:
+  workflow_dispatch:
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the pre-deployment version
+        uses: actions/checkout@v4
+        with:
+          ref: 00f10ee2133fd843fc6702cd27e0db02191e0fd8
+          fetch-depth: 1
+
+      - name: Restore only files transferred by the interrupted run
+        env:
+          FTP_SERVER: ${{ secrets.FTP_SERVER }}
+          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+          FTP_SERVER_DIR: ${{ secrets.FTP_SERVER_DIR }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          restore_files=(
+            "add_topic.php"
+            "archived_topics.php"
+            "collective_knowledge_finalizer.php"
+            "community.php"
+            "community_member_removal_helpers.php"
+            "create_community.php"
+            "expertise.php"
+            "expertise_action.php"
+            "join_community.php"
+            "knowledge_library.php"
+            "leave_community.php"
+            "migrations/auto_apply.php"
+            "profile.php"
+            "request_member_removal.php"
+            "set_community_parent.php"
+            "tests/community_hierarchy_history_access_contract_test.php"
+          )
+          remove_files=(
+            "community_charter_amendment_action.php"
+            "community_charter_amendments.php"
+            "community_decision_ledger.php"
+            "community_law_amendment_helpers.php"
+            "community_law_amendments.php"
+            "community_law_change_action.php"
+            "community_law_change_cases.php"
+            "community_law_change_helpers.php"
+            "community_law_conformity_action.php"
+            "community_law_conformity_cases.php"
+            "community_law_conformity_helpers.php"
+            "community_law_helpers.php"
+            "community_law_outcome_action.php"
+            "community_laws.php"
+            "tests/community_charter_amendments_integration_test.php"
+            "tests/community_charter_amendments_test.php"
+            "tests/community_decision_knowledge_link_integration_test.php"
+            "tests/community_decision_knowledge_separation_integration_test.php"
+            "tests/community_decision_ledger_backfill_integration_test.php"
+            "tests/community_decision_ledger_integration_test.php"
+            "tests/community_law_amendment_membership_lock_contract_test.php"
+            "tests/community_law_amendment_notice_contract_test.php"
+          )
+
+          for file in "${restore_files[@]}"; do
+            test -f "$file"
+            encoded_path="$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe="/"))' "$file")"
+            echo "Restoring: $file"
+            curl --fail --show-error --silent --ftp-create-dirs \
+              --user "$FTP_USERNAME:$FTP_PASSWORD" \
+              --upload-file "$file" \
+              "ftp://${FTP_SERVER}${FTP_SERVER_DIR%/}/${encoded_path}"
+          done
+
+          for file in "${remove_files[@]}"; do
+            remote_path="${FTP_SERVER_DIR%/}/$file"
+            echo "Removing newly introduced file: $file"
+            curl --fail --show-error --silent \
+              --user "$FTP_USERNAME:$FTP_PASSWORD" \
+              --quote "DELE $remote_path" \
+              "ftp://${FTP_SERVER}/"
+          done
+
+          echo "Restoration completed. Restored ${#restore_files[@]} files and removed ${#remove_files[@]} newly introduced files."

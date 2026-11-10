@@ -1,0 +1,39 @@
+name: PHP syntax check - knowledge library
+
+on:
+  push:
+    branches:
+      - main
+      - feature/collective-knowledge-library
+    paths:
+      - 'knowledge_library.php'
+      - 'profile.php'
+      - 'community.php'
+      - 'archived_topics.php'
+      - 'migrations/20261106_knowledge_publication_community_vote.sql'
+      - '.github/workflows/php-knowledge-library-check.yml'
+  pull_request:
+    paths:
+      - 'knowledge_library.php'
+      - 'profile.php'
+      - 'community.php'
+      - 'archived_topics.php'
+      - 'migrations/20261106_collective_knowledge_library.sql'
+      - '.github/workflows/php-knowledge-library-check.yml'
+
+jobs:
+  php-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+      - name: Check PHP syntax
+        run: |
+          php -l knowledge_library.php
+          php -l profile.php
+          php -l community.php
+          php -l archived_topics.php

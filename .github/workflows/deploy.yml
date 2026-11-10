@@ -1,0 +1,79 @@
+name: Deploy to InfinityFree (upload only, never delete)
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_all:
+        description: "Upload all tracked, non-excluded files (otherwise only files changed in the latest commit)"
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  deploy:
+    name: Upload changed files without deleting remote files
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get repository files
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Upload changed files via FTP (no delete operations)
+        env:
+          FTP_SERVER: ${{ secrets.FTP_SERVER }}
+          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+          FTP_SERVER_DIR: ${{ secrets.FTP_SERVER_DIR }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_BEFORE: ${{ github.event.before }}
+          DEPLOY_ALL: ${{ inputs.deploy_all }}
+          COMMIT_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "$EVENT_NAME" == "push" ]]; then
+            if [[ -z "$EVENT_BEFORE" || "$EVENT_BEFORE" =~ ^0+$ ]]; then
+              mapfile -d '' files < <(git ls-files -z)
+            else
+              mapfile -d '' files < <(git diff --name-only -z --diff-filter=ACMRT "$EVENT_BEFORE" "$COMMIT_SHA")
+            fi
+          elif [[ "$DEPLOY_ALL" == "true" ]]; then
+            mapfile -d '' files < <(git ls-files -z)
+          else
+            mapfile -d '' files < <(git diff --name-only -z --diff-filter=ACMRT HEAD^ HEAD)
+          fi
+
+          uploaded=0
+          skipped=0
+
+          for file in "${files[@]}"; do
+            case "$file" in
+              .git*|.github/*|*/.git*|*/.github/*|node_modules/*|*/node_modules/*|migrations/*.sql|*.sql|README*|db.php|migration_config.php|.env|.env.*|dolate_eshgh1.sql|*backup*.php|full_backup.php|test.php|test1.php|test_enforce_stats.php|deployment-test/*|ftp-test/*|deploy-test.txt|deployment_test.txt)
+                echo "SKIP protected/excluded path: $file"
+                skipped=$((skipped + 1))
+                continue
+                ;;
+            esac
+
+            if [[ ! -f "$file" ]]; then
+              echo "SKIP missing or deleted path: $file"
+              skipped=$((skipped + 1))
+              continue
+            fi
+
+            encoded_path="$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe="/"))' "$file")"
+            remote_url="ftp://${FTP_SERVER}${FTP_SERVER_DIR%/}/${encoded_path}"
+
+            echo "Uploading: $file"
+            curl --fail --show-error --silent --ftp-create-dirs \
+              --user "$FTP_USERNAME:$FTP_PASSWORD" \
+              --upload-file "$file" \
+              "$remote_url"
+
+            uploaded=$((uploaded + 1))
+          done
+
+          echo "Upload complete. Uploaded: $uploaded; skipped: $skipped."
+          echo "No FTP delete, mirror, or clean-slate command was used."
