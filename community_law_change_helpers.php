@@ -259,6 +259,7 @@ if (!function_exists('community_law_submit_change_assessment')) {
             $counts->close();
 
             $new_status='under_review'; $review_result=null; $electorate_count=0;
+            $valid_rule=false; $turnout_percent=null; $approval_percent=null;
             if ((int)$summary['total']>=5) {
                 if ((int)$summary['uphold_count']>=4) {
                     $eligible_count_stmt=$conn->prepare('SELECT COUNT(*) AS total FROM community_members cm WHERE cm.community_id=? AND NOT EXISTS (SELECT 1 FROM community_law_change_reviewers r WHERE r.case_id=? AND r.reviewer_user_id=cm.user_id)');
@@ -320,17 +321,17 @@ if (!function_exists('community_law_submit_change_assessment')) {
                          vote_opened_at=IF(?='awaiting_vote',NOW(),NULL),
                          vote_closes_at=IF(?='awaiting_vote',DATE_ADD(NOW(),INTERVAL 7 DAY),NULL),
                          electorate_count=?,
-                         turnout_numerator=IF(?='awaiting_vote',?,NULL),
-                         turnout_denominator=IF(?='awaiting_vote',10000,NULL),
-                         approval_numerator=IF(?='awaiting_vote',?,NULL),
-                         approval_denominator=IF(?='awaiting_vote',10000,NULL)
+                         turnout_numerator=IF(?='awaiting_vote',?,turnout_numerator),
+                         turnout_denominator=IF(?='awaiting_vote',10000,turnout_denominator),
+                         approval_numerator=IF(?='awaiting_vote',?,approval_numerator),
+                         approval_denominator=IF(?='awaiting_vote',10000,approval_denominator)
                      WHERE id=? AND status='under_review'"
                 );
                 if (!$update) throw new RuntimeException('case result update prepare failed');
                 $turnout_basis_points=$valid_rule?(int)round($turnout_percent*100):null;
                 $approval_basis_points=$valid_rule?(int)round($approval_percent*100):null;
                 $update->bind_param(
-                    'sssssisisisi',
+                    'sssssisissii',
                     $new_status,$review_result,$summary_text,$new_status,$new_status,$electorate_count,
                     $new_status,$turnout_basis_points,$new_status,$new_status,$approval_basis_points,$case_id
                 );
