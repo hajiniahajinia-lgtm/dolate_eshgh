@@ -82,6 +82,9 @@ try {
         '20261107_community_charter_foundation.sql' => [
             '20261107_community_charter_amendments.sql'
         ],
+        '20261107_community_charter_amendments.sql' => [
+            '20261110_community_charter_initial_adoption.sql'
+        ],
         '20261107_community_law_voting_rules.sql' => [
             '20261107_community_law_voting_rule_approval.sql'
         ],
