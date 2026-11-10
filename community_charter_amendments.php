@@ -58,6 +58,15 @@ if ($check) {
     if ($check->execute()) $ready = (int)$check->get_result()->fetch_assoc()['total'] === count($required);
     $check->close();
 }
+if ($ready) {
+    $case_type_check = $conn->query(
+        "SELECT COUNT(*) AS total FROM information_schema.columns
+         WHERE table_schema=DATABASE() AND table_name='community_charter_amendments'
+           AND column_name='case_type'"
+    );
+    $ready = $case_type_check && (int)$case_type_check->fetch_assoc()['total'] === 1;
+    if ($case_type_check) $case_type_check->free();
+}
 
 $active_version = null;
 $articles = [];
