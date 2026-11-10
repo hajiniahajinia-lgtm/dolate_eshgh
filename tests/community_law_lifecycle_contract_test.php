@@ -90,8 +90,10 @@ $checks['change requests require five independent reviewers and four supporting 
     strpos($change_source, 'count($candidates)<5') !== false &&
     strpos($change_source, 'if ((int)$summary[\'total\']>=5)') !== false &&
     strpos($change_source, 'if ((int)$summary[\'uphold_count\']>=4)') !== false &&
-    strpos($change_source, "'turnout_required'=>'2/3'") !== false &&
-    strpos($change_source, "'approval_required'=>'2/3'") !== false;
+    strpos($change_source, "FROM community_law_voting_rules") !== false &&
+    strpos($change_source, "status='approved'") !== false &&
+    strpos($change_source, "'turnout_required'=>((int)$case['turnout_numerator'])") !== false &&
+    strpos($change_source, "'approval_required'=>((int)$case['approval_numerator'])") !== false;
 $checks['approved suspension, reinstatement and repeal effects are idempotent and audited'] =
     strpos($change_source, "\$row['effect_applied_at']!==null") !== false &&
     strpos($change_source, 'community_law_record_history(') !== false &&
