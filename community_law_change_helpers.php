@@ -331,9 +331,9 @@ if (!function_exists('community_law_submit_change_assessment')) {
                 $turnout_basis_points=$valid_rule?(int)round($turnout_percent*100):null;
                 $approval_basis_points=$valid_rule?(int)round($approval_percent*100):null;
                 $update->bind_param(
-                    'sssssisissii',
+                    'sssssisissisi',
                     $new_status,$review_result,$summary_text,$new_status,$new_status,$electorate_count,
-                    $new_status,$turnout_basis_points,$new_status,$new_status,$approval_basis_points,$case_id
+                    $new_status,$turnout_basis_points,$new_status,$new_status,$approval_basis_points,$new_status,$case_id
                 );
                 if (!$update->execute() || $update->affected_rows!==1) throw new RuntimeException('case result update failed');
                 $update->close();
