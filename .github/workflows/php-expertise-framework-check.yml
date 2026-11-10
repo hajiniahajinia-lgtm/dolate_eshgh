@@ -1,7 +1,6 @@
 name: PHP syntax check - expertise and community laws
 
 on:
-  workflow_dispatch:
   pull_request:
     branches:
       - main
@@ -11,7 +10,9 @@ on:
       - '.github/workflows/php-expertise-framework-check.yml'
   push:
     branches:
-      - '**'
+      - feature/community-law-framework
+      - fix/corrective-completion-migration-order
+      - fix/initial-charter-adoption-workflow
     paths:
       - 'docs/live-database-preflight-2026-11-10.md'
       - '.github/workflows/deploy.yml'
@@ -21,6 +22,7 @@ on:
       - 'add_topic.php'
       - 'community.php'
       - 'community_laws.php'
+      - 'tests/community_law_voting_rule_threshold_contract_test.php'
       - 'migrations/20261109_topic_intent_classification.sql'
       - 'migrations/20261109_z_community_decision_topic_intent.sql'
       - 'tests/topic_intent_classification_contract_test.php'
@@ -34,6 +36,7 @@ on:
       - 'expertise_action.php'
       - 'votes.php'
       - 'community_laws.php'
+      - 'tests/community_law_voting_rule_threshold_contract_test.php'
       - 'archived_topics.php'
       - 'knowledge_library.php'
       - 'community.php'
@@ -279,6 +282,7 @@ jobs:
         run: |
           php -l add_topic.php
           php -l community_laws.php
+          php -l tests/community_law_voting_rule_threshold_contract_test.php
           php -l tests/topic_intent_classification_contract_test.php
           php -l tests/topic_intent_classification_integration_test.php
           php -l tests/community_law_origin_integration_test.php
@@ -356,6 +360,8 @@ jobs:
           php -l tests/community_decision_ledger_integration_test.php
           php -l tests/community_decision_ledger_backfill_integration_test.php
           php -l tests/community_decision_knowledge_separation_integration_test.php
+      - name: Verify configured law voting-rule approval threshold
+        run: php tests/community_law_voting_rule_threshold_contract_test.php
       - name: Verify topic intent classification contract
         run: php tests/topic_intent_classification_contract_test.php
       - name: Verify deployment includes migration scripts without exposing secrets or dumps
