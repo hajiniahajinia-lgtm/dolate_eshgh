@@ -278,7 +278,7 @@ if (!function_exists('community_law_submit_change_assessment')) {
                         $electorate_count=(int)$conn->query('SELECT COUNT(*) AS total FROM community_law_change_electorate WHERE case_id='.(int)$case_id)->fetch_assoc()['total'];
                     }
                     $rule_stmt=$conn->prepare(
-                        "SELECT community_quorum_percent,community_approval_percent
+                        "SELECT individual_quorum_percent,individual_approval_percent,individual_vote_basis
                          FROM community_law_voting_rules
                          WHERE law_version_id=? AND status='approved'
                          LIMIT 1"
@@ -290,10 +290,11 @@ if (!function_exists('community_law_submit_change_assessment')) {
                     $approved_rule=$rule_stmt->get_result()->fetch_assoc();
                     $rule_stmt->close();
 
-                    $turnout_percent=$approved_rule===null?null:(float)$approved_rule['community_quorum_percent'];
-                    $approval_percent=$approved_rule===null?null:(float)$approved_rule['community_approval_percent'];
+                    $turnout_percent=$approved_rule===null?null:(float)$approved_rule['individual_quorum_percent'];
+                    $approval_percent=$approved_rule===null?null:(float)$approved_rule['individual_approval_percent'];
                     $valid_rule=$turnout_percent!==null && $approval_percent!==null &&
                         is_finite($turnout_percent) && is_finite($approval_percent) &&
+                        ($approved_rule['individual_vote_basis']??null)==='count' &&
                         $turnout_percent>=50.01 && $turnout_percent<=100 &&
                         $approval_percent>=50.01 && $approval_percent<=100;
                     if ($electorate_count>=3 && $valid_rule) {
