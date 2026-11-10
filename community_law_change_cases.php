@@ -83,7 +83,7 @@ if ($schema_ready) {
     $case_stmt=$conn->prepare(
         "SELECT c.id,c.law_id,c.law_version_id,c.request_type,c.status,c.review_result,
                 c.requested_by,c.requester_community_id,c.reason,c.evidence,c.emergency_requested,
-                c.created_at,c.review_completed_at,c.vote_opened_at,c.vote_closes_at,
+                c.created_at,c.review_completed_at,c.review_summary,c.vote_opened_at,c.vote_closes_at,
                 c.electorate_count,c.vote_result,c.effect_applied_at,c.effect_summary,
                 l.law_code,l.status AS law_status,l.originating_community_id,
                 origin.name AS originating_community_name,v.title,
@@ -277,6 +277,14 @@ button.secondary{background:#475569}details{border-top:1px solid #e2e8f0;padding
                 $vote_closed=$case['vote_closes_at']!==null && strtotime($case['vote_closes_at'])<=time();
                 $case_type=$type_labels[$case['request_type']]??$case['request_type'];
                 $case_status=$case_status_labels[$case['status']]??$case['status'];
+                $review_summary_data=json_decode((string)($case['review_summary']??''),true);
+                $review_block_reason=is_array($review_summary_data)?(string)($review_summary_data['block_reason']??''):'';
+                $review_messages=[
+                    'insufficient_review_support'=>'بررسی مستقل تکمیل شد، اما شواهد و ارزیابی‌ها حدنصاب حمایت لازم را تأمین نکردند.',
+                    'insufficient_parent_electorate'=>'بررسی مستقل تکمیل شد، اما تعداد اعضای واجد رأی در جامعهٔ مادر برای تشکیل رأی‌گیری کافی نیست.',
+                    'missing_or_invalid_parent_voting_rule'=>'بررسی مستقل تکمیل شد، اما قواعد رأی‌گیری مصوب و معتبر برای همین نسخهٔ قانون موجود نیست؛ رأی‌گیری آغاز نشده است.'
+                ];
+                $review_message=$review_messages[$review_block_reason]??'بررسی تکمیل شد، اما شرایط لازم برای ارجاع پرونده به رأی فراهم نشد.';
 
                 // دلایل ارزیابی‌ها و رویدادهای مرتبط با همین پرونده، فقط برای مشاهده خوانده می‌شوند.
                 $case_assessments=[];
@@ -337,7 +345,7 @@ button.secondary{background:#475569}details{border-top:1px solid #e2e8f0;padding
                 <?php if ($case['effect_applied_at']!==null): ?>
                     <div class="notice">اثر حقوقی در <?= clcp_h($case['effect_applied_at']) ?> اعمال شده است.</div>
                 <?php elseif ($case['status']==='review_complete'): ?>
-                    <div class="notice warning">نظر ارزیابان به حدنصاب لازم برای ارجاع به رأی نرسید؛ می‌توان با مستندات تکمیلی درخواست تازه‌ای ثبت کرد.</div>
+                    <div class="notice warning"><?= clcp_h($review_message) ?> می‌توان پس از رفع مانع، درخواست تازه‌ای ثبت کرد.</div>
                 <?php endif; ?>
 
                 <details>

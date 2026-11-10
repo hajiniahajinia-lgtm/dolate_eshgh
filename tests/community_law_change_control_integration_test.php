@@ -93,6 +93,9 @@ try {
     $db->query("INSERT INTO community_laws (id,law_code,originating_community_id,created_by,status,current_version_id,effective_at) VALUES (9501,'LAW-CHANGE-TEST',90010,90100,'approved',99001,NOW())");
     $db->query("INSERT INTO community_law_versions (id,law_id,version_number,title,law_text,proposed_by,status,approved_at) VALUES (99001,9501,1,'قانون آزمایشی','متن قانون',90100,'approved',NOW())");
     $db->query("INSERT INTO community_law_scopes (law_version_id,scope_community_id,include_descendants) VALUES (99001,90010,1)");
+    $db->query("INSERT INTO community_law_voting_rules
+        (law_version_id,jurisdiction_level,individual_quorum_percent,individual_approval_percent,individual_vote_basis,community_quorum_percent,community_approval_percent,status,configured_by,configured_at,approved_at)
+        VALUES (99001,'parent_shared',75.00,75.00,'count',75.00,75.00,'approved',90100,NOW(),NOW())");
     $db->query("INSERT INTO community_laws (id,law_code,originating_community_id,created_by,status,current_version_id,effective_at) VALUES (9502,'LAW-LOCAL-CONFORMITY-TEST',90020,90200,'approved',99002,NOW())");
     $db->query("INSERT INTO community_law_versions (id,law_id,version_number,title,law_text,proposed_by,status,approved_at) VALUES (99002,9502,1,'قانون محلی آزمایشی','متن قانون محلی',90200,'approved',NOW())");
     $db->query("INSERT INTO community_law_scopes (law_version_id,scope_community_id,include_descendants) VALUES (99002,90020,1)");
@@ -603,10 +606,20 @@ try {
     change_case_check(count($electorate)===4,'independent reviewers are excluded from the parent voting electorate');
     change_case_check(community_law_change_cast_vote($db,$case_id,(int)$electorate[0]['user_id'],'yes'),'eligible parent voter can vote yes');
     change_case_check(community_law_change_cast_vote($db,$case_id,(int)$electorate[1]['user_id'],'yes'),'second eligible parent voter can vote yes');
-    change_case_check(community_law_change_cast_vote($db,$case_id,(int)$electorate[2]['user_id'],'no'),'eligible parent voter can vote no');
+    change_case_check(community_law_change_cast_vote($db,$case_id,(int)$electorate[2]['user_id'],'yes'),'third eligible parent voter can vote yes');
+    change_case_check(community_law_change_cast_vote($db,$case_id,(int)$electorate[3]['user_id'],'no'),'fourth eligible parent voter can vote no');
     change_case_check(!community_law_change_cast_vote($db,$case_id,90200,'yes'),'a child-community member outside the captured parent electorate cannot vote');
+    $case_rules=$db->query('SELECT turnout_numerator,turnout_denominator,approval_numerator,approval_denominator FROM community_law_change_cases WHERE id='.(int)$case_id)->fetch_assoc();
+    change_case_check($case_rules && (int)$case_rules['turnout_numerator']===7500 && (int)$case_rules['turnout_denominator']===10000 &&
+        (int)$case_rules['approval_numerator']===7500 && (int)$case_rules['approval_denominator']===10000,
+        'the case snapshots the approved 75 percent individual-vote quorum and approval rules for its exact law version');
     $db->query('UPDATE community_law_change_cases SET vote_closes_at=DATE_SUB(NOW(),INTERVAL 1 SECOND) WHERE id='.(int)$case_id);
-    change_case_check(community_law_change_finalize_vote($db,$case_id)==='approved','two-thirds turnout and approval thresholds approve the request');
+    change_case_check(community_law_change_finalize_vote($db,$case_id)==='approved','the approved 75 percent individual-vote rules approve a 3-of-4 yes vote with full turnout');
+    $final_note=$db->query('SELECT decision_note FROM community_law_change_cases WHERE id='.(int)$case_id)->fetch_assoc();
+    $final_note_data=json_decode((string)$final_note['decision_note'],true);
+    change_case_check($final_note_data && $final_note_data['turnout_required']==='7500/10000' &&
+        $final_note_data['approval_required']==='7500/10000',
+        'the permanent decision record reports the exact thresholds used by the case');
     change_case_check(!community_law_change_cast_vote($db,$case_id,(int)$reviewers[0]['reviewer_user_id'],'no'),'votes are closed after the deadline');
     $vote_case=$db->query('SELECT status,vote_result FROM community_law_change_cases WHERE id='.(int)$case_id)->fetch_assoc();
     change_case_check($vote_case && $vote_case['status']==='approved' && $vote_case['vote_result']==='approved','vote outcome is permanently recorded');
@@ -966,6 +979,34 @@ try {
     );
     $change_read=(int)$db->query("SELECT COUNT(*) AS n FROM community_law_community_notices WHERE id=".(int)$change_notice['id']." AND read_at IS NOT NULL")->fetch_assoc()['n'];
     change_case_check($change_read===1,'change notice read status is updated in the change-notice table');
+
+    // A missing approved rule for the exact law version must fail closed.
+    $db->query("INSERT INTO community_laws (id,law_code,originating_community_id,created_by,status,current_version_id,effective_at)
+        VALUES (9505,'LAW-CHANGE-NO-RULE-TEST',90010,90100,'approved',99005,NOW())");
+    $db->query("INSERT INTO community_law_versions (id,law_id,version_number,title,law_text,proposed_by,status,approved_at)
+        VALUES (99005,9505,1,'قانون بدون قاعدهٔ رأی‌گیری','متن قانون',90100,'approved',NOW())");
+    $db->query("INSERT INTO community_law_scopes (law_version_id,scope_community_id,include_descendants)
+        VALUES (99005,90010,1)");
+    $missing_rule_case=community_law_open_change_case($db,9505,90200,90020,'suspend','آزمون نبودن قاعدهٔ رأی‌گیری','شواهد آزمایشی',false);
+    change_case_check(is_int($missing_rule_case) && $missing_rule_case>0,'a change request can enter independent review when its law version has no approved voting rule');
+    $missing_rule_reviewers=$db->query('SELECT reviewer_user_id FROM community_law_change_reviewers WHERE case_id='.(int)$missing_rule_case.' ORDER BY reviewer_user_id')->fetch_all(MYSQLI_ASSOC);
+    change_case_check(count($missing_rule_reviewers)===5,'the missing-rule test receives five independent reviewers');
+    foreach ($missing_rule_reviewers as $index=>$reviewer) {
+        $verdict=$index<4?'uphold':'dismiss';
+        change_case_check(
+            community_law_submit_change_assessment($db,$missing_rule_case,(int)$reviewer['reviewer_user_id'],$verdict,'بررسی مستقل آزمون نبودن قاعده انجام شد.')!==false,
+            'missing-rule reviewer assessment is accepted'
+        );
+    }
+    $missing_rule_result=$db->query('SELECT status,review_result,review_summary,electorate_count FROM community_law_change_cases WHERE id='.(int)$missing_rule_case)->fetch_assoc();
+    $missing_rule_summary=json_decode((string)$missing_rule_result['review_summary'],true);
+    change_case_check(
+        $missing_rule_result && $missing_rule_result['status']==='review_complete' &&
+        $missing_rule_result['review_result']==='inconclusive' &&
+        (int)$missing_rule_result['electorate_count']===4 &&
+        ($missing_rule_summary['block_reason']??null)==='missing_or_invalid_parent_voting_rule',
+        'missing or invalid approved rules block the vote and record the exact reason without opening an electorate vote'
+    );
 
     fwrite(STDOUT,"OK: community law change-control integration checks passed.\n");
 } finally { $db->close(); }
