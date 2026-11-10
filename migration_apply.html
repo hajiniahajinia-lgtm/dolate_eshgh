@@ -37,12 +37,17 @@
     button.disabled = true;
     result.textContent = 'درخواست ارسال شد؛ لطفاً صفحه را نبند.';
     try {
+      // Encode the UTF-8 token as ASCII-safe Base64 before placing it in an HTTP header.
+      const tokenBytes = new TextEncoder().encode(token);
+      let binaryToken = '';
+      tokenBytes.forEach(byte => { binaryToken += String.fromCharCode(byte); });
+      const encodedToken = btoa(binaryToken);
       const response = await fetch('migration_runner.php', {
         method: 'POST',
         cache: 'no-store',
         headers: {
           'Content-Type': 'application/json',
-          'X-Migration-Token': token
+          'X-Migration-Token-Base64': encodedToken
         },
         body: JSON.stringify({mode: 'apply'})
       });
