@@ -74,6 +74,12 @@ try {
          implode("','", $requiredTables) . "')"
     )->fetch_assoc();
     integration_check((int)$tables['total'] === count($requiredTables), 'all charter tables were created');
+    $caseTypeColumn = $db->query(
+        "SELECT COUNT(*) AS total FROM information_schema.columns
+         WHERE table_schema=DATABASE() AND table_name='community_charter_amendments'
+           AND column_name='case_type'"
+    )->fetch_assoc();
+    integration_check((int)$caseTypeColumn['total'] === 1, 'initial adoption case type is available');
 
     $initial = $db->query(
         "SELECT id, version_number, status, approved_at, effective_at
