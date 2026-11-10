@@ -295,7 +295,7 @@ if (!function_exists('community_law_submit_change_assessment')) {
                     $valid_rule=$turnout_percent!==null && $approval_percent!==null &&
                         is_finite($turnout_percent) && is_finite($approval_percent) &&
                         ($approved_rule['individual_vote_basis']??null)==='count' &&
-                        $turnout_percent>=50.01 && $turnout_percent<=100 &&
+                        $turnout_percent>=1 && $turnout_percent<=100 &&
                         $approval_percent>=50.01 && $approval_percent<=100;
                     if ($electorate_count>=3 && $valid_rule) {
                         $new_status='awaiting_vote'; $review_result='supported';
