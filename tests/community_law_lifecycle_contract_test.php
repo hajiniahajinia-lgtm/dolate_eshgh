@@ -4,7 +4,8 @@ declare(strict_types=1);
 /** Contract audit connecting the production law lifecycle gates. */
 $law_source = file_get_contents(__DIR__ . '/../community_laws.php');
 $change_source = file_get_contents(__DIR__ . '/../community_law_change_helpers.php');
-if (!is_string($law_source) || !is_string($change_source)) {
+$change_page = file_get_contents(__DIR__ . '/../community_law_change_cases.php');
+if (!is_string($law_source) || !is_string($change_source) || !is_string($change_page)) {
     fwrite(STDERR, "FAIL: unable to read law lifecycle sources\n");
     exit(1);
 }
@@ -97,6 +98,12 @@ $checks['change requests require five independent reviewers and four supporting 
     strpos($change_source, "parent_shared") !== false &&
     strpos($change_source, 'turnout_required') !== false &&
     strpos($change_source, 'approval_required') !== false;
+$checks['change review records and explains the precise reason when no parent vote opens'] =
+    strpos($change_source, "'block_reason'=>\$review_block_reason") !== false &&
+    strpos($change_page, 'c.review_summary') !== false &&
+    strpos($change_page, 'insufficient_review_support') !== false &&
+    strpos($change_page, 'insufficient_parent_electorate') !== false &&
+    strpos($change_page, 'missing_or_invalid_parent_voting_rule') !== false;
 $change_effects_migration = file_get_contents(__DIR__ . '/../migrations/20261108_community_law_change_effects.sql');
 $checks['reinstatement request type is supported by the existing effects migration'] =
     is_string($change_effects_migration) &&
