@@ -258,7 +258,7 @@ if (!function_exists('community_law_submit_change_assessment')) {
             $summary=$counts->get_result()->fetch_assoc();
             $counts->close();
 
-            $new_status='under_review'; $review_result=null; $electorate_count=0;
+            $new_status='under_review'; $review_result=null; $electorate_count=0; $review_block_reason=null;
             $valid_rule=false; $turnout_percent=null; $approval_percent=null;
             if ((int)$summary['total']>=5) {
                 if ((int)$summary['uphold_count']>=4) {
@@ -276,6 +276,8 @@ if (!function_exists('community_law_submit_change_assessment')) {
                         if (!$capture->execute()) throw new RuntimeException('electorate snapshot failed');
                         $capture->close();
                         $electorate_count=(int)$conn->query('SELECT COUNT(*) AS total FROM community_law_change_electorate WHERE case_id='.(int)$case_id)->fetch_assoc()['total'];
+                    } else {
+                        $review_block_reason='insufficient_parent_electorate';
                     }
                     $rule_stmt=$conn->prepare(
                         "SELECT jurisdiction_level,individual_quorum_percent,individual_approval_percent,individual_vote_basis
@@ -304,17 +306,22 @@ if (!function_exists('community_law_submit_change_assessment')) {
                     } else {
                         // بدون قواعد مصوب و معتبر همان نسخه، رأی‌گیری آغاز نمی‌شود.
                         $new_status='review_complete'; $review_result='inconclusive';
+                        $review_block_reason=$electorate_count<3
+                            ? 'insufficient_parent_electorate'
+                            : 'missing_or_invalid_parent_voting_rule';
                     }
                 } elseif ((int)$summary['dismiss_count']>=4) {
                     $new_status='rejected'; $review_result='dismissed';
                 } else {
                     $new_status='review_complete'; $review_result='inconclusive';
+                    $review_block_reason='insufficient_review_support';
                 }
                 $summary_text=json_encode([
                     'case_id'=>$case_id,
                     'reviewer_count'=>(int)$summary['total'],
                     'uphold_count'=>(int)$summary['uphold_count'],
                     'dismiss_count'=>(int)$summary['dismiss_count'],
+                    'block_reason'=>$review_block_reason,
                     'result'=>$review_result,
                     'vote_electorate_count'=>$electorate_count
                 ],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
