@@ -1962,9 +1962,6 @@ if (!function_exists('community_charter_start_initial_adoption')) {
             $amendment_id = (int)$insert->insert_id;
             $insert->close();
 
-            if (count($candidates) < 14) {
-                throw new RuntimeException('برای اعلام تعارض، رسیدگی مستقل و رأی‌گیری، دست‌کم ۱۴ کاربر مستقل از پیشنهاددهنده لازم است.');
-            }
             $candidate_ids = array_slice($candidates, 0, 8);
             $adjudicator_ids = array_slice($candidates, 8, 3);
             $electorate_ids = array_slice($candidates, 11);
