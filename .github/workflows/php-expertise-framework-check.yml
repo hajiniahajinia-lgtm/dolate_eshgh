@@ -6,6 +6,8 @@ on:
       - feature/community-law-framework
       - fix/corrective-completion-migration-order
     paths:
+      - '.github/workflows/deploy.yml'
+      - 'tests/deploy_workflow_migration_upload_test.php'
       - 'migration_runner.php'
       - 'migrations/recovery_guard.php'
       - 'add_topic.php'
@@ -148,6 +150,8 @@ on:
       - 'tests/migration_order_test.php'
   pull_request:
     paths:
+      - '.github/workflows/deploy.yml'
+      - 'tests/deploy_workflow_migration_upload_test.php'
       - 'migration_runner.php'
       - 'migrations/recovery_guard.php'
       - 'migrations/auto_apply.php'
@@ -301,6 +305,7 @@ jobs:
           php -l tests/community_law_change_control_integration_test.php
           php -l tests/migration_order_test.php
           php -l tests/migration_runner_plan_mode_contract_test.php
+          php -l tests/deploy_workflow_migration_upload_test.php
           php -l migration_runner.php
           php -l migrations/recovery_guard.php
           php -l tests/migration_recovery_guard_integration_test.php
@@ -342,6 +347,8 @@ jobs:
           php -l tests/community_decision_knowledge_separation_integration_test.php
       - name: Verify topic intent classification contract
         run: php tests/topic_intent_classification_contract_test.php
+      - name: Verify deployment includes migration scripts without exposing secrets or dumps
+        run: php tests/deploy_workflow_migration_upload_test.php
       - name: Verify automatic migration dependency order
         run: |
           php tests/migration_order_test.php
