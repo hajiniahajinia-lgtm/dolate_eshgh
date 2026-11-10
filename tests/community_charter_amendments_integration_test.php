@@ -51,6 +51,7 @@ try {
     apply_sql_file($db, __DIR__ . '/../migrations/20261107_community_charter_foundation.sql');
     apply_sql_file($db, __DIR__ . '/../migrations/20261107_community_charter_amendments.sql');
     apply_sql_file($db, __DIR__ . '/../migrations/20261110_community_charter_initial_adoption.sql');
+    apply_sql_file($db, __DIR__ . '/../migrations/20261111_community_charter_reviewer_conflicts.sql');
     apply_sql_file($db, __DIR__ . '/../migrations/20261108_community_charter_amendment_appeal_assignments.sql');
 
     require_once __DIR__ . '/../community_law_helpers.php';
@@ -66,7 +67,10 @@ try {
         'community_charter_amendment_votes',
         'community_charter_amendment_appeals',
         'community_charter_amendment_appeal_reviewers',
-        'community_charter_amendment_appeal_reviewer_assignments'
+        'community_charter_amendment_appeal_reviewer_assignments',
+        'community_charter_amendment_reviewer_candidates',
+        'community_charter_amendment_conflict_adjudicators',
+        'community_charter_amendment_conflict_decisions'
     ];
     $tables = $db->query(
         "SELECT COUNT(*) AS total FROM information_schema.tables
@@ -113,20 +117,77 @@ try {
         $initialCase['status'] === 'independent_review',
         'the initial draft enters independent review without requiring an existing effective charter');
 
-    $initialReviewers = $db->query(
-        "SELECT reviewer_user_id FROM community_charter_amendment_reviewers
-         WHERE amendment_id=" . (int)$initialCaseId . " ORDER BY reviewer_user_id"
+    $initialCandidates = $db->query(
+        "SELECT candidate_user_id FROM community_charter_amendment_reviewer_candidates
+         WHERE amendment_id=" . (int)$initialCaseId . " ORDER BY candidate_order"
+    )->fetch_all(MYSQLI_ASSOC);
+    $initialAdjudicators = $db->query(
+        "SELECT adjudicator_user_id FROM community_charter_amendment_conflict_adjudicators
+         WHERE amendment_id=" . (int)$initialCaseId . " ORDER BY adjudicator_user_id"
     )->fetch_all(MYSQLI_ASSOC);
     $initialElectorate = $db->query(
         "SELECT user_id FROM community_charter_amendment_electorate
          WHERE amendment_id=" . (int)$initialCaseId . " ORDER BY user_id"
     )->fetch_all(MYSQLI_ASSOC);
-    $initialReviewerIds = array_map('intval', array_column($initialReviewers, 'reviewer_user_id'));
+    $candidateIds = array_map('intval', array_column($initialCandidates, 'candidate_user_id'));
+    $adjudicatorIds = array_map('intval', array_column($initialAdjudicators, 'adjudicator_user_id'));
     $initialElectorIds = array_map('intval', array_column($initialElectorate, 'user_id'));
-    integration_check(count($initialReviewerIds) === 5 && count($initialElectorIds) === 10 &&
-        !in_array(1, $initialReviewerIds, true) && !in_array(1, $initialElectorIds, true) &&
-        !array_intersect($initialReviewerIds, $initialElectorIds),
-        'initial adoption snapshots five independent reviewers and a separate electorate excluding the proposer');
+    integration_check(count($candidateIds) === 8 && count($adjudicatorIds) === 3 &&
+        count($initialElectorIds) >= 3 && !in_array(1, $candidateIds, true) &&
+        !in_array(1, $adjudicatorIds, true) && !in_array(1, $initialElectorIds, true) &&
+        !array_intersect($candidateIds, $adjudicatorIds) &&
+        !array_intersect($candidateIds, $initialElectorIds) &&
+        !array_intersect($adjudicatorIds, $initialElectorIds),
+        'reviewer candidates, conflict adjudicators and public electorate are snapshotted as separate roles');
+
+    community_charter_record_conflict_declaration(
+        $db, $initialCaseId, $candidateIds[0], 'review', ['financial'],
+        'رابطه مالی احتمالی با یکی از طرف‌های پرونده برای بررسی محرمانه.'
+    );
+    community_charter_record_conflict_decision(
+        $db, $initialCaseId, $candidateIds[0], $adjudicatorIds[0], 'conflict',
+        'رابطه مستقیم مالی می‌تواند بی‌طرفی ارزیاب را مخدوش کند.'
+    );
+    community_charter_record_conflict_decision(
+        $db, $initialCaseId, $candidateIds[0], $adjudicatorIds[1], 'conflict',
+        'شواهد اعلام‌شده برای کنارگذاشتن نامزد از این پرونده کافی است.'
+    );
+    community_charter_record_conflict_declaration(
+        $db, $initialCaseId, $candidateIds[1], 'recuse', [], ''
+    );
+    foreach (array_slice($candidateIds, 2, 5) as $candidateId) {
+        community_charter_record_conflict_declaration(
+            $db, $initialCaseId, $candidateId, 'no_conflict', [], ''
+        );
+    }
+
+    $initialReviewers = $db->query(
+        "SELECT reviewer_user_id FROM community_charter_amendment_reviewers
+         WHERE amendment_id=" . (int)$initialCaseId . " ORDER BY reviewer_user_id"
+    )->fetch_all(MYSQLI_ASSOC);
+    $initialReviewerIds = array_map('intval', array_column($initialReviewers, 'reviewer_user_id'));
+    integration_check(count($initialReviewerIds) === 5 &&
+        $initialReviewerIds === array_slice($candidateIds, 2, 5) &&
+        !in_array($candidateIds[0], $initialReviewerIds, true) &&
+        !in_array($candidateIds[1], $initialReviewerIds, true) &&
+        !array_intersect($initialReviewerIds, $initialElectorIds) &&
+        count($initialElectorIds) === 4,
+        'only five cleared candidates are assigned; recused/conflicted candidates are replaced and never vote');
+
+    $initialCandidateStates = $db->query(
+        "SELECT candidate_user_id,status FROM community_charter_amendment_reviewer_candidates
+         WHERE amendment_id=" . (int)$initialCaseId . " ORDER BY candidate_order"
+    )->fetch_all(MYSQLI_ASSOC);
+    integration_check($initialCandidateStates[0]['status'] === 'conflict' &&
+        $initialCandidateStates[1]['status'] === 'recused' &&
+        $initialCandidateStates[6]['status'] === 'invited' &&
+        $initialCandidateStates[7]['status'] === 'invited',
+        'conflict and recusal decisions remain auditable while reserve candidates remain available');
+    $initialCaseAfterScreening = $db->query(
+        "SELECT status FROM community_charter_amendments WHERE id=" . (int)$initialCaseId
+    )->fetch_assoc();
+    integration_check($initialCaseAfterScreening['status'] === 'independent_review',
+        'independent review starts only after five eligible reviewers have cleared disclosure');
 
     $initialAssessmentInsert = $db->prepare(
         "INSERT INTO community_charter_amendment_assessments
@@ -162,15 +223,14 @@ try {
     $initialVoteInsert = $db->prepare(
         "INSERT INTO community_charter_amendment_votes (amendment_id,user_id,vote) VALUES (?,?,?)"
     );
-    foreach ($initialElectorIds as $index => $voterId) {
-        if ($index >= 9) continue;
-        $vote = $index < 7 ? 'yes' : ($index === 7 ? 'no' : 'abstain');
+    foreach (array_slice($initialElectorIds, 0, 3) as $index => $voterId) {
+        $vote = 'yes';
         $initialVoteInsert->bind_param('iis', $initialCaseId, $voterId, $vote);
         $initialVoteInsert->execute();
     }
     $initialVoteInsert->close();
-    integration_check(community_charter_amendment_vote_result(10, 7, 1, 1) === 'approved',
-        'the initial charter meets the two-thirds participation and three-quarters valid-vote approval thresholds');
+    integration_check(community_charter_amendment_vote_result(4, 3, 0, 0) === 'approved',
+        'the revised separate electorate meets the two-thirds participation and three-quarters valid-vote thresholds');
     $db->query(
         "UPDATE community_charter_amendments
          SET voting_closes_at=DATE_SUB(NOW(),INTERVAL 1 SECOND)
