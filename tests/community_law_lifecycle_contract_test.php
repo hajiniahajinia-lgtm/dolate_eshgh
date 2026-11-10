@@ -97,11 +97,11 @@ $checks['change requests require five independent reviewers and four supporting 
     strpos($change_source, "parent_shared") !== false &&
     strpos($change_source, 'turnout_required') !== false &&
     strpos($change_source, 'approval_required') !== false;
-$change_request_migration = file_get_contents(__DIR__ . '/../migrations/20261110_community_law_change_reinstate_request_type.sql');
-$checks['reinstatement request type is supported by the database schema'] =
-    is_string($change_request_migration) &&
+$change_effects_migration = file_get_contents(__DIR__ . '/../migrations/20261108_community_law_change_effects.sql');
+$checks['reinstatement request type is supported by the existing effects migration'] =
+    is_string($change_effects_migration) &&
     strpos($change_source, "'suspend','repeal','review_expiry','reinstate'") !== false &&
-    strpos($change_request_migration, "'suspend','repeal','review_expiry','reinstate'") !== false;
+    strpos($change_effects_migration, "MODIFY request_type ENUM('suspend','repeal','review_expiry','reinstate') NOT NULL") !== false;
 $checks['approved suspension, reinstatement and repeal effects are idempotent and audited'] =
     strpos($change_source, "\$row['effect_applied_at']!==null") !== false &&
     strpos($change_source, 'community_law_record_history(') !== false &&
