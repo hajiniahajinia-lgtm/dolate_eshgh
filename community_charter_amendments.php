@@ -125,6 +125,18 @@ if ($ready) {
     }
 
     if (!$active_version) {
+        $list = $conn->query(
+            "SELECT a.*,v.version_number AS proposed_version_number,u.username AS proposer_name
+             FROM community_charter_amendments a
+             JOIN community_charter_versions v ON v.id=a.proposed_charter_version_id
+             LEFT JOIN users u ON u.id=a.proposer_user_id
+             ORDER BY a.created_at DESC,a.id DESC LIMIT 50"
+        );
+        if ($list) {
+            while ($row = $list->fetch_assoc()) $amendments[] = $row;
+            $list->free();
+        }
+
         $draft_result = $conn->query(
             "SELECT id,version_number,title FROM community_charter_versions
              WHERE status='draft' AND approved_at IS NULL AND effective_at IS NULL
