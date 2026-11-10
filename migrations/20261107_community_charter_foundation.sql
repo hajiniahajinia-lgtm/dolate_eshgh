@@ -67,13 +67,13 @@ CREATE TABLE IF NOT EXISTS community_law_charter_assessments (
     KEY idx_law_charter_assessment_version (law_version_id, submitted_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- نسخه آغازین منشور؛ تنها یک نسخه می‌تواند در هر لحظه مرجع لازم‌الاجرا باشد.
+-- نسخه آغازین فقط پیش‌نویس است؛ تصویب و لازم‌الاجرا شدن به فرایند معتبر جمعی وابسته است.
 INSERT IGNORE INTO community_charter_versions
     (id, version_number, title, status, change_summary, approved_at, effective_at)
 VALUES
-    (1, 1, 'منشور بنیادین دولت عشق - نسخه آغازین', 'effective',
-     'نسخه پایه منشور بر اساس اصول بنیادین مصوب در طراحی سامانه',
-     CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+    (1, 1, 'منشور بنیادین دولت عشق - پیش‌نویس آغازین', 'draft',
+     'پیش‌نویس اولیه برای بررسی عمومی، اصلاح و تصویب از مسیر معتبر جمعی',
+     NULL, NULL);
 
 INSERT IGNORE INTO community_charter_articles
     (charter_version_id, article_code, title, article_text, principle_group, is_core, display_order)
