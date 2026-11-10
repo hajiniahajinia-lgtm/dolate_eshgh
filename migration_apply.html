@@ -5,39 +5,45 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
 <meta http-equiv="Cache-Control" content="no-store">
-<title>اجرای امن مهاجرت‌های دولت عشق</title>
+<title>بررسی و اجرای امن مهاجرت‌های دولت عشق</title>
 <style>
-:root{color-scheme:light}*{box-sizing:border-box}body{margin:0;padding:24px;background:#f4f6f8;color:#17202a;font-family:Tahoma,Arial,sans-serif;line-height:1.8}.panel{max-width:620px;margin:6vh auto;background:#fff;border:1px solid #dce2e8;border-radius:14px;padding:24px;box-shadow:0 8px 28px #17202a12}h1{font-size:1.35rem;margin:0 0 12px}p{margin:8px 0 16px}.warning{background:#fff5df;border:1px solid #efd28d;border-radius:9px;padding:12px;font-size:.93rem}label{display:block;margin:18px 0 6px;font-weight:bold}input{width:100%;padding:13px;border:1px solid #aeb8c2;border-radius:8px;font-size:16px}button{width:100%;margin-top:16px;padding:13px;border:0;border-radius:8px;background:#1769aa;color:white;font-size:16px;font-weight:bold;cursor:pointer}button:disabled{opacity:.55;cursor:wait}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#101820;color:#e8f0f7;padding:14px;border-radius:8px;min-height:60px;direction:ltr;text-align:left;font-size:12px}.muted{color:#52606d;font-size:.88rem}
+:root{color-scheme:light}*{box-sizing:border-box}body{margin:0;padding:24px;background:#f4f6f8;color:#17202a;font-family:Tahoma,Arial,sans-serif;line-height:1.8}.panel{max-width:620px;margin:6vh auto;background:#fff;border:1px solid #dce2e8;border-radius:14px;padding:24px;box-shadow:0 8px 28px #17202a12}h1{font-size:1.35rem;margin:0 0 12px}p{margin:8px 0 16px}.warning{background:#fff5df;border:1px solid #efd28d;border-radius:9px;padding:12px;font-size:.93rem}label{display:block;margin:18px 0 6px;font-weight:bold}input{width:100%;padding:13px;border:1px solid #aeb8c2;border-radius:8px;font-size:16px}button{width:100%;margin-top:12px;padding:13px;border:0;border-radius:8px;background:#1769aa;color:white;font-size:16px;font-weight:bold;cursor:pointer}button.secondary{background:#286b45}button:disabled{opacity:.55;cursor:wait}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#101820;color:#e8f0f7;padding:14px;border-radius:8px;min-height:60px;direction:ltr;text-align:left;font-size:12px}.muted{color:#52606d;font-size:.88rem}
 </style>
 </head>
 <body>
 <main class="panel">
-<h1>اجرای امن مهاجرت‌های دولت عشق</h1>
-<p>این صفحه فقط درخواست اجرای مهاجرت‌ها را به اجراگر محافظت‌شدهٔ موجود می‌فرستد. رمز فقط برای همین درخواست استفاده می‌شود و در مرورگر ذخیره نمی‌شود.</p>
-<div class="warning"><strong>هشدار:</strong> اجرای مهاجرت‌ها ساختار دیتابیس را تغییر می‌دهد. فقط پس از تهیهٔ پشتیبان و بررسی موفق Plan ادامه بده. اگر اجرا با خطا متوقف شد، دوباره اجرا نکن و نتیجه را بررسی کن.</div>
+<h1>بررسی و اجرای امن مهاجرت‌های دولت عشق</h1>
+<p>ابتدا با دکمهٔ «بررسی وضعیت (Plan)» فهرست مهاجرت‌های در انتظار را ببین. این بررسی فقط وضعیت را می‌خواند و دیتابیس را تغییر نمی‌دهد.</p>
+<div class="warning"><strong>هشدار:</strong> دکمهٔ Apply ساختار دیتابیس را تغییر می‌دهد. فقط پس از تهیهٔ پشتیبان و بررسی موفق Plan اجرا کن. اگر اجرا با خطا متوقف شد یا وضعیت نامشخص بود، دوباره اجرا نکن و نتیجه را بررسی کن.</div>
 <label for="token">رمز محرمانهٔ مهاجرت</label>
 <input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="رمز را وارد کن">
+<button id="plan" class="secondary" type="button">بررسی وضعیت (Plan — بدون تغییر دیتابیس)</button>
 <button id="apply" type="button">اجرای مهاجرت‌های باقی‌مانده (Apply)</button>
-<p class="muted">مهاجرت‌های ثبت‌شده با checksum معتبر دوباره اجرا نمی‌شوند. اجراگر پیش از شروع، checksum مهاجرت‌های قبلی و نشانگر بازیابی را بررسی می‌کند.</p>
-<pre id="result" aria-live="polite">آمادهٔ اجرا؛ هنوز درخواستی ارسال نشده است.</pre>
+<p class="muted">رمز فقط برای همان درخواست ارسال می‌شود و در مرورگر ذخیره نمی‌شود. مهاجرت‌های ثبت‌شده با checksum معتبر دوباره اجرا نمی‌شوند.</p>
+<pre id="result" aria-live="polite">آمادهٔ بررسی؛ هنوز درخواستی ارسال نشده است.</pre>
 </main>
 <script>
 (() => {
   const tokenInput = document.getElementById('token');
-  const button = document.getElementById('apply');
+  const planButton = document.getElementById('plan');
+  const applyButton = document.getElementById('apply');
   const result = document.getElementById('result');
-  button.addEventListener('click', async () => {
+
+  async function sendMigrationRequest(mode) {
     const token = tokenInput.value.trim();
     if (token.length < 32) {
       result.textContent = 'رمز معتبر وارد نشده است.';
       tokenInput.focus();
       return;
     }
-    if (!window.confirm('آیا از اجرای مهاجرت‌های باقی‌مانده روی دیتابیس زنده مطمئن هستی؟ این عملیات تغییر واقعی ایجاد می‌کند.')) return;
-    button.disabled = true;
-    result.textContent = 'درخواست ارسال شد؛ لطفاً صفحه را نبند.';
+    if (mode === 'apply' && !window.confirm('آیا از اجرای مهاجرت‌های باقی‌مانده روی دیتابیس زنده مطمئن هستی؟ این عملیات تغییر واقعی ایجاد می‌کند.')) return;
+
+    planButton.disabled = true;
+    applyButton.disabled = true;
+    result.textContent = mode === 'plan'
+      ? 'در حال بررسی فقط‌خواندنی؛ لطفاً صفحه را نبند.'
+      : 'درخواست اجرای مهاجرت ارسال شد؛ لطفاً صفحه را نبند.';
     try {
-      // Encode the UTF-8 token as ASCII-safe Base64 before placing it in an HTTP header.
       const tokenBytes = new TextEncoder().encode(token);
       let binaryToken = '';
       tokenBytes.forEach(byte => { binaryToken += String.fromCharCode(byte); });
@@ -45,27 +51,35 @@
       const response = await fetch('migration_runner.php', {
         method: 'POST',
         cache: 'no-store',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Migration-Token-Base64': encodedToken
-        },
-        body: JSON.stringify({mode: 'apply'})
+        headers: {'Content-Type': 'application/json','X-Migration-Token-Base64': encodedToken},
+        body: JSON.stringify({mode})
       });
       const body = await response.text();
       let parsed;
       try { parsed = JSON.parse(body); } catch (_) { parsed = {raw_response: body}; }
       result.textContent = 'HTTP ' + response.status + '\n' + JSON.stringify(parsed, null, 2);
-      if (!response.ok || parsed.success !== true) {
-        result.textContent += '\n\nاجرا موفق تأیید نشد. دوباره اجرا نکن؛ ابتدا خطا بررسی شود.';
+      if (mode === 'plan' && parsed.mode === 'plan') {
+        result.textContent += parsed.database_changes_made === false
+          ? '\n\nتأیید: این بررسی هیچ تغییری در دیتابیس ایجاد نکرد.'
+          : '\n\nهشدار: نتیجه، عدم تغییر دیتابیس را تأیید نمی‌کند.';
       }
-      tokenInput.value = '';
+      if (!response.ok || parsed.success !== true) {
+        result.textContent += mode === 'apply'
+          ? '\n\nاجرا موفق تأیید نشد. دوباره اجرا نکن؛ ابتدا خطا بررسی شود.'
+          : '\n\nبررسی کامل و موفق نبود؛ تا رفع خطا Apply را اجرا نکن.';
+      }
     } catch (error) {
-      result.textContent = 'ارتباط با اجراگر برقرار نشد. وضعیت اجرا نامشخص است؛ دوباره اجرا نکن و ابتدا وضعیت را بررسی کن.';
-      tokenInput.value = '';
+      result.textContent = mode === 'apply'
+        ? 'ارتباط با اجراگر برقرار نشد. وضعیت اجرا نامشخص است؛ دوباره اجرا نکن و ابتدا وضعیت را بررسی کن.'
+        : 'ارتباط با اجراگر برقرار نشد؛ هیچ نتیجه‌ای از Plan دریافت نشد.';
     } finally {
-      button.disabled = false;
+      tokenInput.value = '';
+      planButton.disabled = false;
+      applyButton.disabled = false;
     }
-  });
+  }
+  planButton.addEventListener('click', () => sendMigrationRequest('plan'));
+  applyButton.addEventListener('click', () => sendMigrationRequest('apply'));
 })();
 </script>
 </body>
