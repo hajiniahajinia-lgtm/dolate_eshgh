@@ -276,9 +276,29 @@ if (!function_exists('community_law_submit_change_assessment')) {
                         $capture->close();
                         $electorate_count=(int)$conn->query('SELECT COUNT(*) AS total FROM community_law_change_electorate WHERE case_id='.(int)$case_id)->fetch_assoc()['total'];
                     }
-                    if ($electorate_count>=3) {
+                    $rule_stmt=$conn->prepare(
+                        "SELECT community_quorum_percent,community_approval_percent
+                         FROM community_law_voting_rules
+                         WHERE law_version_id=? AND status='approved'
+                         LIMIT 1"
+                    );
+                    if (!$rule_stmt) throw new RuntimeException('approved change-vote rule lookup prepare failed');
+                    $rule_version_id=(int)$case['law_version_id'];
+                    $rule_stmt->bind_param('i',$rule_version_id);
+                    if (!$rule_stmt->execute()) throw new RuntimeException('approved change-vote rule lookup failed');
+                    $approved_rule=$rule_stmt->get_result()->fetch_assoc();
+                    $rule_stmt->close();
+
+                    $turnout_percent=$approved_rule===null?null:(float)$approved_rule['community_quorum_percent'];
+                    $approval_percent=$approved_rule===null?null:(float)$approved_rule['community_approval_percent'];
+                    $valid_rule=$turnout_percent!==null && $approval_percent!==null &&
+                        is_finite($turnout_percent) && is_finite($approval_percent) &&
+                        $turnout_percent>=50.01 && $turnout_percent<=100 &&
+                        $approval_percent>=50.01 && $approval_percent<=100;
+                    if ($electorate_count>=3 && $valid_rule) {
                         $new_status='awaiting_vote'; $review_result='supported';
                     } else {
+                        // بدون قواعد مصوب و معتبر همان نسخه، رأی‌گیری آغاز نمی‌شود.
                         $new_status='review_complete'; $review_result='inconclusive';
                     }
                 } elseif ((int)$summary['dismiss_count']>=4) {
@@ -299,11 +319,21 @@ if (!function_exists('community_law_submit_change_assessment')) {
                      SET status=?,review_result=?,review_summary=?,review_completed_at=NOW(),
                          vote_opened_at=IF(?='awaiting_vote',NOW(),NULL),
                          vote_closes_at=IF(?='awaiting_vote',DATE_ADD(NOW(),INTERVAL 7 DAY),NULL),
-                         electorate_count=?
+                         electorate_count=?,
+                         turnout_numerator=IF(?='awaiting_vote',?,NULL),
+                         turnout_denominator=IF(?='awaiting_vote',10000,NULL),
+                         approval_numerator=IF(?='awaiting_vote',?,NULL),
+                         approval_denominator=IF(?='awaiting_vote',10000,NULL)
                      WHERE id=? AND status='under_review'"
                 );
                 if (!$update) throw new RuntimeException('case result update prepare failed');
-                $update->bind_param('sssssii',$new_status,$review_result,$summary_text,$new_status,$new_status,$electorate_count,$case_id);
+                $turnout_basis_points=$valid_rule?(int)round($turnout_percent*100):null;
+                $approval_basis_points=$valid_rule?(int)round($approval_percent*100):null;
+                $update->bind_param(
+                    'sssssisisisi',
+                    $new_status,$review_result,$summary_text,$new_status,$new_status,$electorate_count,
+                    $new_status,$turnout_basis_points,$new_status,$new_status,$approval_basis_points,$case_id
+                );
                 if (!$update->execute() || $update->affected_rows!==1) throw new RuntimeException('case result update failed');
                 $update->close();
                 if (!community_law_record_history($conn,(int)$case['law_id'],(int)$case['law_version_id'],null,
@@ -582,8 +612,10 @@ if (!function_exists('community_law_change_finalize_vote')) {
             $note=json_encode([
                 'case_id'=>$case_id,
                 'electorate'=>$electorate,'turnout'=>$turnout,'yes'=>$yes,'no'=>$no,
-                'abstain'=>$turnout-$valid_votes,'turnout_required'=>'2/3',
-                'approval_required'=>'2/3','result'=>$result,'law_effect_applied'=>($status==='approved')
+                'abstain'=>$turnout-$valid_votes,
+                'turnout_required'=>((int)$case['turnout_numerator']).'/'.((int)$case['turnout_denominator']),
+                'approval_required'=>((int)$case['approval_numerator']).'/'.((int)$case['approval_denominator']),
+                'result'=>$result,'law_effect_applied'=>($status==='approved')
             ],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
             $update=$conn->prepare("UPDATE community_law_change_cases SET status=?,vote_result=?,decided_at=NOW(),decision_note=? WHERE id=? AND status='awaiting_vote'");
             if (!$update) throw new RuntimeException('vote result update prepare failed');
