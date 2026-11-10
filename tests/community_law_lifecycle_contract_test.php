@@ -92,6 +92,9 @@ $checks['change requests require five independent reviewers and four supporting 
     strpos($change_source, 'if ((int)$summary[\'uphold_count\']>=4)') !== false &&
     strpos($change_source, "FROM community_law_voting_rules") !== false &&
     strpos($change_source, "status='approved'") !== false &&
+    strpos($change_source, "jurisdiction_level") !== false &&
+    strpos($change_source, "individual_vote_basis") !== false &&
+    strpos($change_source, "parent_shared") !== false &&
     strpos($change_source, 'turnout_required') !== false &&
     strpos($change_source, 'approval_required') !== false;
 $change_request_migration = file_get_contents(__DIR__ . '/../migrations/20261110_community_law_change_reinstate_request_type.sql');
