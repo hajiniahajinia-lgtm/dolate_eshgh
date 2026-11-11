@@ -22,6 +22,31 @@ function guest_h($value) {
 <title>گشت‌وگذار در جامعه‌های دولت عشق</title>
 <style>
 *{box-sizing:border-box}body{font-family:tahoma,Arial,sans-serif;background:#f2f6f2;color:#26352b;margin:0;padding:16px;line-height:1.9}.wrap{max-width:900px;margin:0 auto}.panel{background:#fff;border:1px solid #dce7dc;border-radius:12px;padding:18px;margin-bottom:14px}.community{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px;border:1px solid #e1e8e1;border-radius:9px;margin-top:10px}.community h2{font-size:17px;margin:0}.btn{display:inline-block;text-decoration:none;background:#216b45;color:#fff;border:0;border-radius:7px;padding:8px 13px;font:inherit;font-size:14px;cursor:pointer}.secondary{background:#fff;color:#216b45;border:1px solid #216b45}.actions{display:flex;gap:8px;flex-wrap:wrap}.muted{color:#66736a;font-size:13px}@media(max-width:520px){body{padding:9px}.panel{padding:13px}.community{align-items:stretch;flex-direction:column}.community .btn{width:100%;text-align:center}}
+
+/* هماهنگی صفحه فهرست جامعه‌های عمومی */
+body { background: #f3f7f4; color: #293a30; }
+.panel {
+    border-color: #e0e9e2;
+    border-radius: 15px;
+    box-shadow: 0 5px 18px rgba(28, 75, 48, .055);
+}
+.community {
+    border-color: #e0e9e2;
+    border-radius: 11px;
+    background: #fff;
+}
+.community h2 { color: #245d3c; }
+.btn { background: #216b45; border-radius: 9px; }
+.btn.secondary {
+    background: #fff;
+    color: #216b45;
+    border-color: #b8d1bf;
+}
+.muted { color: #68786d; }
+@media (max-width: 520px) {
+    .panel { border-radius: 12px; }
+}
+
 </style>
 </head>
 <body><main class="wrap">
