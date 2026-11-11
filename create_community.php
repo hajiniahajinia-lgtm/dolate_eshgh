@@ -29,20 +29,29 @@ $community_type_custom = trim($_POST['community_type_custom'] ?? '');
 $join_now = isset($_POST['join_now']) && $_POST['join_now']==1 ? true : false;
 
 $allowed_community_types = [
-    'کشور',
-    'شهر',
-    'روستا یا منطقه',
-    'کارخانه یا محل کار',
-    'دانشگاه یا مرکز آموزشی',
-    'سازمان یا نهاد',
-    'گروه با هدف مشترک',
-    'سایر'
+    'کشور', 'استان', 'شهر', 'روستا یا منطقه', 'محله',
+    'کارخانه یا محل کار', 'دانشگاه یا مرکز آموزشی', 'مدرسه',
+    'سازمان یا نهاد', 'اداره', 'شرکت', 'انجمن', 'تعاونی',
+    'گروه با هدف مشترک'
 ];
-if (!in_array($community_type, $allowed_community_types, true)) {
-    die("نوع جامعه معتبر نیست. <a href='profile.php'>بازگشت</a>");
-}
-if ($community_type === 'سایر') {
+
+if ($community_type === '__custom__') {
     $community_type = $community_type_custom;
+} else {
+    // نوع‌های قبلاً ثبت‌شده نیز معتبرند و در فهرست پروفایل نمایش داده می‌شوند.
+    $type_stmt = $conn->prepare("SELECT 1 FROM communities WHERE community_type = ? LIMIT 1");
+    if (!$type_stmt) {
+        die("بررسی نوع جامعه انجام نشد. <a href='profile.php'>بازگشت</a>");
+    }
+    $type_stmt->bind_param("s", $community_type);
+    $type_stmt->execute();
+    $type_result = $type_stmt->get_result();
+    $type_exists = $type_result && $type_result->num_rows > 0;
+    $type_stmt->close();
+
+    if (!in_array($community_type, $allowed_community_types, true) && !$type_exists) {
+        die("نوع جامعه معتبر نیست. <a href='profile.php'>بازگشت</a>");
+    }
 }
 if ($name === '' || $approach === '' || $community_type === '') {
     die("نام، نوع جامعه و وظایف/رویکردها نمی‌تواند خالی باشد. <a href='profile.php'>بازگشت</a>");
