@@ -55,6 +55,19 @@ $top_urgency = $top_urgency_q ? $top_urgency_q->fetch_assoc() : null;
     h2 {color: #003399; text-align:center}
     p {font-size:16px; margin:10px 0}
     a {display:block;text-align:center;margin-top:15px;font-size:15px;text-decoration:none;color:#fff;background:#0066cc;padding:10px;border-radius:8px}
+
+/* --- هماهنگ‌سازی بصری آمار سامانه --- */
+body{min-height:100vh;display:flex;align-items:flex-start;justify-content:center;box-sizing:border-box;background:#f3f6fb;color:#26364a;line-height:1.9;padding:28px 14px}
+.box{box-sizing:border-box;width:min(100%,620px);margin:24px auto;padding:22px 24px;border:1px solid #e2e8f0;border-radius:14px;box-shadow:0 7px 24px rgba(30,55,90,.07)}
+h2{color:#294d73;font-size:21px;line-height:1.7;margin:0 0 18px;padding-bottom:12px;border-bottom:1px solid #edf1f6}
+p{font-size:15px;line-height:2;margin:0;padding:12px 2px;border-bottom:1px solid #edf1f6;overflow-wrap:anywhere}
+p:last-of-type{border-bottom:0}
+p b{color:#1f4f82}
+a{display:flex;align-items:center;justify-content:center;min-height:44px;margin-top:20px;padding:10px 14px;border-radius:9px;background:#245fa8;transition:filter .18s ease,transform .18s ease}
+a:hover{background:#194b89;filter:brightness(.97)}
+a:active{transform:translateY(1px)}
+@media(max-width:520px){body{padding:12px}.box{margin:10px auto;padding:17px 15px;border-radius:12px}h2{font-size:19px}p{font-size:14px}}
+
 </style>
 </head>
 <body>
