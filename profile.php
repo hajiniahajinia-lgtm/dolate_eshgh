@@ -535,7 +535,7 @@ $community_type_options = [
     'کشور', 'استان', 'شهر', 'روستا یا منطقه',
     'محله', 'کارخانه یا محل کار', 'دانشگاه یا مرکز آموزشی',
     'مدرسه', 'سازمان یا نهاد', 'اداره', 'شرکت',
-    'انجمن', 'تعاونی', 'گروه با هدف مشترک'
+    'انجمن', 'تعاونی'
 ];
 $types_result = $conn->query("SELECT DISTINCT community_type FROM communities WHERE community_type IS NOT NULL AND community_type <> '' ORDER BY community_type");
 if ($types_result) {
