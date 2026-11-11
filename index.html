@@ -55,6 +55,24 @@
         }
             .header-search { display:inline-flex; align-items:center; justify-content:center; margin-top:16px; padding:8px 18px; border-radius:8px; background:#fff; color:#216b45; text-decoration:none; font-weight:bold; }
         .header-search:focus { outline:3px solid #f2c94c; outline-offset:3px; }
+
+        /* هماهنگی بصری صفحه اصلی با سایر بخش‌های سامانه */
+        body { background: #f4f7f4; color: #26382d; }
+        header { background: linear-gradient(135deg, #174f36, #28764f); }
+        section { border-radius: 16px; border-color: #e1eae2; box-shadow: 0 5px 18px rgba(28, 75, 48, .06); }
+        h2 { color: #205f3e; }
+        .button { border-radius: 10px; transition: background-color .18s ease, box-shadow .18s ease; }
+        .button:hover { box-shadow: 0 4px 12px rgba(26, 83, 52, .14); }
+        .primary { background: #216b45; }
+        .primary:hover { background: #185638; }
+        .secondary:hover { background: #edf5ef; }
+        .header-search { border: 1px solid rgba(255,255,255,.65); }
+        .header-search:hover { background: #edf5ef; }
+        @media (max-width: 480px) {
+            header { padding: 32px 16px 28px; }
+            section { border-radius: 13px; }
+        }
+
 </style>
 </head>
 <body>
