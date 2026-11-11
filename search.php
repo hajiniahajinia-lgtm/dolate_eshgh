@@ -95,6 +95,35 @@ button,.link{display:inline-flex;align-items:center;justify-content:center;paddi
 h2{font-size:18px;margin:0 0 10px}.result{padding:12px 0;border-bottom:1px solid #e7edf1}.result:last-child{border-bottom:0}
 .result-title{font-weight:bold;color:#1769aa;text-decoration:none}.meta{font-size:13px;color:#64727d}.empty{color:#667781}
 @media(max-width:520px){body{padding:9px}.top,.panel{padding:13px}.search-form{flex-direction:column}.search-form button{width:100%}h1{font-size:20px}}
+
+/* --- هماهنگ‌سازی بصری جست‌وجو با سایر صفحات --- */
+:root{--search-ink:#26364a;--search-border:#e2e8f0;--search-blue:#245fa8;--search-radius:13px;--search-shadow:0 5px 18px rgba(30,55,90,.06)}
+body{background:#f3f6fb;color:var(--search-ink);line-height:1.9}
+.container{max-width:960px;padding-top:8px;padding-bottom:28px}
+.top,.panel{border:1px solid var(--search-border);border-radius:var(--search-radius);box-shadow:var(--search-shadow)}
+.top{padding:21px;background:linear-gradient(135deg,#e9f3ff,#f5f1ff)}
+.topline{gap:10px 14px}
+h1{color:#243b55;font-size:22px;line-height:1.6}
+h2{color:#29445f;font-size:17px;padding-bottom:8px;border-bottom:1px solid #edf1f6}
+.search-form{gap:10px}
+input[name=q]{min-height:46px;border-color:#d5deea;border-radius:9px;background:#fff}
+input[name=q]:focus{outline:3px solid rgba(49,112,190,.18);outline-offset:2px;border-color:#6b9bd0}
+button,.link{min-height:44px;border-radius:9px;background:#245fa8;transition:filter .18s ease,transform .18s ease}
+button:hover,.link:hover{filter:brightness(.94)}
+button:active,.link:active{transform:translateY(1px)}
+.panel{padding:18px}
+.result{padding:13px 2px;border-bottom-color:#e8edf3}
+.result-title{color:#245fa8;line-height:1.8}
+.result-title:hover{color:#194b89;text-decoration:underline}
+.meta{color:#718096;line-height:1.8}
+.empty{padding:8px 0;color:#64748b}
+@media(max-width:520px){
+body{padding:10px}
+.top,.panel{padding:14px;border-radius:11px}
+h1{font-size:19px}
+.search-form{gap:8px}
+}
+
 </style>
 </head>
 <body>
