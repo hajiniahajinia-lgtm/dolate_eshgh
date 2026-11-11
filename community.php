@@ -626,6 +626,51 @@ textarea{resize:vertical;}
 
 .community-idea-review-feedback{display:inline-block;margin:8px 0;padding:8px 12px;border:0;border-radius:7px;background:#dcefe5;color:#20583b;font:inherit;cursor:pointer}
 .community-idea-review-feedback:hover{background:#cce5d7}
+
+/* --- هماهنگ‌سازی ظاهر صفحه جامعه با پروفایل؛ صرفاً CSS --- */
+:root{--community-bg:#f3f6fb;--community-border:#e2e8f0;--community-ink:#26364a;--community-blue:#245fa8;--community-radius:13px;--community-shadow:0 5px 18px rgba(30,55,90,.06)}
+body{color:var(--community-ink);line-height:1.8}
+body:not(.country-community-page){background:var(--community-bg)}
+.container{max-width:980px;padding-top:10px;padding-bottom:28px}
+.box,.card-form,.card{border:1px solid var(--community-border);border-radius:var(--community-radius);box-shadow:var(--community-shadow)}
+.community-header{padding:18px;background:linear-gradient(135deg,#fce8ed 0%,#fff0db 25%,#edf8e7 50%,#e8f4ff 75%,#f4edff 100%);border-color:#e2e5ed}
+.community-header h2{color:#263b53;line-height:1.6}
+.community-header-top{padding-bottom:12px;border-bottom:1px solid rgba(100,116,139,.18)}
+.community-header-top>a{min-height:40px;box-shadow:0 2px 6px rgba(30,55,90,.08)}
+.finance-bank-toggle{border-radius:10px;box-shadow:0 2px 7px rgba(20,90,75,.12)}
+.community-duties,.community-duty-item,.topic-discussion,.ideas-box{border-radius:10px}
+.community-duties{border-color:#e0e7ef;background:rgba(255,255,255,.88)}
+.community-duties-toggle>summary,.community-topics-toggle>summary,.archive-topics-toggle>summary,.final-voting-toggle>summary,.community-hierarchy-toggle>summary{border-radius:10px}
+.community-duty-item{border-color:#e4eaf2;box-shadow:0 2px 6px rgba(30,55,90,.035)}
+.topic{border-radius:12px;border-color:#c7d9ec;box-shadow:0 2px 8px rgba(30,55,90,.045)}
+.community-topic-item>summary{padding:10px 13px;line-height:1.6}
+.community-topic-title{color:#243b55;line-height:1.65}
+.community-topic-body{padding:4px 13px 14px}
+.community-topic-section{border-color:#e2eaf3}
+.community-topic-section-title{border-radius:9px;background:#edf4fc;color:#294d73}
+.topic-discussion{border-color:#d8e7f5;background:#f6faff}
+.topic-discussion-entry,.community-idea-feedback-entry{border-color:#e2eaf2;border-radius:9px}
+.ideas-box{border-color:#e3eaf2;background:#f8fafd}
+.idea{border-color:#e3eaf2;border-radius:10px;box-shadow:0 1px 4px rgba(30,55,90,.035)}
+input,select,textarea{border-color:#d5deea;border-radius:9px;background:#fff}
+input:focus,select:focus,textarea:focus,button:focus-visible,a:focus-visible,summary:focus-visible{outline:3px solid rgba(49,112,190,.18);outline-offset:2px;border-color:#6b9bd0}
+button{border-radius:9px;transition:filter .18s ease,transform .18s ease}
+button:hover{filter:brightness(.96)}
+button:active{transform:translateY(1px)}
+a{transition:color .18s ease}
+.members-list,.member-profile,.action-tooltip-text,.idea-action-tooltip-text{border-color:#d9e3ef;border-radius:10px;box-shadow:0 7px 22px rgba(30,45,70,.16)}
+@media(max-width:720px){
+.container{padding:8px 8px 22px}
+.box,.card-form,.card{padding:13px;margin-bottom:13px;border-radius:11px}
+.community-header{padding:14px}
+.community-header-top{gap:9px!important}
+.community-header-top>a{font-size:12px!important}
+.topic{border-radius:10px}
+.community-topic-item>summary{padding:9px 10px}
+.community-topic-body{padding:3px 10px 11px}
+}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{transition-duration:.01ms!important;animation-duration:.01ms!important}}
+
 </style>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
