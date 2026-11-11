@@ -735,6 +735,46 @@ body{
 .member-entry:hover .member-profile,.member-entry:focus-within .member-profile{display:block;}
 .members-dropdown:hover .members-list,.members-dropdown:focus-within .members-list{display:block;}
 @media(max-width:720px){.member-profile{left:12px;right:12px;transform:none;top:12px;width:auto;max-width:none;}.community-header{border-radius:14px;}.community-mobile-actions{display:flex;flex-direction:row;flex-wrap:nowrap;align-items:center;gap:6px;width:100%;margin:8px 0 12px;}.community-mobile-actions>*{flex:1 1 0;min-width:0;max-width:33.333%;margin:0!important;text-align:center!important;}.community-mobile-actions a,.community-mobile-actions form button,.community-mobile-actions .members-button{display:flex;align-items:center;justify-content:center;width:100%;min-height:42px;box-sizing:border-box;padding:7px 3px!important;font-size:10px!important;line-height:1.35;white-space:normal;margin:0!important;}.community-mobile-actions form{display:flex;align-items:center;min-width:0;}.community-mobile-actions .members-dropdown{display:flex;align-items:stretch;min-width:0;}.community-duty-item{align-items:flex-start;flex-direction:column;}.community-duty-vote-form{align-self:flex-start;}}
+
+/* پرداخت نهایی ظاهر صفحه موضوعات و رأی‌گیری */
+body { background: #f3f7f4; color: #293a30; }
+.container { gap: 18px; }
+.header-box, .card {
+    border: 1px solid #e0e9e2;
+    border-radius: 15px;
+    box-shadow: 0 5px 18px rgba(28, 75, 48, .06);
+}
+.topic-collapse {
+    border-color: #d9e7dc;
+    border-radius: 13px;
+    background: #fff;
+    box-shadow: 0 3px 12px rgba(28, 75, 48, .045);
+}
+.topic-collapse > summary {
+    background: #edf5ef;
+    color: #244d34;
+    border-radius: 12px;
+}
+.topic-description { color: #526358; }
+.idea, .idea-box {
+    border-color: #e5eadf;
+    border-radius: 11px;
+}
+.vote-btn, button, input[type="submit"] { border-radius: 9px; }
+.community-header { border-radius: 16px; }
+.community-duty-item {
+    border-color: #e0e9e2;
+    border-radius: 10px;
+}
+.community-duty-type { background: #edf5ef; color: #286343; }
+.members-button { background: #216b45; border-radius: 8px; }
+.members-list { border-color: #dce7df; border-radius: 10px; }
+@media (max-width: 720px) {
+    body { padding: 9px; }
+    .container { gap: 12px; }
+    .header-box, .card { border-radius: 12px; }
+}
+
 </style>
 </head>
 <body>
