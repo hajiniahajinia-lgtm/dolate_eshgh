@@ -176,8 +176,10 @@ document.addEventListener("DOMContentLoaded", function() {
 <h2 style="margin:0;">پروفایل</h2>
 <a href="expertise.php" style="display:inline-flex;align-items:center;justify-content:center;background:#287a55;color:#fff;text-decoration:none;padding:9px 13px;border-radius:8px;font-size:14px;font-weight:bold;white-space:nowrap;">شایستگی تخصصی</a>
 <a href="search.php" style="display:inline-flex;align-items:center;justify-content:center;gap:6px;background:#1769aa;color:#fff;text-decoration:none;padding:9px 13px;border-radius:8px;font-size:14px;font-weight:bold;white-space:nowrap;">🔎 سرچ</a>
+<a href="community_charter_amendments.php" style="display:inline-flex;align-items:center;justify-content:center;background:#6741a5;color:#fff;text-decoration:none;padding:9px 13px;border-radius:8px;font-size:14px;font-weight:bold;white-space:nowrap;">📜 منشور بنیادین</a>
 <a href="stats.php" style="display:inline-flex;align-items:center;justify-content:center;background:#5b6472;color:#fff;text-decoration:none;padding:9px 13px;border-radius:8px;font-size:14px;font-weight:bold;white-space:nowrap;">📊 آمار سامانه</a>
 </div>
+<a href="knowledge_library.php" style="display:block;text-align:center;background:#176b56;color:#fff;text-decoration:none;padding:10px 13px;border-radius:8px;font-size:14px;font-weight:bold;margin:8px 0 12px;">📚 کتابخانهٔ دانش جمعی</a>
 <button type="button" class="edit" onclick="toggleEditForm()">تکمیل/ویرایش پروفایل</button>
 <div id="editForm" class="edit-form">
 <form method="post" action="">
@@ -471,7 +473,7 @@ if($user_comms->num_rows>0):
 </div>
 
 <details class="community-management" id="join-community" <?= isset($_GET['join_community']) ? 'open' : '' ?>>
-<summary>➕ عضویت در جامعه یا ایجاد جامعه جدید</summary>
+<summary>➕ عضویت در جامعه</summary>
 
 <!-- عضویت در جوامع موجود -->
 <div class="box">
@@ -515,6 +517,10 @@ $is_child = !empty($nc['parent_community_id']);
 <button type="submit">عضویت</button>
 </form>
 </div>
+</details>
+
+<details class="community-management" id="create-community" <?= isset($_GET['create_community']) ? 'open' : '' ?>>
+<summary>➕ ایجاد جامعه</summary>
 
 <!-- ایجاد جامعه جدید -->
 <div class="box">
