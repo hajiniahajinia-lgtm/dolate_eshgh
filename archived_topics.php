@@ -428,6 +428,40 @@ h1{margin:0 0 18px;font-size:22px;text-align:center}
 @media(max-width:720px){.topic-navigation-buttons{display:flex!important;flex-direction:row!important;flex-wrap:nowrap!important;gap:6px!important;width:100%;}.topic-navigation-buttons>a{flex:1 1 0!important;min-width:0!important;width:50%;padding:9px 4px!important;font-size:12px!important;line-height:1.4!important;overflow-wrap:anywhere;white-space:normal;text-align:center;}
 .community-header{border-radius:14px;}.community-mobile-actions{display:flex;flex-direction:row;flex-wrap:nowrap;align-items:center;gap:6px;width:100%;margin:8px 0 12px;}.community-mobile-actions>*{flex:1 1 0;min-width:0;max-width:33.333%;margin:0!important;text-align:center!important;}.community-mobile-actions a,.community-mobile-actions form button,.community-mobile-actions .members-button{display:flex;align-items:center;justify-content:center;width:100%;min-height:42px;box-sizing:border-box;padding:7px 3px!important;font-size:10px!important;line-height:1.35;white-space:normal;margin:0!important;}.community-mobile-actions form{display:flex;align-items:center;min-width:0;}.community-mobile-actions .members-dropdown{display:flex;align-items:stretch;min-width:0;}.community-duty-item{align-items:flex-start;flex-direction:column;}.community-duty-vote-form{align-self:flex-start;}}
 
+
+/* پرداخت نهایی ظاهر بایگانی موضوعات */
+body { background: #f3f7f4; color: #293a30; }
+.column {
+    border: 1px solid #e0e9e2;
+    border-radius: 15px;
+    box-shadow: 0 5px 18px rgba(28, 75, 48, .06);
+}
+.column.winners { background: #f0f7f1; }
+.column.losers { background: #fbf2f1; }
+.column h2 { color: #31543d; }
+.archive-group {
+    border: 1px solid #e0e9e2;
+    border-radius: 11px;
+    margin-bottom: 10px;
+    background: #fff;
+}
+.archive-group > summary {
+    background: #edf5ef;
+    color: #294d36;
+}
+.archive-subgroup { border-radius: 9px; }
+.card {
+    border-color: #e2eae3;
+    border-radius: 11px;
+    box-shadow: 0 2px 9px rgba(28, 75, 48, .045);
+}
+.idea-box { border-radius: 10px; }
+.community-header { border-radius: 16px; }
+@media (max-width: 720px) {
+    body { padding: 9px; }
+    .column { min-width: 0; width: 100%; max-height: none; }
+}
+
 </style>
 <script>
 function toggleIdea(id){
