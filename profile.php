@@ -530,18 +530,32 @@ $is_child = !empty($nc['parent_community_id']);
 <label>نام جامعه*</label>
 <input type="text" name="community_name" required>
 
+<?php
+$community_type_options = [
+    'کشور', 'استان', 'شهر', 'روستا یا منطقه',
+    'محله', 'کارخانه یا محل کار', 'دانشگاه یا مرکز آموزشی',
+    'مدرسه', 'سازمان یا نهاد', 'اداره', 'شرکت',
+    'انجمن', 'تعاونی', 'گروه با هدف مشترک'
+];
+$types_result = $conn->query("SELECT DISTINCT community_type FROM communities WHERE community_type IS NOT NULL AND community_type <> '' ORDER BY community_type");
+if ($types_result) {
+    while ($type_row = $types_result->fetch_assoc()) {
+        $community_type_options[] = $type_row['community_type'];
+    }
+    $types_result->free();
+}
+$community_type_options = array_values(array_unique($community_type_options));
+?>
 <label>نوع جامعه*</label>
 <select name="community_type" id="communityType" required>
-    <option value="کشور">کشور</option>
-    <option value="شهر">شهر</option>
-    <option value="روستا یا منطقه">روستا یا منطقه</option>
-    <option value="کارخانه یا محل کار">کارخانه یا محل کار</option>
-    <option value="دانشگاه یا مرکز آموزشی">دانشگاه یا مرکز آموزشی</option>
-    <option value="سازمان یا نهاد">سازمان یا نهاد</option>
     <option value="گروه با هدف مشترک" selected>گروه با هدف مشترک</option>
-    <option value="سایر">سایر</option>
+    <?php foreach ($community_type_options as $type_option): ?>
+        <option value="<?= htmlspecialchars($type_option, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($type_option, ENT_QUOTES, 'UTF-8') ?></option>
+    <?php endforeach; ?>
+    <option value="__custom__">➕ افزودن نوع جامعه جدید...</option>
 </select>
-<input type="text" name="community_type_custom" id="communityTypeCustom" maxlength="100" placeholder="نوع جامعه را بنویسید" style="display:none;margin-top:8px;">
+<input type="text" name="community_type_custom" id="communityTypeCustom" maxlength="100" placeholder="نام نوع جدید جامعه را وارد کنید" style="display:none;margin-top:8px;">
+<small style="display:block;margin-top:5px;color:#666;">نوع‌های ثبت‌شده در جوامع قبلی نیز به فهرست اضافه می‌شوند.</small>
 
 <label>وظایف و رویکردها*</label>
 <textarea name="community_approach" required></textarea>
@@ -558,7 +572,7 @@ $is_child = !empty($nc['parent_community_id']);
     const customType = document.getElementById('communityTypeCustom');
     if (!typeSelect || !customType) return;
     function updateCustomType() {
-        const isOther = typeSelect.value === 'سایر';
+        const isOther = typeSelect.value === '__custom__';
         customType.style.display = isOther ? 'block' : 'none';
         customType.required = isOther;
         if (!isOther) customType.value = '';
