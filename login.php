@@ -307,6 +307,48 @@ a {
 a:hover {
     text-decoration:underline;
 }
+
+/* هماهنگی بصری فرم ورود */
+body {
+    background: #f3f7f4;
+    color: #26382d;
+}
+.container {
+    border: 1px solid #e0e9e2;
+    border-radius: 18px;
+    box-shadow: 0 10px 30px rgba(28, 75, 48, .09);
+}
+h2 { color: #216b45; }
+label { color: #344b3b; }
+input[type="text"], input[type="password"] {
+    border: 1px solid #cbd8ce;
+    border-radius: 10px;
+    transition: border-color .18s ease, box-shadow .18s ease;
+}
+input[type="text"]:focus, input[type="password"]:focus {
+    outline: none;
+    border-color: #39845a;
+    box-shadow: 0 0 0 3px rgba(57, 132, 90, .13);
+}
+button {
+    background: #216b45;
+    border-radius: 10px;
+    transition: background-color .18s ease;
+}
+button:hover { background: #185638; }
+.message {
+    color: #a33333;
+    background: #fff1f0;
+    border: 1px solid #f2d1ce;
+    border-radius: 9px;
+    padding: 9px 12px;
+}
+a { color: #216b45; }
+a:hover { color: #174f36; }
+@media (max-width: 480px) {
+    .container { border-radius: 15px; }
+}
+
 </style>
 </head>
 
