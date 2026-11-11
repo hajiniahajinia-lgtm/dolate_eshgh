@@ -31,7 +31,7 @@ if (!is_file($config_path)) {
 }
 
 $config = require $config_path;
-$expected_token = is_array($config) ? (string)($config['token'] ?? '') : '';
+$expected_token = is_array($config) ? trim((string)($config['token'] ?? '')) : '';
 $provided_token = '';
 $encoded_token = (string)($_SERVER['HTTP_X_MIGRATION_TOKEN_BASE64'] ?? '');
 if ($encoded_token !== '') {
@@ -44,7 +44,16 @@ if ($encoded_token !== '') {
     $provided_token = (string)($_SERVER['HTTP_X_MIGRATION_TOKEN'] ?? '');
 }
 
-if (strlen($expected_token) < 32 || $provided_token === '' || !hash_equals($expected_token, $provided_token)) {
+if (strlen($expected_token) < 32) {
+    error_log('[migration-auth] Host token configuration is missing or shorter than 32 bytes.');
+    migration_response(403, ['success' => false, 'message' => 'Forbidden']);
+}
+if ($provided_token === '') {
+    error_log('[migration-auth] No usable migration token was received in the request headers.');
+    migration_response(403, ['success' => false, 'message' => 'Forbidden']);
+}
+if (!hash_equals($expected_token, $provided_token)) {
+    error_log('[migration-auth] Received migration token does not match the host configuration.');
     migration_response(403, ['success' => false, 'message' => 'Forbidden']);
 }
 
