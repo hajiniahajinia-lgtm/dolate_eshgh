@@ -227,7 +227,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 body { padding: 10px; }
                 .wrap { padding: 0 6px; }
             }
-        </style>
+        
+            /* هماهنگی بصری فرم ثبت‌نام */
+            :root { --accent: #216b45; --muted: #cbd8ce; --card: #fff; }
+            body { background: #f3f7f4; color: #26382d; }
+            .wrap { max-width: 500px; }
+            .intro-box, .stats-box, form {
+                border-radius: 15px;
+                box-shadow: 0 5px 18px rgba(28, 75, 48, .06);
+                border-color: #e0e9e2;
+            }
+            .intro-box { border-color: #d4e8da; background: #edf6ef; }
+            .stats-box { border-color: #eadfbd; background: #fbf7e9; }
+            h2 { color: #216b45; }
+            label { color: #344b3b; }
+            input[type="text"], input[type="password"] {
+                border-color: #cbd8ce;
+                border-radius: 10px;
+                transition: border-color .18s ease, box-shadow .18s ease;
+            }
+            input[type="text"]:focus, input[type="password"]:focus {
+                outline: none;
+                border-color: #39845a;
+                box-shadow: 0 0 0 3px rgba(57, 132, 90, .13);
+            }
+            button {
+                background: #216b45;
+                border-radius: 10px;
+                font-weight: 600;
+                transition: background-color .18s ease;
+            }
+            button:hover { background: #185638; }
+
+</style>
     </head>
     <body>
     <div class="wrap">
