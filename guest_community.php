@@ -36,6 +36,45 @@ if ($community) {
 <title><?= $community ? guest_community_h($community['name']) : 'جامعه پیدا نشد' ?> | دولت عشق</title>
 <style>
 *{box-sizing:border-box}body{font-family:tahoma,Arial,sans-serif;background:#f2f6fa;color:#263238;margin:0;padding:14px;line-height:1.95}.wrap{max-width:1000px;margin:0 auto}.panel,.topic{background:#fff;border:1px solid #dce5ed;border-radius:12px;padding:16px;margin-bottom:14px;min-width:0}.header{background:linear-gradient(125deg,#ffe4eb,#ffefd6,#e7f8d9,#dff4ff,#e9e0ff);border-color:#e2dff0}.actions{display:flex;gap:8px;flex-wrap:wrap}.btn{display:inline-block;text-decoration:none;background:#216b45;color:#fff;border:0;border-radius:7px;padding:8px 12px;font:inherit;font-size:13px;cursor:pointer}.secondary{background:#fff;color:#216b45;border:1px solid #216b45}.topic h2{font-size:18px;margin:0 0 7px;overflow-wrap:anywhere}.meta{font-size:12px;color:#667085}.description{white-space:pre-wrap;overflow-wrap:anywhere;color:#4b5563;margin:8px 0}.ideas{margin-top:12px;padding:12px;background:#f8fafc;border:1px solid #e5eaf0;border-radius:9px}.idea{background:#fff;border:1px solid #e4e7ec;border-radius:8px;padding:10px;margin-top:8px;white-space:pre-wrap;overflow-wrap:anywhere}.notice{margin-top:12px;background:#fff8e1;border:1px solid #f2d675;border-radius:8px;padding:10px;font-size:13px}.empty{color:#667085}@media(max-width:520px){body{padding:8px}.panel,.topic{padding:12px}.actions{flex-direction:column}.actions .btn{text-align:center;width:100%}}
+
+/* هماهنگی نمایش عمومی موضوعات و ایده‌ها */
+body { background: #f3f7f4; color: #293a30; }
+.panel, .topic {
+    border-color: #e0e9e2;
+    border-radius: 15px;
+    box-shadow: 0 5px 18px rgba(28, 75, 48, .055);
+}
+.header {
+    background: linear-gradient(135deg, #edf6ef, #f8fbf8);
+    border-color: #dce9df;
+}
+.topic h2 { color: #245d3c; }
+.meta { color: #68786d; }
+.description { color: #4c5f52; }
+.ideas {
+    background: #f5f9f5;
+    border-color: #e0e9e2;
+    border-radius: 11px;
+}
+.idea {
+    border-color: #e0e9e2;
+    border-radius: 10px;
+}
+.btn { background: #216b45; border-radius: 9px; }
+.btn.secondary {
+    background: #fff;
+    color: #216b45;
+    border-color: #b8d1bf;
+}
+.notice {
+    background: #f8f6e9;
+    border-color: #e9dfb9;
+    border-radius: 10px;
+}
+@media (max-width: 520px) {
+    .panel, .topic { border-radius: 12px; }
+}
+
 </style>
 <script>
 function guestNeedsAccount(action){
