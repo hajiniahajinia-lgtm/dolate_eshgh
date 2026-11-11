@@ -19,13 +19,17 @@ function cam_page_h($value): string {
 function cam_page_status(string $status): string {
     $labels = [
         'draft_created' => 'پیش‌نویس اصلاح منشور ثبت شد.',
-        'initial_review_started' => 'منشور آغازین برای بررسی مستقل و سپس رأی عمومی ارسال شد.',
-        'review_started' => 'پیشنهاد برای بررسی مستقل ارسال شد.',
+        'initial_review_started' => 'نامزدهای ارزیابی منشور آغازین برای اعلام تعارض دعوت شدند؛ بررسی پس از تکمیل هیئت آغاز می‌شود.',
+        'review_started' => 'نامزدهای ارزیابی برای اعلام تعارض دعوت شدند؛ بررسی پس از تکمیل هیئت آغاز می‌شود.',
         'assessment_saved' => 'ارزیابی مستقل ثبت شد.',
         'public_voting_started' => 'بررسی مستقل موفق بود؛ رأی‌گیری عمومی آغاز شد.',
         'vote_saved' => 'رأی شما ثبت شد.',
         'appeal_period' => 'پیشنهاد در مهلت هفت‌روزه اعتراض قرار گرفت.',
         'appeal_submitted' => 'اعتراض ثبت و برای رسیدگی مستقل ارجاع شد.',
+        'conflict_disclosed_clear' => 'اعلام نبود تعارض ثبت شد؛ در صورت تکمیل پنج ارزیاب، بررسی مستقل آغاز می‌شود.',
+        'reviewer_recused' => 'کناره‌گیری شما ثبت شد؛ نامزدهای ذخیره برای تکمیل هیئت بررسی می‌شوند.',
+        'conflict_referred' => 'اعلام تعارض برای رسیدگی محرمانه ارجاع شد.',
+        'conflict_decision_saved' => 'تصمیم رسیدگی محرمانه ثبت شد؛ نتیجه پس از رأی کافی اعمال می‌شود.',
         'appeal_assessment_saved' => 'ارزیابی اعتراض ثبت شد؛ رسیدگی ادامه دارد.',
         'appeal_upheld' => 'اعتراض وارد تشخیص داده شد و اصلاحیه رد شد.',
         'appeal_dismissed' => 'اعتراض وارد تشخیص داده نشد.',
@@ -41,7 +45,10 @@ $required = [
     'community_charter_amendment_assessments','community_charter_amendment_electorate',
     'community_charter_amendment_votes','community_charter_amendment_appeals',
     'community_charter_amendment_appeal_reviewers',
-    'community_charter_amendment_appeal_reviewer_assignments'
+    'community_charter_amendment_appeal_reviewer_assignments',
+    'community_charter_amendment_reviewer_candidates',
+    'community_charter_amendment_conflict_adjudicators',
+    'community_charter_amendment_conflict_decisions'
 ];
 $marks = implode(',', array_fill(0, count($required), '?'));
 $check = $conn->prepare(
@@ -235,7 +242,7 @@ button.secondary{background:#58677a}button.danger{background:#8a3940}.grid{displ
 <h1>اصلاح منشور بنیادین</h1>
 <p>منشور، مرجع حقوقی برتر همه جوامع است. اصلاح آن تنها پس از بررسی مستقل، رأی مستقیم کاربران، مهلت اعتراض و رسیدگی به اعتراض‌ها امکان‌پذیر است.</p>
 <div class="notice">قواعد این فرایند: دست‌کم ۵ ارزیاب مستقل و حمایت ۴ نفر؛ مشارکت دست‌کم دوسوم رأی‌دهندگان؛ موافقت دست‌کم سه‌چهارم آرای موافق و مخالف؛ سپس ۷ روز مهلت اعتراض.</div>
-<div class="notice">ارزیابان مستقل و رأی‌دهندگان از میان کاربران ثبت‌نام‌شده به‌صورت تصادفی انتخاب می‌شوند؛ پیشنهاددهنده در این فهرست‌ها قرار نمی‌گیرد و ارزیابان نیز از رأی‌دهندگان جدا هستند. در نسخه فعلی، اطلاعات روابط شخصی یا تعارض منافع کاربران ثبت نمی‌شود؛ بنابراین این موضوع باید پیش از گسترش فرایند با سازوکار اعلام و رسیدگی مستقل تکمیل شود.</div>
+<div class="notice">ارزیابان، رسیدگی‌کنندگان تعارض و رأی‌دهندگان به‌صورت تصادفی و در فهرست‌های جدا انتخاب می‌شوند. نامزد ارزیابی پیش از شروع بررسی باید نبود تعارض را اعلام کند، کناره‌گیری کند یا درخواست رسیدگی محرمانه بدهد. جزئیات خصوصی فقط برای رسیدگی‌کنندگان همان پرونده نمایش داده می‌شود؛ تا تکمیل پنج ارزیاب واجد شرایط، بررسی مستقل آغاز نمی‌شود.</div>
 <?php if ($message = cam_page_status((string)($_GET['status'] ?? ''))): ?>
 <div class="notice"><?= cam_page_h($message) ?></div>
 <?php endif; ?>
@@ -258,12 +265,12 @@ button.secondary{background:#58677a}button.danger{background:#8a3940}.grid{displ
 </div>
 <?php endforeach; ?>
 <?php if ($initial_case): ?>
-<p>پروندهٔ تصویب اولیه ثبت شده است. وضعیت فعلی: <strong><?= cam_page_h($charter_case_status_labels[$initial_case['status']] ?? 'وضعیت نامشخص') ?></strong>. جزئیات بررسی، رأی‌گیری و اعتراض در پروندهٔ پایین نمایش داده می‌شود.</p>
+<p>پروندهٔ تصویب اولیه ثبت شده است. وضعیت فعلی: <strong><?= cam_page_h($initial_case['status']==='draft' ? 'در انتظار اعلام و رسیدگی به تعارض منافع' : ($charter_case_status_labels[$initial_case['status']] ?? 'وضعیت نامشخص')) ?></strong>. جزئیات بررسی، رأی‌گیری و اعتراض در پروندهٔ پایین نمایش داده می‌شود.</p>
 <?php else: ?>
 <form method="post" action="community_charter_amendment_action.php">
 <input type="hidden" name="csrf_token" value="<?= cam_page_h($csrf) ?>">
 <input type="hidden" name="action" value="start_initial_adoption">
-<button type="submit">ارسال منشور آغازین برای بررسی مستقل و رأی عمومی</button>
+<button type="submit">دعوت نامزدها برای اعلام تعارض و تشکیل هیئت بررسی</button>
 </form>
 <?php endif; ?>
 <?php elseif ($initial_case): ?>
@@ -337,12 +344,32 @@ button.secondary{background:#58677a}button.danger{background:#8a3940}.grid{displ
     $aid = (int)$a['id'];
     $status_labels = $charter_case_status_labels;
     $is_reviewer = false; $has_assessment = false; $is_elector = false; $my_vote = '';
+    $is_adjudicator = false; $candidate_status = '';
     $q = $conn->prepare("SELECT 1 FROM community_charter_amendment_reviewers WHERE amendment_id=? AND reviewer_user_id=? LIMIT 1");
     if ($q) { $q->bind_param('ii',$aid,$user_id); $q->execute(); $is_reviewer=(bool)$q->get_result()->fetch_row(); $q->close(); }
     if ($is_reviewer) {
         $q=$conn->prepare("SELECT 1 FROM community_charter_amendment_assessments WHERE amendment_id=? AND reviewer_user_id=? LIMIT 1");
         if($q){$q->bind_param('ii',$aid,$user_id);$q->execute();$has_assessment=(bool)$q->get_result()->fetch_row();$q->close();}
     }
+    $candidate_status = '';
+    $candidate_q = $conn->prepare(
+        "SELECT status FROM community_charter_amendment_reviewer_candidates
+         WHERE amendment_id=? AND candidate_user_id=? LIMIT 1"
+    );
+    if ($candidate_q) {
+        $candidate_q->bind_param('ii',$aid,$user_id);
+        if ($candidate_q->execute()) $candidate_status=(string)($candidate_q->get_result()->fetch_assoc()['status'] ?? '');
+        $candidate_q->close();
+    }
+    $adjudicator_q = $conn->prepare(
+        "SELECT 1 FROM community_charter_amendment_conflict_adjudicators
+         WHERE amendment_id=? AND adjudicator_user_id=? LIMIT 1"
+    );
+    if ($adjudicator_q) {
+        $adjudicator_q->bind_param('ii',$aid,$user_id);
+        $adjudicator_q->execute(); $is_adjudicator=(bool)$adjudicator_q->get_result()->fetch_row();
+        $adjudicator_q->close();
+    } else { $is_adjudicator=false; }
     $q=$conn->prepare("SELECT 1 FROM community_charter_amendment_electorate WHERE amendment_id=? AND user_id=? LIMIT 1");
     if($q){$q->bind_param('ii',$aid,$user_id);$q->execute();$is_elector=(bool)$q->get_result()->fetch_row();$q->close();}
     if($is_elector){$q=$conn->prepare("SELECT vote FROM community_charter_amendment_votes WHERE amendment_id=? AND user_id=? LIMIT 1");if($q){$q->bind_param('ii',$aid,$user_id);$q->execute();$my_vote=(string)($q->get_result()->fetch_assoc()['vote']??'');$q->close();}}
@@ -350,10 +377,101 @@ button.secondary{background:#58677a}button.danger{background:#8a3940}.grid{displ
 <div class="amendment">
 <h3><?= cam_page_h($a['title']) ?></h3>
 <p><span class="tag"><?= ($a['case_type'] ?? 'amendment') === 'initial_adoption' ? 'تصویب اولیه' : 'اصلاح منشور' ?></span>
-<span class="tag"><?= cam_page_h($status_labels[$a['status']] ?? $a['status']) ?></span>
+<span class="tag"><?= cam_page_h((($a['case_type'] ?? 'amendment')==='initial_adoption' && $a['status']==='draft') ? 'در انتظار اعلام تعارض' : ($status_labels[$a['status']] ?? $a['status'])) ?></span>
 <span class="muted">پیشنهاددهنده: <?= cam_page_h($a['proposer_name'] ?? 'کاربر') ?> — نسخه پیشنهادی: <?= cam_page_h($a['proposed_version_number']) ?></span></p>
 <p><strong>دلیل:</strong> <?= nl2br(cam_page_h($a['justification'])) ?></p>
 <p><strong>ارزیابی پیامدها:</strong> <?= nl2br(cam_page_h($a['impact_assessment'])) ?></p>
+
+<?php if ($a['status']==='draft' && $candidate_status==='invited'): ?>
+<div class="item">
+<strong>اعلام محرمانه تعارض منافع پیش از ارزیابی</strong>
+<p class="muted">پیش از دسترسی به نقش ارزیاب، یکی از وضعیت‌ها را صادقانه انتخاب کنید. کناره‌گیری بدون ذکر دلیل عمومی پذیرفته می‌شود؛ جزئیات این فرم در صفحه عمومی نمایش داده نمی‌شود.</p>
+<form method="post" action="community_charter_amendment_action.php">
+<input type="hidden" name="csrf_token" value="<?= cam_page_h($csrf) ?>">
+<input type="hidden" name="action" value="declare_reviewer_conflict">
+<input type="hidden" name="amendment_id" value="<?= $aid ?>">
+<label><input type="radio" name="declaration" value="no_conflict" required style="width:auto"> تعارضی نمی‌شناسم</label>
+<label><input type="radio" name="declaration" value="recuse" style="width:auto"> بدون افشای دلیل، از ارزیابی این پرونده کناره‌گیری می‌کنم</label>
+<label><input type="radio" name="declaration" value="review" style="width:auto"> احتمال تعارض وجود دارد؛ درخواست رسیدگی محرمانه دارم</label>
+<p><strong>در صورت درخواست رسیدگی، نوع احتمالی تعارض را مشخص کنید:</strong></p>
+<?php
+$conflict_categories = [
+ 'family_personal'=>'رابطه خانوادگی یا شخصی نزدیک',
+ 'financial'=>'رابطه مالی یا قراردادی',
+ 'employment'=>'وابستگی استخدامی یا سازمانی مستقیم',
+ 'professional'=>'همکاری حرفه‌ای نزدیک یا رابطه استاد/شاگردی',
+ 'personal_dispute'=>'اختلاف شخصی مؤثر یا دعوای جاری',
+ 'direct_involvement'=>'نقش مستقیم در تهیه، اجرا یا تصمیم مورد بررسی',
+ 'other'=>'سایر شرایط مؤثر بر بی‌طرفی'
+];
+foreach ($conflict_categories as $category_key=>$category_label):
+?>
+<label><input type="checkbox" name="conflict_categories[]" value="<?= cam_page_h($category_key) ?>" style="width:auto"> <?= cam_page_h($category_label) ?></label>
+<?php endforeach; ?>
+<label>توضیح محرمانه برای رسیدگی‌کنندگان (درخواست بررسی)</label>
+<textarea name="private_details" maxlength="10000"></textarea>
+<button type="submit">ثبت اعلام محرمانه</button>
+</form>
+</div>
+<?php elseif ($a['status']==='draft' && in_array($candidate_status,['eligible','assigned','recused','review_pending','conflict','insufficient'],true)): ?>
+<p class="muted">وضعیت اعلام تعارض شما ثبت شده است: <?= cam_page_h($candidate_status==='assigned'?'واجد شرایط و ارزیاب':($candidate_status==='eligible'?'واجد شرایط':($candidate_status==='recused'?'کناره‌گیری':($candidate_status==='review_pending'?'در انتظار رسیدگی':'تعیین تکلیف شده')))) ?>.</p>
+<?php endif; ?>
+
+<?php if ($a['status']==='draft' && $is_adjudicator): ?>
+<div class="item">
+<strong>رسیدگی محرمانه به اعلام تعارض</strong>
+<?php
+$conflict_categories = [
+ 'family_personal'=>'رابطه خانوادگی یا شخصی نزدیک',
+ 'financial'=>'رابطه مالی یا قراردادی',
+ 'employment'=>'وابستگی استخدامی یا سازمانی مستقیم',
+ 'professional'=>'همکاری حرفه‌ای نزدیک یا رابطه استاد/شاگردی',
+ 'personal_dispute'=>'اختلاف شخصی مؤثر یا دعوای جاری',
+ 'direct_involvement'=>'نقش مستقیم در تهیه، اجرا یا تصمیم مورد بررسی',
+ 'other'=>'سایر شرایط مؤثر بر بی‌طرفی'
+];
+?>
+<?php
+$pending_conflicts = $conn->prepare(
+    "SELECT c.candidate_user_id,c.conflict_categories,c.private_details,u.username
+     FROM community_charter_amendment_reviewer_candidates c
+     LEFT JOIN users u ON u.id=c.candidate_user_id
+     LEFT JOIN community_charter_amendment_conflict_decisions d
+       ON d.amendment_id=c.amendment_id AND d.candidate_user_id=c.candidate_user_id
+      AND d.adjudicator_user_id=?
+     WHERE c.amendment_id=? AND c.status='review_pending' AND d.candidate_user_id IS NULL
+     ORDER BY c.candidate_order"
+);
+if ($pending_conflicts):
+$pending_conflicts->bind_param('ii',$user_id,$aid);
+if ($pending_conflicts->execute()):
+$pending_result=$pending_conflicts->get_result();
+if ($pending_result->num_rows===0): ?><p class="muted">در حال حاضر اعلامی برای تصمیم شما باقی نمانده است.</p><?php endif; ?>
+<?php while($conflict=$pending_result->fetch_assoc()):
+$category_keys=json_decode((string)$conflict['conflict_categories'],true) ?: [];
+$category_names=[];
+foreach($category_keys as $category_key) if(isset($conflict_categories[$category_key])) $category_names[]=$conflict_categories[$category_key];
+?>
+<div class="amendment">
+<strong>نامزد: <?= cam_page_h($conflict['username'] ?: 'کاربر') ?></strong>
+<p>موضوعات اعلام‌شده: <?= cam_page_h(implode('، ',$category_names)) ?></p>
+<p><?= nl2br(cam_page_h($conflict['private_details'] ?? '')) ?></p>
+<form method="post" action="community_charter_amendment_action.php">
+<input type="hidden" name="csrf_token" value="<?= cam_page_h($csrf) ?>">
+<input type="hidden" name="action" value="decide_reviewer_conflict">
+<input type="hidden" name="amendment_id" value="<?= $aid ?>">
+<input type="hidden" name="candidate_user_id" value="<?= (int)$conflict['candidate_user_id'] ?>">
+<label>نتیجه رسیدگی</label>
+<select name="verdict"><option value="clear">تعارض مؤثر احراز نشد</option><option value="conflict">تعارض مؤثر است؛ نامزد جایگزین شود</option><option value="insufficient">اطلاعات برای تصمیم کافی نیست</option></select>
+<label>دلایل محرمانه تصمیم</label>
+<textarea name="reasoning" minlength="20" maxlength="10000" required></textarea>
+<button type="submit">ثبت تصمیم مستقل</button>
+</form>
+</div>
+<?php endwhile; endif; $pending_conflicts->close(); endif; ?>
+</div>
+<?php endif; ?>
+
 <?php
 $item_stmt=$conn->prepare(
     "SELECT i.action,i.article_code,i.proposed_title,i.proposed_text,i.rationale,
