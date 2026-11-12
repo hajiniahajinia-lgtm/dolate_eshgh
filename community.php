@@ -145,9 +145,11 @@ body.country-community-page{
 .community-quick-menu-items>div,.community-quick-menu-items>form{display:block;width:100%;box-sizing:border-box;margin:0!important;text-align:right!important;}
 .community-quick-menu-items>div a{background:#2065d1;}
 .community-quick-menu-items>form button{display:block;width:100%!important;margin:0!important;background:#c62828;color:#fff;padding:10px 12px;border:0;border-radius:7px;text-align:right;font:inherit;font-size:13px;line-height:1.5;cursor:pointer;}
-.community-header-top{position:relative;padding-left:54px;padding-bottom:48px;}
-.community-search-button{position:absolute;left:64px;bottom:0;z-index:2;display:inline-flex;align-items:center;justify-content:center;gap:6px;background:#1769aa;color:#fff!important;text-decoration:none;padding:10px 14px;border-radius:9px;font-size:13px;font-weight:bold;white-space:nowrap;box-sizing:border-box;box-shadow:0 2px 7px rgba(0,0,0,.15);}
-@media(max-width:520px){.community-header-top{padding-bottom:46px;}.community-search-button{left:58px;bottom:0;padding:9px 12px;}}
+.community-header-top{position:relative;padding-left:54px;}
+.community-header-bottom-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;box-sizing:border-box;margin:14px 0 4px;}
+.community-header-bottom-actions .community-search-button{position:static;left:auto;bottom:auto;z-index:2;display:inline-flex;align-items:center;justify-content:center;gap:6px;background:#1769aa;color:#fff!important;text-decoration:none;padding:10px 14px;border-radius:9px;font-size:13px;font-weight:bold;white-space:nowrap;box-sizing:border-box;box-shadow:0 2px 7px rgba(0,0,0,.15);}
+.community-header-bottom-actions .members-dropdown{margin:0;}
+@media(max-width:520px){.community-header-bottom-actions{gap:8px;margin:12px 0 4px;}.community-header-bottom-actions .community-search-button{padding:9px 10px;font-size:12px;}}
 @media(max-width:520px){.community-quick-menu{top:10px;left:10px;}.community-quick-menu>summary{width:38px;height:38px;}.community-quick-menu-items{width:205px;}.community-header-top{padding-left:48px;}}
 .community-header{
     background:linear-gradient(125deg,
@@ -2425,27 +2427,21 @@ el.addEventListener('mouseleave', function(){
   if (menu && leaveForm) menu.appendChild(leaveForm);
 })();
 
-// فهرست اعضا در ردیف دسترسی موبایل باقی می‌ماند.
+// سرچ و مشاهده اعضا در یک ردیف انتهایی سربرگ، روبه‌روی یکدیگر قرار می‌گیرند.
 (function(){
-  const actions = document.getElementById('communityMobileActions');
-  if (!actions) return;
-  const header = actions.closest('.community-header');
-  const actionsPlaceholder = document.createComment('community-mobile-actions-position');
-  actions.parentNode.insertBefore(actionsPlaceholder, actions);
+  const header = document.querySelector('.community-header');
+  if (!header) return;
+  const search = header.querySelector('.community-search-button');
   const members = header.querySelector('.members-dropdown');
-  const placeholder = members ? document.createComment('community-members-position') : null;
-  if (members) members.parentNode.insertBefore(placeholder, members);
-  function arrangeActions(){
-    if (window.matchMedia('(max-width: 720px)').matches) {
-      if (members) actions.appendChild(members);
-      header.appendChild(actions);
-    } else {
-      if (actionsPlaceholder.parentNode) actionsPlaceholder.parentNode.insertBefore(actions, actionsPlaceholder);
-      if (members && placeholder && placeholder.parentNode) placeholder.parentNode.insertBefore(members, placeholder);
-    }
-  }
-  arrangeActions();
-  window.addEventListener('resize', arrangeActions);
+  if (!search || !members) return;
+  const actions = document.createElement('div');
+  actions.className = 'community-header-bottom-actions';
+  actions.setAttribute('aria-label', 'جست‌وجو و اعضای جامعه');
+  header.appendChild(actions);
+  actions.appendChild(search);
+  actions.appendChild(members);
+  const mobileActions = document.getElementById('communityMobileActions');
+  if (mobileActions) mobileActions.remove();
 })();
 </script>
 </body>
