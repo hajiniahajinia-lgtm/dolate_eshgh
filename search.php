@@ -2,6 +2,17 @@
 session_start();
 require_once __DIR__ . "/db.php";
 
+$community_id = max(0, (int)($_GET['community_id'] ?? 0));
+$community_name = '';
+if ($community_id > 0) {
+    $community_stmt = $conn->prepare("SELECT name FROM communities WHERE id=?");
+    $community_stmt->bind_param("i", $community_id);
+    $community_stmt->execute();
+    $community_row = $community_stmt->get_result()->fetch_assoc();
+    $community_stmt->close();
+    if ($community_row) $community_name = (string)$community_row['name'];
+    else $community_id = 0;
+}
 $q = trim((string)($_GET['q'] ?? ''));
 $q = mb_substr($q, 0, 120, 'UTF-8');
 $like = '%' . $q . '%';
@@ -14,27 +25,45 @@ $search_error = false;
 
 if ($q !== '') {
     try {
-        $stmt = $conn->prepare("SELECT t.id, t.title, t.description, t.community_id, c.name AS community_name
-            FROM topics t LEFT JOIN communities c ON c.id=t.community_id
-            WHERE t.title LIKE ? OR t.description LIKE ?
-            ORDER BY t.id DESC LIMIT 30");
-        $stmt->bind_param("ss", $like, $like);
+        if ($community_id > 0) {
+            $stmt = $conn->prepare("SELECT t.id, t.title, t.description, t.community_id, c.name AS community_name
+                FROM topics t LEFT JOIN communities c ON c.id=t.community_id
+                WHERE t.community_id=? AND (t.title LIKE ? OR t.description LIKE ?)
+                ORDER BY t.id DESC LIMIT 30");
+            $stmt->bind_param("iss", $community_id, $like, $like);
+        } else {
+            $stmt = $conn->prepare("SELECT t.id, t.title, t.description, t.community_id, c.name AS community_name
+                FROM topics t LEFT JOIN communities c ON c.id=t.community_id
+                WHERE t.title LIKE ? OR t.description LIKE ?
+                ORDER BY t.id DESC LIMIT 30");
+            $stmt->bind_param("ss", $like, $like);
+        }
         $stmt->execute();
         $topics = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
         $stmt->close();
 
-        $stmt = $conn->prepare("SELECT i.id, i.content, t.id AS topic_id, t.title AS topic_title,
-                t.community_id, c.name AS community_name
-            FROM ideas i JOIN topics t ON t.id=i.topic_id
-            LEFT JOIN communities c ON c.id=t.community_id
-            WHERE i.content LIKE ?
-            ORDER BY i.id DESC LIMIT 30");
-        $stmt->bind_param("s", $like);
+        if ($community_id > 0) {
+            $stmt = $conn->prepare("SELECT i.id, i.content, t.id AS topic_id, t.title AS topic_title,
+                    t.community_id, c.name AS community_name
+                FROM ideas i JOIN topics t ON t.id=i.topic_id
+                LEFT JOIN communities c ON c.id=t.community_id
+                WHERE t.community_id=? AND i.content LIKE ?
+                ORDER BY i.id DESC LIMIT 30");
+            $stmt->bind_param("is", $community_id, $like);
+        } else {
+            $stmt = $conn->prepare("SELECT i.id, i.content, t.id AS topic_id, t.title AS topic_title,
+                    t.community_id, c.name AS community_name
+                FROM ideas i JOIN topics t ON t.id=i.topic_id
+                LEFT JOIN communities c ON c.id=t.community_id
+                WHERE i.content LIKE ?
+                ORDER BY i.id DESC LIMIT 30");
+            $stmt->bind_param("s", $like);
+        }
         $stmt->execute();
         $ideas = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
         $stmt->close();
 
-        if (isset($_SESSION['user_id'])) {
+        if ($community_id === 0 && isset($_SESSION['user_id'])) {
             $membership_stmt = $conn->prepare("SELECT community_id FROM community_members WHERE user_id=?");
             $logged_in_user_id = (int)$_SESSION['user_id'];
             $membership_stmt->bind_param("i", $logged_in_user_id);
@@ -46,18 +75,22 @@ if ($q !== '') {
             $membership_stmt->close();
         }
 
-        $stmt = $conn->prepare("SELECT id, name FROM communities WHERE name LIKE ? ORDER BY name ASC LIMIT 30");
-        $stmt->bind_param("s", $like);
-        $stmt->execute();
-        $communities = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
-        $stmt->close();
+        if ($community_id === 0) {
+            $stmt = $conn->prepare("SELECT id, name FROM communities WHERE name LIKE ? ORDER BY name ASC LIMIT 30");
+            $stmt->bind_param("s", $like);
+            $stmt->execute();
+            $communities = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+            $stmt->close();
+        }
 
         // جست‌وجوی اعضا فقط بر اساس نام کاربری؛ اطلاعات خصوصی کاربران نمایش داده نمی‌شود.
-        $stmt = $conn->prepare("SELECT id, username FROM users WHERE username LIKE ? ORDER BY username ASC LIMIT 30");
-        $stmt->bind_param("s", $like);
-        $stmt->execute();
-        $users = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
-        $stmt->close();
+        if ($community_id === 0) {
+            $stmt = $conn->prepare("SELECT id, username FROM users WHERE username LIKE ? ORDER BY username ASC LIMIT 30");
+            $stmt->bind_param("s", $like);
+            $stmt->execute();
+            $users = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+            $stmt->close();
+        }
     } catch (Throwable $e) {
         $search_error = true;
     }
@@ -75,7 +108,7 @@ function search_excerpt($value, $limit = 220) {
 }
 $mission_text = 'دولت عشق بستری برای مشارکت همگانی، شناخت مسائل و چالش‌ها، ارائه ایده و راه‌حل، تصمیم‌گیری جمعی و پیگیری اجرای راه‌حل‌هاست. هوش مصنوعی ابزار کمکی انسان‌هاست و جایگزین اراده و مشارکت آنان نیست.';
 $mission_match = false;
-if ($q !== '') {
+if ($q !== '' && $community_id === 0) {
     $mission_match = (function_exists('mb_stripos') ? mb_stripos($mission_text, $q, 0, 'UTF-8') : stripos($mission_text, $q)) !== false;
 }
 ?>
@@ -84,7 +117,7 @@ if ($q !== '') {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>سرچ در دولت عشق</title>
+<title><?= $community_id > 0 ? "سرچ در این جامعه" : "سرچ در دولت عشق" ?></title>
 <style>
 *{box-sizing:border-box}body{margin:0;padding:16px;font-family:Tahoma,Arial,sans-serif;background:#f3f7fa;color:#263238;line-height:1.9}
 .container{max-width:900px;margin:0 auto}.top,.panel{background:#fff;border:1px solid #dce5eb;border-radius:12px;padding:18px;margin-bottom:14px}
@@ -100,9 +133,10 @@ h2{font-size:18px;margin:0 0 10px}.result{padding:12px 0;border-bottom:1px solid
 <body>
 <div class="container">
 <section class="top">
-<div class="topline"><h1>🔎 سرچ در دولت عشق</h1><a class="link" href="<?= isset($_SESSION['user_id']) ? 'profile.php' : 'index.html' ?>">بازگشت</a></div>
-<p>در موضوعات، ایده‌ها، جامعه‌ها و مأموریت دولت عشق جست‌وجو کنید.</p>
+<div class="topline"><h1>🔎 <?= $community_id > 0 ? 'سرچ در این جامعه: ' . search_h($community_name) : 'سرچ در دولت عشق' ?></h1><a class="link" href="<?= $community_id > 0 ? 'community.php?id=' . $community_id : (isset($_SESSION['user_id']) ? 'profile.php' : 'index.html') ?>">بازگشت</a></div>
+<p><?= $community_id > 0 ? 'در موضوعات و ایده‌های همین جامعه جست‌وجو کنید.' : 'در موضوعات، ایده‌ها، جامعه‌ها و مأموریت دولت عشق جست‌وجو کنید.' ?></p>
 <form class="search-form" method="get" action="search.php">
+<?php if ($community_id > 0): ?><input type="hidden" name="community_id" value="<?= (int)$community_id ?>"><?php endif; ?>
 <input type="search" name="q" value="<?= search_h($q) ?>" placeholder="عبارت موردنظر را بنویسید…" maxlength="120" autofocus>
 <button type="submit">جست‌وجو</button>
 </form>
@@ -111,10 +145,10 @@ h2{font-size:18px;margin:0 0 10px}.result{padding:12px 0;border-bottom:1px solid
 <section class="panel"><p class="empty">عبارت موردنظر را وارد کنید؛ نتایج موضوعات، ایده‌ها و جامعه‌های مرتبط نمایش داده می‌شوند.</p></section>
 <?php else: ?>
 <?php if ($search_error): ?><section class="panel"><p>در خواندن بعضی نتایج مشکلی پیش آمد. لطفاً دوباره تلاش کنید.</p></section><?php endif; ?>
-<?php if ($mission_match): ?>
+<?php if ($community_id === 0 && $mission_match): ?>
 <section class="panel"><h2>مأموریت و کارکرد دولت عشق</h2><div class="result"><?= search_h($mission_text) ?><p><a class="result-title" href="about.html">آشنایی عمیق‌تر با مفاهیم و علت ایجاد دولت عشق ←</a></p></div></section>
 <?php endif; ?>
-<section class="panel"><h2>جامعه‌ها (<?= count($communities) ?>)</h2>
+<?php if ($community_id === 0): ?><section class="panel"><h2>جامعه‌ها (<?= count($communities) ?>)</h2>
 <?php if (!$communities): ?><p class="empty">جامعه‌ای پیدا نشد.</p><?php endif; ?>
 <?php foreach ($communities as $item): ?>
 <?php $community_is_member = in_array((int)$item['id'], $member_community_ids, true); ?>
@@ -135,7 +169,7 @@ h2{font-size:18px;margin:0 0 10px}.result{padding:12px 0;border-bottom:1px solid
 <section class="panel"><h2>کاربران دولت عشق (<?= count($users) ?>)</h2>
 <?php if (!$users): ?><p class="empty">کاربری با این نام پیدا نشد.</p><?php endif; ?>
 <?php foreach ($users as $item): ?><div class="result"><strong><?= search_h($item['username']) ?></strong><div class="meta">عضو دولت عشق</div></div><?php endforeach; ?>
-</section>
+</section><?php endif; ?>
 <section class="panel"><h2>موضوعات (<?= count($topics) ?>)</h2>
 <?php if (!$topics): ?><p class="empty">موضوعی پیدا نشد.</p><?php endif; ?>
 <?php foreach ($topics as $item): ?><div class="result"><a class="result-title" href="community.php?id=<?= (int)$item['community_id'] ?>#topic-<?= (int)$item['id'] ?>"><?= search_h($item['title']) ?></a>

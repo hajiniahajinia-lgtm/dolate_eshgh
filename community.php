@@ -145,6 +145,8 @@ body.country-community-page{
 .community-quick-menu-items>div,.community-quick-menu-items>form{display:block;width:100%;box-sizing:border-box;margin:0!important;text-align:right!important;}
 .community-quick-menu-items>div a{background:#2065d1;}
 .community-quick-menu-items>form button{display:block;width:100%!important;margin:0!important;background:#c62828;color:#fff;padding:10px 12px;border:0;border-radius:7px;text-align:right;font:inherit;font-size:13px;line-height:1.5;cursor:pointer;}
+.community-search-button{position:fixed;left:16px;bottom:16px;z-index:1150;display:inline-flex;align-items:center;justify-content:center;gap:6px;background:#1769aa;color:#fff!important;text-decoration:none;padding:11px 15px;border-radius:10px;font-size:13px;font-weight:bold;white-space:nowrap;box-sizing:border-box;box-shadow:0 3px 12px rgba(0,0,0,.22);}
+@media(max-width:520px){.community-search-button{left:12px;bottom:12px;padding:10px 13px;}}
 .community-header-top{padding-left:54px;}
 @media(max-width:520px){.community-quick-menu{top:10px;left:10px;}.community-quick-menu>summary{width:38px;height:38px;}.community-quick-menu-items{width:205px;}.community-header-top{padding-left:48px;}}
 .community-header{
@@ -720,7 +722,7 @@ document.addEventListener('DOMContentLoaded', function () {
         <div style="margin-top:6px;color:#4b5563;font-size:13px;">نوع جامعه: <strong><?= htmlspecialchars($community['community_type'], ENT_QUOTES, 'UTF-8') ?></strong></div>
       <?php endif; ?>
     </div>
-    <a href="search.php" style="display:inline-flex;align-items:center;justify-content:center;gap:6px;background:#1769aa;color:#fff;text-decoration:none;padding:9px 13px;border-radius:8px;font-size:13px;font-weight:bold;white-space:nowrap;box-sizing:border-box;">🔎 سرچ</a>
+    <a class="community-search-button" href="search.php?community_id=<?= (int)$community_id ?>">🔎 سرچ در این جامعه</a>
   </div>
   <div class="community-mobile-actions" id="communityMobileActions" aria-label="دسترسی‌های جامعه"></div>
   <div style="margin:0 0 12px;text-align:right;">
