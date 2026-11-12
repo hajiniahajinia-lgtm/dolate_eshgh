@@ -717,10 +717,10 @@ document.addEventListener('DOMContentLoaded', function () {
       <a href="knowledge_library.php?community_id=<?= (int)$community_id ?>" style="background:#2874a6;">📖 کتابخانه دانش این جامعه</a>
       <a href="community_laws.php?community_id=<?= (int)$community_id ?>">⚖️ قوانین همین جامعه</a>
       <?php if (!empty($community['parent_community_id'])): ?>
-        <a href="community_laws.php?community_id=<?= (int)$community['parent_community_id'] ?>">🏛️ قوانین بالادستی</a>
+        <a href="community_laws.php?community_id=<?= (int)$community['parent_community_id'] ?>">🏛️ قوانین جامعه بالا دستی</a>
       <?php endif; ?>
-      <a href="community_stats.php?community_id=<?= (int)$community['id'] ?>">📊 گزارش آماری جامعه</a>
-      <a href="community_charter_amendments.php">📜 منشور بنیادین و اصلاح آن</a>
+      <a href="community_stats.php?community_id=<?= (int)$community['id'] ?>">📊 آمار این جامعه</a>
+      <a href="community_charter_amendments.php">📜 منشور بنیادین</a>
     </nav>
   </details>
   <div class="community-header-top" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
