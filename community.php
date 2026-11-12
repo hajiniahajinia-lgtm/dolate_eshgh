@@ -141,6 +141,9 @@ body.country-community-page{
 .community-quick-menu-items a:nth-child(2){background:#5b4b9a;}
 .community-quick-menu-items a:nth-child(3){background:#0099cc;}
 .community-quick-menu-items a:nth-child(4){background:#795548;}
+.community-quick-menu-items>div,.community-quick-menu-items>form{display:block;width:100%;box-sizing:border-box;margin:0!important;text-align:right!important;}
+.community-quick-menu-items>div a{background:#2065d1;}
+.community-quick-menu-items>form button{display:block;width:100%!important;margin:0!important;background:#c62828;color:#fff;padding:10px 12px;border:0;border-radius:7px;text-align:right;font:inherit;font-size:13px;line-height:1.5;cursor:pointer;}
 .community-header-top{padding-left:54px;}
 @media(max-width:520px){.community-quick-menu{top:10px;left:10px;}.community-quick-menu>summary{width:38px;height:38px;}.community-quick-menu-items{width:205px;}.community-header-top{padding-left:48px;}}
 .community-header{
@@ -2394,36 +2397,35 @@ el.addEventListener('mouseleave', function(){
   }
 })();
 
-// در موبایل سه دسترسی اصلی زیر عنوان جامعه در یک ردیف قرار می‌گیرند؛
- // در دسکتاپ جای اصلی عناصر حفظ می‌شود.
+// بازگشت به پروفایل و خروج از عضویت همیشه داخل منوی سه‌خطی قرار می‌گیرند.
+(function(){
+  const header = document.querySelector('.community-header');
+  if (!header) return;
+  const menu = header.querySelector('.community-quick-menu-items');
+  const backLink = header.querySelector('a[href="profile.php"]');
+  const backWrap = backLink ? backLink.parentElement : null;
+  const leaveForm = header.querySelector('form[action="leave_community.php"]');
+  if (menu && backWrap) menu.appendChild(backWrap);
+  if (menu && leaveForm) menu.appendChild(leaveForm);
+})();
+
+// فهرست اعضا در ردیف دسترسی موبایل باقی می‌ماند.
 (function(){
   const actions = document.getElementById('communityMobileActions');
   if (!actions) return;
   const header = actions.closest('.community-header');
   const actionsPlaceholder = document.createComment('community-mobile-actions-position');
   actions.parentNode.insertBefore(actionsPlaceholder, actions);
-  const backLink = document.querySelector('.community-header a[href="profile.php"]');
-  const backWrap = backLink ? backLink.parentElement : null;
-  const leaveForm = document.querySelector('.community-header form[action="leave_community.php"]');
-  const members = document.querySelector('.community-header .members-dropdown');
-  const nodes = [backWrap, leaveForm, members].filter(Boolean);
-  const placeholders = new Map();
-  nodes.forEach(node => {
-    const placeholder = document.createComment('community-action-position');
-    node.parentNode.insertBefore(placeholder, node);
-    placeholders.set(node, placeholder);
-  });
+  const members = header.querySelector('.members-dropdown');
+  const placeholder = members ? document.createComment('community-members-position') : null;
+  if (members) members.parentNode.insertBefore(placeholder, members);
   function arrangeActions(){
     if (window.matchMedia('(max-width: 720px)').matches) {
-      nodes.forEach(node => actions.appendChild(node));
-      // ردیف دکمه‌ها باید در پایین‌ترین بخش کادر سربرگ باشد.
+      if (members) actions.appendChild(members);
       header.appendChild(actions);
     } else {
       if (actionsPlaceholder.parentNode) actionsPlaceholder.parentNode.insertBefore(actions, actionsPlaceholder);
-      nodes.forEach(node => {
-        const placeholder = placeholders.get(node);
-        if (placeholder && placeholder.parentNode) placeholder.parentNode.insertBefore(node, placeholder);
-      });
+      if (members && placeholder && placeholder.parentNode) placeholder.parentNode.insertBefore(members, placeholder);
     }
   }
   arrangeActions();
