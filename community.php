@@ -139,8 +139,9 @@ body.country-community-page{
 .community-quick-menu-items a{display:block;width:100%;box-sizing:border-box;padding:10px 12px;border-radius:7px;color:#fff;text-align:right;font-size:13px;line-height:1.5;}
 .community-quick-menu-items a:nth-child(1){background:#147d64;}
 .community-quick-menu-items a:nth-child(2){background:#5b4b9a;}
-.community-quick-menu-items a:nth-child(3){background:#0099cc;}
-.community-quick-menu-items a:nth-child(4){background:#795548;}
+.community-quick-menu-items a:nth-child(3){background:#7652a5;}
+.community-quick-menu-items a:nth-child(4){background:#0099cc;}
+.community-quick-menu-items a:nth-child(5){background:#795548;}
 .community-quick-menu-items>div,.community-quick-menu-items>form{display:block;width:100%;box-sizing:border-box;margin:0!important;text-align:right!important;}
 .community-quick-menu-items>div a{background:#2065d1;}
 .community-quick-menu-items>form button{display:block;width:100%!important;margin:0!important;background:#c62828;color:#fff;padding:10px 12px;border:0;border-radius:7px;text-align:right;font:inherit;font-size:13px;line-height:1.5;cursor:pointer;}
@@ -704,7 +705,10 @@ document.addEventListener('DOMContentLoaded', function () {
     <summary aria-label="باز کردن منوی جامعه" title="منوی جامعه">☰</summary>
     <nav class="community-quick-menu-items" aria-label="دسترسی‌های جامعه">
       <a href="finance.php?community_id=<?= (int)$community_id ?>">🏦 بانک مالی و اموال جامعه</a>
-      <a href="community_laws.php?community_id=<?= (int)$community_id ?>">⚖️ قوانین جامعه و قوانین بالادستی</a>
+      <a href="community_laws.php?community_id=<?= (int)$community_id ?>">⚖️ قوانین همین جامعه</a>
+      <?php if (!empty($community['parent_community_id'])): ?>
+        <a href="community_laws.php?community_id=<?= (int)$community['parent_community_id'] ?>">🏛️ قوانین بالادستی</a>
+      <?php endif; ?>
       <a href="community_stats.php?community_id=<?= (int)$community['id'] ?>">📊 گزارش آماری جامعه</a>
       <a href="community_charter_amendments.php">📜 منشور بنیادین و اصلاح آن</a>
     </nav>
