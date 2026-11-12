@@ -2623,6 +2623,102 @@ if (!function_exists('community_law_register_hierarchy_conformity_reviews')) {
 }
 
 
+
+if (!function_exists('community_law_register_parent_law_enactment_conformity_reviews')) {
+    /**
+     * پس از لازم‌الاجرا شدن یک قانون، قوانین جاریِ جوامع زیرشاخهٔ مشمول
+     * برای بررسی سازگاری با نسخهٔ تازهٔ قانون بالادستی ثبت می‌شوند.
+     * این تابع داخل تراکنش ابلاغ فراخوانی می‌شود و خودش commit/rollback نمی‌کند.
+     */
+    function community_law_register_parent_law_enactment_conformity_reviews(
+        mysqli $conn, int $law_id, int $law_version_id, int $origin_community_id, int $actor_user_id
+    ): bool {
+        if ($law_id <= 0 || $law_version_id <= 0 || $origin_community_id <= 0 || $actor_user_id <= 0) return false;
+        $tables = ['community_law_conformity_cases','community_law_conformity_conflicts','community_law_conformity_events'];
+        $marks = implode(',', array_fill(0, count($tables), '?'));
+        $check = $conn->prepare("SELECT COUNT(*) AS total FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN ($marks)");
+        if (!$check) return false;
+        $types = str_repeat('s', count($tables)); $params = array_merge([$types], $tables); $refs = [];
+        foreach ($params as $index => &$value) $refs[$index] = &$value;
+        call_user_func_array([$check, 'bind_param'], $refs);
+        if (!$check->execute()) { $check->close(); return false; }
+        $ready = (int)$check->get_result()->fetch_assoc()['total']; $check->close();
+        if ($ready !== count($tables)) return false;
+
+        $law = $conn->prepare(
+            "SELECT l.originating_community_id,l.current_version_id,l.status AS law_status,v.status AS version_status
+             FROM community_laws l JOIN community_law_versions v ON v.id=l.current_version_id AND v.law_id=l.id
+             WHERE l.id=? AND v.id=? LIMIT 1"
+        );
+        if (!$law) return false;
+        $law->bind_param('ii',$law_id,$law_version_id);
+        if (!$law->execute()) { $law->close(); return false; }
+        $law_row=$law->get_result()->fetch_assoc(); $law->close();
+        if (!$law_row || (int)$law_row['originating_community_id']!==$origin_community_id ||
+            (int)$law_row['current_version_id']!==$law_version_id ||
+            $law_row['law_status']!=='approved' || $law_row['version_status']!=='approved') return false;
+
+        $hierarchy=$conn->query("SELECT id,parent_community_id FROM communities ORDER BY id");
+        if (!$hierarchy) return false;
+        $parent_map=[];
+        while($row=$hierarchy->fetch_assoc()) $parent_map[(int)$row['id']]=$row['parent_community_id']===null?0:(int)$row['parent_community_id'];
+        $hierarchy->free();
+        if (!community_law_parent_map_is_valid($parent_map) || !array_key_exists($origin_community_id,$parent_map)) return false;
+        $scope_ids=community_law_scope_ids_for_parent_map($conn,$law_version_id,$parent_map);
+        if ($scope_ids===null || !in_array($origin_community_id,$scope_ids,true)) return false;
+
+        $local_stmt=$conn->prepare(
+            "SELECT l.id AS law_id,l.current_version_id AS version_id
+             FROM community_laws l JOIN community_law_versions v ON v.id=l.current_version_id AND v.law_id=l.id
+             WHERE l.originating_community_id=? AND l.id<>? AND l.status='approved' AND v.status='approved'
+               AND (l.effective_at IS NULL OR l.effective_at<=NOW())
+               AND (l.expires_at IS NULL OR l.expires_at>NOW()) AND l.repealed_at IS NULL
+             ORDER BY l.id"
+        );
+        $insert=$conn->prepare(
+            "INSERT IGNORE INTO community_law_conformity_cases
+             (community_id,parent_community_id,local_law_id,local_law_version_id,parent_law_id,parent_law_version_id,status,trigger_type,opened_by)
+             VALUES (?,?,?,?,?,?,'review_required','parent_law_enacted',?)"
+        );
+        $event=$conn->prepare(
+            "INSERT INTO community_law_conformity_events (case_id,actor_user_id,event_type,details)
+             VALUES (?,?,'review_case_opened',?)"
+        );
+        if (!$local_stmt || !$insert || !$event) {
+            if($local_stmt)$local_stmt->close(); if($insert)$insert->close(); if($event)$event->close();
+            return false;
+        }
+        foreach($scope_ids as $descendant_id) {
+            $descendant_id=(int)$descendant_id;
+            if($descendant_id===$origin_community_id ||
+               !community_law_is_descendant_or_same($parent_map,$descendant_id,$origin_community_id)) continue;
+            $local_stmt->bind_param('ii',$descendant_id,$law_id);
+            if(!$local_stmt->execute()) { $local_stmt->close();$insert->close();$event->close();return false; }
+            $local_laws=$local_stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+            foreach($local_laws as $local_law) {
+                $local_law_id=(int)$local_law['law_id']; $local_version_id=(int)$local_law['version_id'];
+                $insert->bind_param('iiiiiii',$descendant_id,$origin_community_id,$local_law_id,$local_version_id,$law_id,$law_version_id,$actor_user_id);
+                if(!$insert->execute()) { $local_stmt->close();$insert->close();$event->close();return false; }
+                if($insert->affected_rows!==1) continue;
+                $case_id=(int)$conn->insert_id;
+                $details=json_encode([
+                    'trigger_type'=>'parent_law_enacted','community_id'=>$descendant_id,
+                    'parent_community_id'=>$origin_community_id,'local_law_id'=>$local_law_id,
+                    'local_law_version_id'=>$local_version_id,'parent_law_id'=>$law_id,
+                    'parent_law_version_id'=>$law_version_id
+                ],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
+                if(!is_string($details)) { $local_stmt->close();$insert->close();$event->close();return false; }
+                $event->bind_param('iis',$case_id,$actor_user_id,$details);
+                if(!$event->execute() || !community_law_record_history(
+                    $conn,$local_law_id,$local_version_id,$descendant_id,$actor_user_id,'conformity_review_opened',$details
+                )) { $local_stmt->close();$insert->close();$event->close();return false; }
+            }
+        }
+        $local_stmt->close();$insert->close();$event->close();
+        return true;
+    }
+}
+
 /**
  * بازیابی منشأ معتبر برای ایجاد پیش‌نویس اولیهٔ قانون.
  * تصمیم باید پذیرفته‌شده و ثبت‌شده، متعلق به همین جامعه و متصل به

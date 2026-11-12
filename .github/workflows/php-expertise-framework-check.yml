@@ -72,6 +72,7 @@ on:
       - 'tests/community_law_hierarchy_helpers_test.php'
       - 'tests/community_law_scope_contract_test.php'
       - 'tests/community_law_parent_descendant_scope_contract_test.php'
+      - 'tests/community_law_parent_enactment_conformity_contract_test.php'
       - 'tests/community_charter_amendments_test.php'
       - 'tests/community_charter_amendments_integration_test.php'
       - 'community_decision_ledger.php'
@@ -96,6 +97,7 @@ on:
       - 'migrations/20261108_community_law_outcome_corrective_actions.sql'
       - 'migrations/20261109_community_law_corrective_completion_reviews.sql'
       - 'migrations/20261108_community_law_conformity_workflow.sql'
+      - 'migrations/20261112_parent_law_enactment_conformity.sql'
       - 'migrations/20261109_community_law_conformity_review_rounds.sql'
       - 'migrations/20261109_community_law_conformity_review_rounds.sql'
       - 'migrations/20261108_community_law_z1_amendment_00_workflow.sql'
@@ -178,6 +180,7 @@ on:
       - 'tests/community_decision_ledger_backfill_integration_test.php'
       - 'tests/community_decision_knowledge_separation_integration_test.php'
       - 'migrations/20261108_community_law_conformity_workflow.sql'
+      - 'migrations/20261112_parent_law_enactment_conformity.sql'
       - 'migrations/20261108_community_law_z1_amendment_00_workflow.sql'
       - 'migrations/20261108_community_law_z1_amendment_10_submission.sql'
       - 'migrations/20261108_community_law_z1_amendment_20_voting.sql'
@@ -348,6 +351,7 @@ jobs:
           php -l tests/community_law_hierarchy_helpers_test.php
           php -l tests/community_law_scope_contract_test.php
           php -l tests/community_law_parent_descendant_scope_contract_test.php
+          php -l tests/community_law_parent_enactment_conformity_contract_test.php
           php -l tests/community_charter_amendments_test.php
           php -l tests/community_charter_amendments_integration_test.php
           php -l tests/community_law_implementation_integration_test.php
@@ -411,6 +415,7 @@ jobs:
           php tests/community_law_hierarchy_helpers_test.php
           php tests/community_law_scope_contract_test.php
           php tests/community_law_parent_descendant_scope_contract_test.php
+          php tests/community_law_parent_enactment_conformity_contract_test.php
           php tests/community_charter_amendments_test.php
 
   charter-mysql-integration:
