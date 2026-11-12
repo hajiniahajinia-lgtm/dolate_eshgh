@@ -130,6 +130,19 @@ body.country-community-page{
 .box, .card-form, .card{background:#fff;border:1px solid #ccc;border-radius:10px;padding:14px;margin-bottom:16px;box-shadow:0 2px 5px rgba(0,0,0,0.05);}
 /* پس‌زمینه رنگین‌کمانی ملایم برای سربرگ جامعه */
 .community-mobile-actions{display:none;}
+.community-header{position:relative;}
+.community-quick-menu{position:absolute;top:12px;left:14px;z-index:1200;direction:rtl;}
+.community-quick-menu>summary{width:40px;height:40px;display:flex;align-items:center;justify-content:center;list-style:none;cursor:pointer;background:#fff;color:#2456a6;border:1px solid rgba(36,86,166,.25);border-radius:9px;box-shadow:0 2px 7px rgba(0,0,0,.12);font-size:25px;font-weight:bold;line-height:1;}
+.community-quick-menu>summary::-webkit-details-marker{display:none;}
+.community-quick-menu>summary::marker{content:"";}
+.community-quick-menu-items{position:absolute;top:46px;left:0;width:220px;max-width:calc(100vw - 52px);display:flex;flex-direction:column;gap:7px;padding:9px;background:#fff;border:1px solid #d5deea;border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,.18);}
+.community-quick-menu-items a{display:block;width:100%;box-sizing:border-box;padding:10px 12px;border-radius:7px;color:#fff;text-align:right;font-size:13px;line-height:1.5;}
+.community-quick-menu-items a:nth-child(1){background:#147d64;}
+.community-quick-menu-items a:nth-child(2){background:#5b4b9a;}
+.community-quick-menu-items a:nth-child(3){background:#0099cc;}
+.community-quick-menu-items a:nth-child(4){background:#795548;}
+.community-header-top{padding-left:54px;}
+@media(max-width:520px){.community-quick-menu{top:10px;left:10px;}.community-quick-menu>summary{width:38px;height:38px;}.community-quick-menu-items{width:205px;}.community-header-top{padding-left:48px;}}
 .community-header{
     background:linear-gradient(125deg,
         #ff9fba 0%,
@@ -684,6 +697,15 @@ document.addEventListener('DOMContentLoaded', function () {
 
 <?php if ($community): ?>
 <div class="box community-header">
+  <details class="community-quick-menu">
+    <summary aria-label="باز کردن منوی جامعه" title="منوی جامعه">☰</summary>
+    <nav class="community-quick-menu-items" aria-label="دسترسی‌های جامعه">
+      <a href="finance.php?community_id=<?= (int)$community_id ?>">🏦 بانک مالی و اموال جامعه</a>
+      <a href="community_laws.php?community_id=<?= (int)$community_id ?>">⚖️ قوانین جامعه و قوانین بالادستی</a>
+      <a href="community_stats.php?community_id=<?= (int)$community['id'] ?>">📊 گزارش آماری جامعه</a>
+      <a href="community_charter_amendments.php">📜 منشور بنیادین و اصلاح آن</a>
+    </nav>
+  </details>
   <div class="community-header-top" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
     <div style="flex:1 1 auto;min-width:0;">
       <h2 style="margin:0;"><?=htmlspecialchars($community['name'])?></h2>
@@ -691,13 +713,9 @@ document.addEventListener('DOMContentLoaded', function () {
         <div style="margin-top:6px;color:#4b5563;font-size:13px;">نوع جامعه: <strong><?= htmlspecialchars($community['community_type'], ENT_QUOTES, 'UTF-8') ?></strong></div>
       <?php endif; ?>
     </div>
-    <a href="community_stats.php?community_id=<?= (int)$community['id'] ?>" style="display:inline-flex;align-items:center;justify-content:center;gap:6px;background:#0099cc;color:#fff;text-decoration:none;padding:9px 13px;border-radius:8px;font-size:13px;font-weight:bold;white-space:nowrap;box-sizing:border-box;">📊 گزارش آماری جامعه</a>
     <a href="search.php" style="display:inline-flex;align-items:center;justify-content:center;gap:6px;background:#1769aa;color:#fff;text-decoration:none;padding:9px 13px;border-radius:8px;font-size:13px;font-weight:bold;white-space:nowrap;box-sizing:border-box;">🔎 سرچ</a>
   </div>
   <div class="community-mobile-actions" id="communityMobileActions" aria-label="دسترسی‌های جامعه"></div>
-  <a class="finance-bank-toggle" id="finance-bank-toggle" href="finance.php?community_id=<?= (int)$community_id ?>">🏦 بانک مالی و اموال جامعه</a>
-  <a class="community-laws-toggle" href="community_laws.php?community_id=<?= (int)$community_id ?>">⚖️ قوانین جامعه و قوانین بالادستی</a>
-  <a class="community-laws-toggle" href="community_charter_amendments.php">📜 منشور بنیادین و اصلاح آن</a>
   <div style="margin:0 0 12px;text-align:right;">
     <a href="profile.php" style="display:inline-block;background:#2065d1;color:#fff;text-decoration:none;padding:9px 14px;border-radius:8px;font-weight:bold;font-size:14px;">↩ بازگشت به پروفایل</a>
   </div>
