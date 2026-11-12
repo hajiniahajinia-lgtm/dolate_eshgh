@@ -711,6 +711,8 @@ document.addEventListener('DOMContentLoaded', function () {
       <?php endif; ?>
       <a href="community_stats.php?community_id=<?= (int)$community['id'] ?>">📊 گزارش آماری جامعه</a>
       <a href="community_charter_amendments.php">📜 منشور بنیادین و اصلاح آن</a>
+      <a href="#community-hierarchy-toggle">🌐 درخت جامعه</a>
+      <a href="#community-duties-toggle">🌱 پیشنهاد رویکرد جامعه</a>
     </nav>
   </details>
   <div class="community-header-top" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
@@ -806,7 +808,7 @@ document.addEventListener('DOMContentLoaded', function () {
     <?php endif; ?>
     </span>
   </p>
-  <details class="community-duties-toggle">
+  <details id="community-duties-toggle" class="community-duties-toggle">
     <summary>پیشنهاد برای رویکردها و وظایف این جامعه</summary>
     <div class="community-duties" id="community-duties">
     <h3>🌱 وظایف و رویکردها</h3>
