@@ -711,8 +711,6 @@ document.addEventListener('DOMContentLoaded', function () {
       <?php endif; ?>
       <a href="community_stats.php?community_id=<?= (int)$community['id'] ?>">📊 گزارش آماری جامعه</a>
       <a href="community_charter_amendments.php">📜 منشور بنیادین و اصلاح آن</a>
-      <a href="#community-hierarchy-toggle" onclick="event.preventDefault(); const target=document.getElementById('community-hierarchy-toggle'); if(target){target.open=true; target.scrollIntoView({behavior:'smooth',block:'start'});} this.closest('details')?.removeAttribute('open');">🌐 درخت جامعه</a>
-      <a href="#community-duties-toggle" onclick="event.preventDefault(); const target=document.getElementById('community-duties-toggle'); if(target){target.open=true; target.scrollIntoView({behavior:'smooth',block:'start'});} this.closest('details')?.removeAttribute('open');">🌱 پیشنهاد رویکرد جامعه</a>
     </nav>
   </details>
   <div class="community-header-top" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
@@ -809,7 +807,7 @@ document.addEventListener('DOMContentLoaded', function () {
     </span>
   </p>
   <details id="community-duties-toggle" class="community-duties-toggle">
-    <summary>پیشنهاد برای رویکردها و وظایف این جامعه</summary>
+    <summary>🌱 پیشنهادها برای رویکرد و وظایف این جامعه</summary>
     <div class="community-duties" id="community-duties">
     <h3>🌱 وظایف و رویکردها</h3>
     <p class="community-duties-help">اعضای جامعه پیشنهاد می‌دهند و با رأی معقولیت، مناسب‌ترین پیشنهادها در صدر قرار می‌گیرند.</p>
@@ -909,7 +907,7 @@ document.addEventListener('DOMContentLoaded', function () {
   $hierarchy_status = $_GET['hierarchy_status'] ?? '';
   ?>
   <details id="community-hierarchy-toggle" style="margin:14px 0;">
-    <summary style="display:block;cursor:pointer;background:#2065d1;color:#fff;padding:10px 14px;border-radius:8px;text-align:center;font-weight:bold;list-style:none;">🌐 جایگاه این جامعه (نمایش درخت)</summary>
+    <summary style="display:block;cursor:pointer;background:#2065d1;color:#fff;padding:10px 14px;border-radius:8px;text-align:center;font-weight:bold;list-style:none;">🌐 درخت جایگاه جامعه</summary>
   <section id="community-hierarchy" style="margin:14px 0;padding:12px;background:rgba(255,255,255,.82);border:1px solid #d9dfe8;border-radius:9px;text-align:right;">
     <h3 style="margin:0 0 7px;">🌐 جایگاه این جامعه</h3>
     <?php if (!$hierarchy_ready): ?>
@@ -2401,6 +2399,16 @@ el.addEventListener('mouseleave', function(){
     shortcuts.appendChild(votingToggle);
     shortcuts.appendChild(archiveToggle);
   }
+})();
+
+// انتقال محتوای درخت جامعه و پیشنهادهای رویکرد به داخل منوی سه‌خطی؛ از صفحهٔ اصلی حذف می‌شوند.
+(function(){
+  const menu = document.querySelector('.community-quick-menu-items');
+  if (!menu) return;
+  const duties = document.getElementById('community-duties-toggle');
+  const hierarchy = document.getElementById('community-hierarchy-toggle');
+  if (duties) menu.appendChild(duties);
+  if (hierarchy) menu.appendChild(hierarchy);
 })();
 
 // بازگشت به پروفایل و خروج از عضویت همیشه داخل منوی سه‌خطی قرار می‌گیرند.
