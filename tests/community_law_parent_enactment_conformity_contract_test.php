@@ -7,7 +7,7 @@ if(!is_string($helpers)||!is_string($page)||!is_string($migration)){fwrite(STDER
 $start=strpos($helpers,'function community_law_register_parent_law_enactment_conformity_reviews(');
 $end=$start===false?false:strpos($helpers,"\nif (!function_exists(",$start+20);
 $helper=($start!==false&&$end!==false)?substr($helpers,$start,$end-$start):'';
-$enact_start=strpos($page,"if (isset($_POST['finalize_law_enactment']))");
+$enact_start=strpos($page,"if (isset($_POST['enact_law']))");
 $enact_end=$enact_start===false?false:strpos($page,"if (isset($_POST['create_law_revision']))",$enact_start);
 $enactment=($enact_start!==false&&$enact_end!==false)?substr($page,$enact_start,$enact_end-$enact_start):'';
 $checks=[];
