@@ -145,6 +145,9 @@ body.country-community-page{
 .community-quick-menu-items>div,.community-quick-menu-items>form{display:block;width:100%;box-sizing:border-box;margin:0!important;text-align:right!important;}
 .community-quick-menu-items>div a{background:#2065d1;}
 .community-quick-menu-items>form button{display:block;width:100%!important;margin:0!important;background:#c62828;color:#fff;padding:10px 12px;border:0;border-radius:7px;text-align:right;font:inherit;font-size:13px;line-height:1.5;cursor:pointer;}
+.community-quick-menu-items #community-member-removal-toggle{display:block;width:100%;box-sizing:border-box;margin:0!important;padding:0!important;}
+.community-quick-menu-items #community-member-removal-toggle>summary{display:block;box-sizing:border-box;width:100%;padding:10px 12px!important;border-radius:7px!important;font-size:13px;line-height:1.5;}
+.community-quick-menu-items #community-member-removal-toggle>div{padding:10px!important;max-height:65vh;overflow-y:auto;}
 .community-header-top{position:relative;padding-left:54px;}
 .community-header-bottom-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;box-sizing:border-box;margin:14px 0 4px;}
 .community-header-bottom-actions .community-search-button{position:static;left:auto;bottom:auto;z-index:2;display:inline-flex;align-items:center;justify-content:center;gap:6px;background:#1769aa;color:#fff!important;text-decoration:none;padding:10px 14px;border-radius:9px;font-size:13px;font-weight:bold;white-space:nowrap;box-sizing:border-box;box-shadow:0 2px 7px rgba(0,0,0,.15);}
@@ -1148,7 +1151,7 @@ $removal_messages = [
 ];
 $removal_msg_key = (string)($_GET['removal_msg'] ?? '');
 ?>
-<details class="box" style="text-align:right;border-color:#e6b8b8;padding:0;overflow:hidden">
+<details id="community-member-removal-toggle" class="box" style="text-align:right;border-color:#e6b8b8;padding:0;overflow:hidden">
   <summary style="display:block;cursor:pointer;list-style:none;padding:12px 14px;background:#fff1f1;color:#8f1d1d;border-radius:10px;font-weight:bold">⚖️ رأی‌گیری برای اخراج عضو <span style="font-size:12px;font-weight:normal;color:#667085"> (برای مشاهده درخواست‌ها و رأی‌ها بزنید)</span></summary>
   <div style="padding:14px">
   <h3 style="margin-bottom:8px">⚖️ رأی‌گیری برای اخراج عضو</h3>
@@ -2413,6 +2416,8 @@ el.addEventListener('mouseleave', function(){
   const hierarchy = document.getElementById('community-hierarchy-toggle');
   if (duties) menu.appendChild(duties);
   if (hierarchy) menu.appendChild(hierarchy);
+  const memberRemoval = document.getElementById('community-member-removal-toggle');
+  if (memberRemoval) menu.appendChild(memberRemoval);
 })();
 
 // بازگشت به پروفایل و خروج از عضویت همیشه داخل منوی سه‌خطی قرار می‌گیرند.
