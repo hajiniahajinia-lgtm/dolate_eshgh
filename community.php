@@ -714,6 +714,7 @@ document.addEventListener('DOMContentLoaded', function () {
       <a href="finance.php?community_id=<?= (int)$community_id ?>">🏦 بانک مالی و اموال جامعه</a>
       <a href="donations.php?community_id=<?= (int)$community_id ?>" style="background:#16845b;">🤝 کمک مالی به جامعه</a>
       <a href="knowledge_library.php?community_id=<?= (int)$community_id ?>" style="background:#2874a6;">📚 کتابخانه دانش همین جامعه</a>
+      <a href="knowledge_library.php?community_id=<?= (int)$community_id ?>" style="background:#2874a6;">📖 کتابخانه دانش این جامعه</a>
       <a href="community_laws.php?community_id=<?= (int)$community_id ?>">⚖️ قوانین همین جامعه</a>
       <?php if (!empty($community['parent_community_id'])): ?>
         <a href="community_laws.php?community_id=<?= (int)$community['parent_community_id'] ?>">🏛️ قوانین بالادستی</a>
