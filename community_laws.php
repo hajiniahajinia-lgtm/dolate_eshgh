@@ -3409,6 +3409,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             $notice->close();
 
+            // قانون بالادستی تازه، قوانین جاریِ زیرشاخه‌های مشمول را نیز برای بررسی سازگاری وارد می‌کند.
+            if (!community_law_register_parent_law_enactment_conformity_reviews(
+                $conn, (int)$law['law_id'], $version_id, (int)$law['originating_community_id'], $user_id
+            )) throw new Exception('parent law enactment conformity registration failed');
+
             if (!community_law_record_history(
                 $conn, (int)$law['law_id'], $version_id, $community_id, $user_id,
                 $is_amendment_enactment ? 'law_amendment_enacted' : 'law_enacted',
