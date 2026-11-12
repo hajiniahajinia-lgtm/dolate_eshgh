@@ -142,6 +142,8 @@ body.country-community-page{
 .community-quick-menu-items a:nth-child(3){background:#7652a5;}
 .community-quick-menu-items a:nth-child(4){background:#0099cc;}
 .community-quick-menu-items a:nth-child(5){background:#795548;}
+/* لینک‌های ششم به بعد نیز پس‌زمینهٔ رنگی داشته باشند تا متن سفیدشان پنهان نشود. */
+.community-quick-menu-items>a:nth-of-type(n+6){background:#2065d1;color:#fff;}
 .community-quick-menu-items>div,.community-quick-menu-items>form{display:block;width:100%;box-sizing:border-box;margin:0!important;text-align:right!important;}
 .community-quick-menu-items>div a{background:#2065d1;}
 .community-quick-menu-items>form button{display:block;width:100%!important;margin:0!important;background:#c62828;color:#fff;padding:10px 12px;border:0;border-radius:7px;text-align:right;font:inherit;font-size:13px;line-height:1.5;cursor:pointer;}
