@@ -1227,6 +1227,9 @@ if ($is_community_member) {
     if ($domain_options) $expertise_proposal_domains = $domain_options->fetch_all(MYSQLI_ASSOC);
 }
 ?>
+ <details id="topic-expertise-main" style="margin:12px 0;padding:12px;background:#f5f9ff;border:1px solid #b8cde6;border-radius:10px;">
+  <summary style="cursor:pointer;font-weight:bold;padding:3px 2px;">حوزه تخصصی موضوع</summary>
+  <div style="margin-top:10px;">
  <details id="topic-expertise-proposal-form" style="margin:12px 0;padding:0;background:#f8fbff;border:1px solid #c8d9f2;border-radius:10px;overflow:hidden;">
   <summary style="padding:13px 14px;cursor:pointer;font-weight:bold;color:#245783;">پیشنهاد حوزهٔ تخصصی برای یک موضوع</summary>
   <div style="padding:0 14px 14px;">
@@ -1412,6 +1415,9 @@ try {
         </div>
       <?php endforeach; ?>
     <?php endif; ?>
+  </div>
+</details>
+
   </div>
 </details>
 
