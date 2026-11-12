@@ -704,7 +704,10 @@ document.addEventListener('DOMContentLoaded', function () {
     <summary aria-label="باز کردن منوی جامعه" title="منوی جامعه">☰</summary>
     <nav class="community-quick-menu-items" aria-label="دسترسی‌های جامعه">
       <a href="finance.php?community_id=<?= (int)$community_id ?>">🏦 بانک مالی و اموال جامعه</a>
-      <a href="community_laws.php?community_id=<?= (int)$community_id ?>">⚖️ قوانین جامعه و قوانین بالادستی</a>
+      <a href="community_laws.php?community_id=<?= (int)$community_id ?>">⚖️ قوانین همین جامعه</a>
+      <?php if (!empty($community['parent_community_id'])): ?>
+        <a href="community_laws.php?community_id=<?= (int)$community['parent_community_id'] ?>">🏛️ قوانین بالادستی</a>
+      <?php endif; ?>
       <a href="community_stats.php?community_id=<?= (int)$community['id'] ?>">📊 گزارش آماری جامعه</a>
       <a href="community_charter_amendments.php">📜 منشور بنیادین و اصلاح آن</a>
     </nav>
