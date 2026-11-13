@@ -301,10 +301,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <input type="text" id="username" name="username" placeholder="مثال: علی رضایی" required>
 
             <label for="phone">شماره همراه (می‌توانید از شماره آزمایشی استفاده کنید)</label>
-            <input type="text" id="phone" name="phone" placeholder="شماره ۱۱ رقمی با شروع 09" inputmode="tel" required>
+            <input type="text" id="phone" name="phone" placeholder="09xxxxxxxxx یا +989xxxxxxxxx" inputmode="tel" autocomplete="tel" required>
 
             <label for="national_id">شماره ملی (می‌توانید از شماره آزمایشی استفاده کنید)</label>
-            <input type="text" id="national_id" name="national_id" placeholder="شماره ۱۰ رقمی با قالب معتبر" required>
+            <input type="text" id="national_id" name="national_id" placeholder="کد ملی ۱۰ رقمی" inputmode="numeric" autocomplete="off" required>
             <p style="margin:6px 0 12px; color:#666; font-size:12px; line-height:1.7">
                 شماره همراه با قالب 09xxxxxxxxx (یا +989xxxxxxxxx) و شماره ملی ۱۰ رقمی با رقم کنترلی معتبر پذیرفته می‌شود. ارقام فارسی و عربی و جداکننده‌های معمول نیز قابل قبول‌اند؛ از اطلاعات واقعی یا متعلق به دیگران استفاده نکنید.
             </p>
