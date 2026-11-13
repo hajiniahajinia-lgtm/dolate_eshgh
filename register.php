@@ -211,6 +211,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 margin-bottom: 14px;
             }
             .intro-box { border-color: #cfe7ff; background:#eaf4ff; }
+            .testing-note {
+                margin-top: 14px; padding: 12px; border: 1px solid #b8d9c5;
+                border-radius: 10px; background: #f0faf3; line-height: 1.8;
+                font-size: 13px; color: #244b32;
+            }
+            .testing-note p { margin: 8px 0; }
+            .testing-note .testing-warning { color: #8a4b12; font-weight: bold; }
             .stats-box { border-color: #ffe9a8; background:#fff8e1; }
             label { display:block; margin:6px 0 4px; font-size:14px; color:#333; }
             input[type="text"], input[type="password"] {
@@ -243,6 +250,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <li>رأی‌دادن و تعیین اولویت</li>
                 <li>گزارش آماری و شفافیت تصمیم‌گیری</li>
             </ul>
+            <div class="testing-note">
+                <strong>🧪 دعوت به آشنایی و همکاری در آزمایش سامانه</strong>
+                <p>
+                    سامانه «دولت عشق» در مرحله آزمایشی و توسعه قرار دارد. شما می‌توانید برای آشنایی با امکانات سامانه، با استفاده از مشخصات ساختگی و غیرواقعی در آن ثبت‌نام کنید و بخش‌های مختلف را بررسی کنید.
+                </p>
+                <p>
+                    همچنین می‌توانید با ثبت موضوعات، ارائه ایده‌ها، مشارکت در گفتگوها و رأی‌گیری‌ها، به آزمایش سامانه کمک کنید تا ایرادها و کاستی‌های آن شناسایی و برطرف شوند.
+                </p>
+                <p><strong>مشارکت شما، حتی در مرحله آزمایشی، گامی ارزشمند در بهتر شدن این سامانه است.</strong></p>
+                <p class="testing-warning">توجه: لطفاً در این مرحله از وارد کردن اطلاعات شخصی، محرمانه یا واقعی خودداری کنید.</p>
+            </div>
         </div>
 
         <div class="stats-box" style="font-size:14px;">
