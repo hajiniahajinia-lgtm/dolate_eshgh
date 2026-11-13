@@ -139,6 +139,12 @@ a {text-decoration:none;color:#2065d1;font-weight:bold;}
 .profile-quick-menu>summary::-webkit-details-marker{display:none;}
 .profile-quick-menu>summary::before{content:"☰";font-size:30px;line-height:1;}
 .profile-quick-menu-items{position:absolute;top:56px;left:0;right:auto;width:min( min(300px, calc(100vw - 36px)), 300px);max-height:70vh;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:10px;background:#fff;border:1px solid #dce4ee;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.18);}
+.profile-communities-menu{width:100%;margin:0;}
+.profile-communities-menu>summary{display:block;box-sizing:border-box;width:100%;padding:12px 10px;border:0;border-radius:8px;background:#6741a5;color:#fff;text-align:center;font-family:tahoma,sans-serif;font-size:14px;font-weight:bold;line-height:1.7;cursor:pointer;list-style:none;}
+.profile-communities-menu>summary::-webkit-details-marker{display:none;}
+.profile-communities-menu[open]{padding:6px;background:#f7f9fc;border-radius:9px;}
+.profile-communities-menu-content>.box{max-width:100%;box-sizing:border-box;padding:10px;margin:8px 0;box-shadow:none;}
+.profile-communities-menu-content>.box>details>summary{line-height:1.7;}
 .profile-quick-menu-items a,.profile-quick-menu-items button{display:block;width:100%;box-sizing:border-box;margin:0;padding:12px 10px;border:0;border-radius:8px;background:#2065d1;color:#fff;text-align:center;font-family:tahoma,sans-serif;font-size:14px;font-weight:bold;line-height:1.7;text-decoration:none;}
 .profile-quick-menu-items a:nth-child(1){background:#6741a5;}
 .profile-quick-menu-items a:nth-child(2){background:#176b56;}
@@ -276,63 +282,10 @@ document.addEventListener("DOMContentLoaded", function() {
 <a href="expertise.php">🎓 شایستگی تخصصی</a>
 <a href="stats.php">📊 آمار سامانه</a>
 <button type="button" class="edit" onclick="toggleEditForm()">✏️ تکمیل و ویرایش پروفایل</button>
-</nav>
-</details>
-<a href="search.php" class="profile-header-search" style="display:inline-flex;align-items:center;justify-content:center;gap:6px;background:#1769aa;color:#fff;text-decoration:none;padding:9px 13px;border-radius:8px;font-size:14px;font-weight:bold;white-space:nowrap;">🔎 سرچ</a>
-</div>
-<div id="editForm" class="edit-form">
-<form method="post" action="">
-<input type="hidden" name="csrf_token" value="<?= htmlspecialchars($community_duty_csrf, ENT_QUOTES, 'UTF-8') ?>">
-<input type="hidden" name="update_profile" value="1">
 
-<label>جنسیت</label>
-<select name="gender">
-<option value="" <?= $user['gender']==''?'selected':'' ?>>انتخاب کنید</option>
-<option value="مرد" <?= $user['gender']=='مرد'?'selected':'' ?>>مرد</option>
-<option value="زن" <?= $user['gender']=='زن'?'selected':'' ?>>زن</option>
-<option value="دیگر" <?= $user['gender']=='دیگر'?'selected':'' ?>>دیگر</option>
-</select>
-
-<label>تحصیلات</label>
-<select name="education">
-<option value="" <?= $user['education']==''?'selected':'' ?>>انتخاب کنید</option>
-<option value="دیپلم" <?= $user['education']=='دیپلم'?'selected':'' ?>>دیپلم</option>
-<option value="کارشناسی" <?= $user['education']=='کارشناسی'?'selected':'' ?>>کارشناسی</option>
-<option value="کارشناسی ارشد" <?= $user['education']=='کارشناسی ارشد'?'selected':'' ?>>کارشناسی ارشد</option>
-<option value="دکتری" <?= $user['education']=='دکتری'?'selected':'' ?>>دکتری</option>
-</select>
-
-<label>شغل</label>
-<input type="text" name="job" value="<?= htmlspecialchars($user['job']) ?>" placeholder="مثال: مهندس نرم‌افزار">
-
-<label>سن</label>
-<input type="number" name="age" value="<?= (int)$user['age'] ?>" min="10" max="120" placeholder="مثال: 30">
-
-<label>شهر</label>
-<input type="text" name="city" value="<?= htmlspecialchars($user['city']) ?>" placeholder="مثال: تهران">
-
-<label>رزومه</label>
-<textarea name="resume" rows="6" maxlength="3000" placeholder="حداکثر 500 کلمه"><?= htmlspecialchars($user['resume']) ?></textarea>
-
-<button type="submit">ذخیره تغییرات</button>
-</form>
-</div>
-
-<?php if (!empty($user['created_at']) && ($profile_created_timestamp = strtotime($user['created_at'])) !== false): ?>
-<?php [$profile_jy, $profile_jm, $profile_jd] = profile_gregorian_to_jalali((int)date('Y', $profile_created_timestamp), (int)date('n', $profile_created_timestamp), (int)date('j', $profile_created_timestamp)); ?>
-<p><strong>تاریخ ایجاد پروفایل:</strong> <?= profile_persian_digits(sprintf('%04d/%02d/%02d', $profile_jy, $profile_jm, $profile_jd)) ?></p>
-<?php endif; ?>
-<p><strong>نام کاربری:</strong> <?= htmlspecialchars($user['username']) ?></p>
-<p><strong>شماره همراه:</strong> <?= htmlspecialchars($user['phone']) ?></p>
-<p><strong>شماره ملی:</strong> <?= htmlspecialchars($user['national_id']) ?></p>
-<?php if($user['gender']): ?><p><strong>جنسیت:</strong> <?= htmlspecialchars($user['gender']) ?></p><?php endif; ?>
-<?php if($user['education']): ?><p><strong>تحصیلات:</strong> <?= htmlspecialchars($user['education']) ?></p><?php endif; ?>
-<?php if($user['job']): ?><p><strong>شغل:</strong> <?= htmlspecialchars($user['job']) ?></p><?php endif; ?>
-<?php if($user['age']): ?><p><strong>سن:</strong> <?= (int)$user['age'] ?></p><?php endif; ?>
-<?php if($user['city']): ?><p><strong>شهر:</strong> <?= htmlspecialchars($user['city']) ?></p><?php endif; ?>
-<?php if($user['resume']): ?><p><strong>رزومه:</strong> <?= nl2br(htmlspecialchars($user['resume'])) ?></p><?php endif; ?>
-</div>
-
+<details class="profile-communities-menu" id="profile-communities-menu">
+<summary>👥 جوامع</summary>
+<div class="profile-communities-menu-content">
 <!-- رأی‌گیری عمومی دربارهٔ جایگاه جوامع -->
 <div class="box" id="community-parent-voting">
 <details>
@@ -652,6 +605,64 @@ if($user_comms->num_rows>0):
 </div>
 </div>
 </details>
+</div>
+</div>
+</details>
+</nav>
+</details>
+<a href="search.php" class="profile-header-search" style="display:inline-flex;align-items:center;justify-content:center;gap:6px;background:#1769aa;color:#fff;text-decoration:none;padding:9px 13px;border-radius:8px;font-size:14px;font-weight:bold;white-space:nowrap;">🔎 سرچ</a>
+</div>
+<div id="editForm" class="edit-form">
+<form method="post" action="">
+<input type="hidden" name="csrf_token" value="<?= htmlspecialchars($community_duty_csrf, ENT_QUOTES, 'UTF-8') ?>">
+<input type="hidden" name="update_profile" value="1">
+
+<label>جنسیت</label>
+<select name="gender">
+<option value="" <?= $user['gender']==''?'selected':'' ?>>انتخاب کنید</option>
+<option value="مرد" <?= $user['gender']=='مرد'?'selected':'' ?>>مرد</option>
+<option value="زن" <?= $user['gender']=='زن'?'selected':'' ?>>زن</option>
+<option value="دیگر" <?= $user['gender']=='دیگر'?'selected':'' ?>>دیگر</option>
+</select>
+
+<label>تحصیلات</label>
+<select name="education">
+<option value="" <?= $user['education']==''?'selected':'' ?>>انتخاب کنید</option>
+<option value="دیپلم" <?= $user['education']=='دیپلم'?'selected':'' ?>>دیپلم</option>
+<option value="کارشناسی" <?= $user['education']=='کارشناسی'?'selected':'' ?>>کارشناسی</option>
+<option value="کارشناسی ارشد" <?= $user['education']=='کارشناسی ارشد'?'selected':'' ?>>کارشناسی ارشد</option>
+<option value="دکتری" <?= $user['education']=='دکتری'?'selected':'' ?>>دکتری</option>
+</select>
+
+<label>شغل</label>
+<input type="text" name="job" value="<?= htmlspecialchars($user['job']) ?>" placeholder="مثال: مهندس نرم‌افزار">
+
+<label>سن</label>
+<input type="number" name="age" value="<?= (int)$user['age'] ?>" min="10" max="120" placeholder="مثال: 30">
+
+<label>شهر</label>
+<input type="text" name="city" value="<?= htmlspecialchars($user['city']) ?>" placeholder="مثال: تهران">
+
+<label>رزومه</label>
+<textarea name="resume" rows="6" maxlength="3000" placeholder="حداکثر 500 کلمه"><?= htmlspecialchars($user['resume']) ?></textarea>
+
+<button type="submit">ذخیره تغییرات</button>
+</form>
+</div>
+
+<?php if (!empty($user['created_at']) && ($profile_created_timestamp = strtotime($user['created_at'])) !== false): ?>
+<?php [$profile_jy, $profile_jm, $profile_jd] = profile_gregorian_to_jalali((int)date('Y', $profile_created_timestamp), (int)date('n', $profile_created_timestamp), (int)date('j', $profile_created_timestamp)); ?>
+<p><strong>تاریخ ایجاد پروفایل:</strong> <?= profile_persian_digits(sprintf('%04d/%02d/%02d', $profile_jy, $profile_jm, $profile_jd)) ?></p>
+<?php endif; ?>
+<p><strong>نام کاربری:</strong> <?= htmlspecialchars($user['username']) ?></p>
+<p><strong>شماره همراه:</strong> <?= htmlspecialchars($user['phone']) ?></p>
+<p><strong>شماره ملی:</strong> <?= htmlspecialchars($user['national_id']) ?></p>
+<?php if($user['gender']): ?><p><strong>جنسیت:</strong> <?= htmlspecialchars($user['gender']) ?></p><?php endif; ?>
+<?php if($user['education']): ?><p><strong>تحصیلات:</strong> <?= htmlspecialchars($user['education']) ?></p><?php endif; ?>
+<?php if($user['job']): ?><p><strong>شغل:</strong> <?= htmlspecialchars($user['job']) ?></p><?php endif; ?>
+<?php if($user['age']): ?><p><strong>سن:</strong> <?= (int)$user['age'] ?></p><?php endif; ?>
+<?php if($user['city']): ?><p><strong>شهر:</strong> <?= htmlspecialchars($user['city']) ?></p><?php endif; ?>
+<?php if($user['resume']): ?><p><strong>رزومه:</strong> <?= nl2br(htmlspecialchars($user['resume'])) ?></p><?php endif; ?>
 </div>
 
 <details class="community-management" id="join-community" <?= isset($_GET['join_community']) ? 'open' : '' ?>>
