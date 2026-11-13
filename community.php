@@ -1381,9 +1381,14 @@ $topics_count_q->close();
 $topics_count = (int)$topics_count_res['cnt'];
 ?>
 <div class="box" style="background:#fff3a6; padding:20px;">
+<?php if ($topics_count > 5): ?>
 <details class="community-topics-toggle"<?= (isset($_GET['open_topic']) && (int)$_GET['open_topic'] > 0) ? ' open' : '' ?>>
-  <summary>📘 موضوعات در حال بررسی (<?= $topics_count ?>)</summary>
+  <summary>📘 نمایش موضوعات در حال بحث (<?= $topics_count ?>)</summary>
   <div id="topics-wrapper" style="max-height:540px; overflow-y:auto; padding:10px;">
+<?php else: ?>
+<h3>📘 موضوعات در حال بحث (<?= $topics_count ?>)</h3>
+<div id="topics-wrapper" style="max-height:540px; overflow-y:auto; padding:10px;">
+<?php endif; ?>
 <?php
 $topics_list = $conn->prepare("
     SELECT t.*, 
@@ -1714,8 +1719,10 @@ if ($remaining_seconds < 0) $remaining_seconds = 0;
     </section>
 <?php endforeach; $topics_list->close(); ?>
 </div> <!-- topics-wrapper -->
+<?php if ($topics_count > 5): ?>
 </details>
-</div> <!-- box موضوعات در حال بررسی -->
+<?php endif; ?>
+</div> <!-- box موضوعات در حال بحث -->
 
 <!-- موضوعات در حال رأی‌گیری؛ این بخش پس از سربرگ قرار می‌گیرد -->
 <?php
