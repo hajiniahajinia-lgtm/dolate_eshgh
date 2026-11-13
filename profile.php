@@ -131,11 +131,12 @@ button.leave {background:#e63946;}
 .leave-community-form button.leave {display:flex;width:100%;height:44px;min-height:44px;padding:0 10px;margin-top:10px;align-items:center;justify-content:center;box-sizing:border-box;line-height:1;}
 button.edit {background:#2a9d8f;margin-bottom:10px;}
 a {text-decoration:none;color:#2065d1;font-weight:bold;}
-.profile-quick-menu{position:relative;z-index:30;}
+.profile-quick-menu{position:absolute;top:0;left:0;z-index:30;}
+.profile-header-search{position:absolute;left:0;bottom:0;}
 .profile-quick-menu>summary{display:flex;align-items:center;justify-content:center;list-style:none;cursor:pointer;width:48px;height:48px;border-radius:9px;background:#fff;color:#2065d1;border:1px solid #d5deea;font-size:0;box-shadow:0 2px 7px rgba(0,0,0,.08);}
 .profile-quick-menu>summary::-webkit-details-marker{display:none;}
 .profile-quick-menu>summary::before{content:"☰";font-size:30px;line-height:1;}
-.profile-quick-menu-items{position:absolute;top:56px;right:0;width:min( min(300px, calc(100vw - 36px)), 300px);max-height:70vh;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:10px;background:#fff;border:1px solid #dce4ee;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.18);}
+.profile-quick-menu-items{position:absolute;top:56px;left:0;right:auto;width:min( min(300px, calc(100vw - 36px)), 300px);max-height:70vh;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:10px;background:#fff;border:1px solid #dce4ee;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.18);}
 .profile-quick-menu-items a,.profile-quick-menu-items button{display:block;width:100%;box-sizing:border-box;margin:0;padding:12px 10px;border:0;border-radius:8px;background:#2065d1;color:#fff;text-align:center;font-family:tahoma,sans-serif;font-size:14px;font-weight:bold;line-height:1.7;text-decoration:none;}
 .profile-quick-menu-items a:nth-child(1){background:#6741a5;}
 .profile-quick-menu-items a:nth-child(2){background:#176b56;}
@@ -178,6 +179,7 @@ a {text-decoration:none;color:#2065d1;font-weight:bold;}
     textarea{min-height:110px;line-height:1.8;}
     label{display:block;line-height:1.8;margin-top:10px;}
     .container > .box:first-of-type > div:first-child{
+        min-height:92px;
         display:grid !important;grid-template-columns:1fr 1fr;gap:8px !important;
         align-items:stretch !important;margin-bottom:10px !important;
     }
@@ -262,7 +264,7 @@ document.addEventListener("DOMContentLoaded", function() {
 
 <!-- پروفایل -->
 <div class="box">
-<div class="profile-header" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+<div class="profile-header" style="position:relative;display:block;min-height:92px;margin-bottom:10px;">
 <h2 style="margin:0;">پروفایل</h2>
 <details class="profile-quick-menu">
 <summary aria-label="باز کردن منوی پروفایل" title="منوی پروفایل">☰</summary>
@@ -274,7 +276,7 @@ document.addEventListener("DOMContentLoaded", function() {
 <button type="button" class="edit" onclick="toggleEditForm()">✏️ تکمیل و ویرایش پروفایل</button>
 </nav>
 </details>
-<a href="search.php" style="display:inline-flex;align-items:center;justify-content:center;gap:6px;background:#1769aa;color:#fff;text-decoration:none;padding:9px 13px;border-radius:8px;font-size:14px;font-weight:bold;white-space:nowrap;">🔎 سرچ</a>
+<a href="search.php" class="profile-header-search" style="display:inline-flex;align-items:center;justify-content:center;gap:6px;background:#1769aa;color:#fff;text-decoration:none;padding:9px 13px;border-radius:8px;font-size:14px;font-weight:bold;white-space:nowrap;">🔎 سرچ</a>
 </div>
 <div id="editForm" class="edit-form">
 <form method="post" action="">
