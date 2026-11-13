@@ -132,7 +132,9 @@ button.leave {background:#e63946;}
 button.edit {background:#2a9d8f;margin-bottom:10px;}
 a {text-decoration:none;color:#2065d1;font-weight:bold;}
 .profile-quick-menu{position:absolute;top:0;left:0;z-index:30;}
-.profile-header-search{position:absolute;left:0;bottom:0;}
+.profile-header-search{position:absolute !important;left:0 !important;right:auto !important;bottom:0 !important;top:auto !important;z-index:20;display:inline-flex;align-items:center;justify-content:center;}
+@media (min-width:601px){.profile-header{position:relative;min-height:92px;}.profile-header-search{left:0 !important;bottom:0 !important;}}
+@media (max-width:600px){.profile-header{position:relative;min-height:92px;}.profile-header-search{left:0 !important;bottom:0 !important;}}
 .profile-quick-menu>summary{display:flex;align-items:center;justify-content:center;list-style:none;cursor:pointer;width:48px;height:48px;border-radius:9px;background:#fff;color:#2065d1;border:1px solid #d5deea;font-size:0;box-shadow:0 2px 7px rgba(0,0,0,.08);}
 .profile-quick-menu>summary::-webkit-details-marker{display:none;}
 .profile-quick-menu>summary::before{content:"☰";font-size:30px;line-height:1;}
