@@ -1749,6 +1749,7 @@ $arch_stats_q = $conn->prepare("
            SUM(CASE WHEN IFNULL(vb.total_votes,0)=0 OR (vb.yes_votes/vb.total_votes)*100 <= 50 THEN 1 ELSE 0 END) AS losers,
            COUNT(*) AS total
     FROM topics t
+    JOIN topic_voting_meta m ON m.topic_id = t.id
     LEFT JOIN (
         SELECT topic_id,
                SUM(CASE WHEN vote_type='yes' THEN 1 ELSE 0 END) AS yes_votes,
@@ -1757,6 +1758,7 @@ $arch_stats_q = $conn->prepare("
         GROUP BY topic_id
     ) vb ON vb.topic_id = t.id
     WHERE t.community_id=? AND t.closed=2
+      AND m.finalized=1 AND m.finalized_at IS NOT NULL
 ");
 $arch_stats_q->bind_param("i", $community_id);
 $arch_stats_q->execute();
