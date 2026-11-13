@@ -142,6 +142,12 @@ a {text-decoration:none;color:#2065d1;font-weight:bold;}
 .profile-quick-menu-items a:nth-child(3){background:#287a55;}
 .profile-quick-menu-items a:nth-child(4){background:#1769aa;}
 .profile-quick-menu-items button.edit{background:#2a9d8f;}
+.profile-quick-menu-items details.community-management{width:100%;margin:0;padding:0;border:0;background:transparent;}
+.profile-quick-menu-items details.community-management>summary{display:block;box-sizing:border-box;width:100%;padding:12px 10px;border:0;border-radius:8px;background:#2065d1;color:#fff;text-align:center;font-family:tahoma,sans-serif;font-size:14px;font-weight:bold;line-height:1.7;cursor:pointer;list-style:none;}
+.profile-quick-menu-items details.community-management>summary::-webkit-details-marker{display:none;}
+.profile-quick-menu-items details.community-management[open]{background:#f7f9fc;padding:6px;border-radius:9px;}
+.profile-quick-menu-items details.community-management[open]>.box{max-width:100%;box-sizing:border-box;}
+
 /* --- آکاردئون جوامع --- */
 .accordion {cursor:pointer;padding:10px;border:1px solid #ccc;border-radius:6px;background:#f8f8f8;margin-bottom:6px;transition:background 0.3s;font-weight:bold;font-size:14px;}
 .accordion:hover {background:#e7e7e7;}
@@ -748,5 +754,15 @@ $is_child = !empty($nc['parent_community_id']);
 </div>
 
 </div>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const menu = document.querySelector('.profile-quick-menu-items');
+    if (!menu) return;
+    ['join-community', 'create-community'].forEach(function (id) {
+        const section = document.getElementById(id);
+        if (section) menu.appendChild(section);
+    });
+});
+</script>
 </body>
 </html>
