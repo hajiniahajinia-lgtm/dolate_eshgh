@@ -4,9 +4,8 @@ session_start();
 include "db.php";
 
  
-// Convert Persian and Arabic-Indic digits for validation only.
-// Submitted values remain unchanged to avoid altering existing login identifiers.
-function digits_for_validation(string $value): string {
+// Normalize Iranian digits and common phone separators before validation/storage.
+function normalize_iranian_digits(string $value): string {
     return strtr($value, [
         '۰'=>'0','۱'=>'1','۲'=>'2','۳'=>'3','۴'=>'4',
         '۵'=>'5','۶'=>'6','۷'=>'7','۸'=>'8','۹'=>'9',
@@ -15,13 +14,40 @@ function digits_for_validation(string $value): string {
     ]);
 }
 
+function normalize_iranian_mobile(string $value): string {
+    $phone = normalize_iranian_digits(trim($value));
+    $phone = preg_replace('/[\\s\\-().]/u', '', $phone);
+
+    if (str_starts_with($phone, '+98')) {
+        $phone = '0' . substr($phone, 3);
+    } elseif (str_starts_with($phone, '0098')) {
+        $phone = '0' . substr($phone, 4);
+    } elseif (str_starts_with($phone, '98') && strlen($phone) === 12) {
+        $phone = '0' . substr($phone, 2);
+    } elseif (preg_match('/^9[0-9]{9}$/', $phone)) {
+        $phone = '0' . $phone;
+    }
+
+    return $phone;
+}
+
+function normalize_iranian_national_id(string $value): string {
+    $code = normalize_iranian_digits(trim($value));
+    return preg_replace('/[\\s\\-]/u', '', $code);
+}
+
 function is_valid_iranian_mobile(string $value): bool {
-    return preg_match('/^09[0-9]{9}$/', digits_for_validation($value)) === 1;
+    return preg_match('/^09[0-9]{9}$/', normalize_iranian_mobile($value)) === 1;
 }
 
 function is_valid_iranian_national_id(string $value): bool {
-    $code = digits_for_validation($value);
-    if (!preg_match('/^[0-9]{10}$/', $code) || preg_match('/^(.)\\1{9}$/', $code)) {
+    $code = normalize_iranian_national_id($value);
+    if (!preg_match('/^[0-9]{10}$/', $code)) {
+        return false;
+    }
+
+    // Reject codes made from one repeated digit.
+    if (count(array_unique(str_split($code))) === 1) {
         return false;
     }
 
@@ -58,8 +84,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     $username = trim($username_input);
-    $phone = trim($phone_input);
-    $national_id = trim($national_id_input);
+    $phone = normalize_iranian_mobile($phone_input);
+    $national_id = normalize_iranian_national_id($national_id_input);
 
     if ($username === '' || $phone === '' || $national_id === '' || $password === '') {
         die("لطفاً همه فیلدها را پر کنید.");
@@ -280,7 +306,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <label for="national_id">شماره ملی (می‌توانید از شماره آزمایشی استفاده کنید)</label>
             <input type="text" id="national_id" name="national_id" placeholder="شماره ۱۰ رقمی با قالب معتبر" required>
             <p style="margin:6px 0 12px; color:#666; font-size:12px; line-height:1.7">
-                اطلاعات آزمایشی باید از نظر قالب و رقم‌های کنترلی مورد قبول فرم باشند؛ از اطلاعات واقعی یا متعلق به دیگران استفاده نکنید.
+                شماره همراه با قالب 09xxxxxxxxx (یا +989xxxxxxxxx) و شماره ملی ۱۰ رقمی با رقم کنترلی معتبر پذیرفته می‌شود. ارقام فارسی و عربی و جداکننده‌های معمول نیز قابل قبول‌اند؛ از اطلاعات واقعی یا متعلق به دیگران استفاده نکنید.
             </p>
 
             <label for="password">رمز عبور</label>
