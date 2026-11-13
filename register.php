@@ -41,24 +41,9 @@ function is_valid_iranian_mobile(string $value): bool {
 }
 
 function is_valid_iranian_national_id(string $value): bool {
+    // In the experimental system, accept any 10 digits without checksum validation.
     $code = normalize_iranian_national_id($value);
-    if (!preg_match('/^[0-9]{10}$/', $code)) {
-        return false;
-    }
-
-    // Reject codes made from one repeated digit.
-    if (count(array_unique(str_split($code))) === 1) {
-        return false;
-    }
-
-    $sum = 0;
-    for ($i = 0; $i < 9; $i++) {
-        $sum += (int)$code[$i] * (10 - $i);
-    }
-    $remainder = $sum % 11;
-    $check_digit = $remainder < 2 ? $remainder : 11 - $remainder;
-
-    return $check_digit === (int)$code[9];
+    return preg_match('/^[0-9]{10}$/', $code) === 1;
 }
 
 // CSRF protection for the public registration form.
