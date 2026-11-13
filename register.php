@@ -274,11 +274,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <label for="username">نام و نام خانوادگی</label>
             <input type="text" id="username" name="username" placeholder="مثال: علی رضایی" required>
 
-            <label for="phone">شماره همراه</label>
-            <input type="text" id="phone" name="phone" placeholder="مثال: 09121234567" inputmode="tel" required>
+            <label for="phone">شماره همراه (می‌توانید از شماره آزمایشی استفاده کنید)</label>
+            <input type="text" id="phone" name="phone" placeholder="شماره ۱۱ رقمی با شروع 09" inputmode="tel" required>
 
-            <label for="national_id">شماره ملی</label>
-            <input type="text" id="national_id" name="national_id" placeholder="مثال: 1378205308" required>
+            <label for="national_id">شماره ملی (می‌توانید از شماره آزمایشی استفاده کنید)</label>
+            <input type="text" id="national_id" name="national_id" placeholder="شماره ۱۰ رقمی با قالب معتبر" required>
+            <p style="margin:6px 0 12px; color:#666; font-size:12px; line-height:1.7">
+                اطلاعات آزمایشی باید از نظر قالب و رقم‌های کنترلی مورد قبول فرم باشند؛ از اطلاعات واقعی یا متعلق به دیگران استفاده نکنید.
+            </p>
 
             <label for="password">رمز عبور</label>
             <input type="password" id="password" name="password" placeholder="رمز عبور" required>
