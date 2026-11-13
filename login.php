@@ -5,6 +5,65 @@ include "db.php";
 
 $message = '';
 
+// Normalize Iranian digits and common phone separators before validation/storage.
+function normalize_iranian_digits(string $value): string {
+    return strtr($value, [
+        '۰'=>'0','۱'=>'1','۲'=>'2','۳'=>'3','۴'=>'4',
+        '۵'=>'5','۶'=>'6','۷'=>'7','۸'=>'8','۹'=>'9',
+        '٠'=>'0','١'=>'1','٢'=>'2','٣'=>'3','٤'=>'4',
+        '٥'=>'5','٦'=>'6','٧'=>'7','٨'=>'8','٩'=>'9'
+    ]);
+}
+
+function normalize_iranian_mobile(string $value): string {
+    $phone = normalize_iranian_digits(trim($value));
+    $phone = preg_replace('/[\\s\\-().]/u', '', $phone);
+
+    if (str_starts_with($phone, '+98')) {
+        $phone = '0' . substr($phone, 3);
+    } elseif (str_starts_with($phone, '0098')) {
+        $phone = '0' . substr($phone, 4);
+    } elseif (str_starts_with($phone, '98') && strlen($phone) === 12) {
+        $phone = '0' . substr($phone, 2);
+    } elseif (preg_match('/^9[0-9]{9}$/', $phone)) {
+        $phone = '0' . $phone;
+    }
+
+    return $phone;
+}
+
+function normalize_iranian_national_id(string $value): string {
+    $code = normalize_iranian_digits(trim($value));
+    return preg_replace('/[\\s\\-]/u', '', $code);
+}
+
+function is_valid_iranian_mobile(string $value): bool {
+    return preg_match('/^09[0-9]{9}$/', normalize_iranian_mobile($value)) === 1;
+}
+
+function is_valid_iranian_national_id(string $value): bool {
+    $code = normalize_iranian_national_id($value);
+    if (!preg_match('/^[0-9]{10}$/', $code)) {
+        return false;
+    }
+
+    // Reject codes made from one repeated digit.
+    if (count(array_unique(str_split($code))) === 1) {
+        return false;
+    }
+
+    $sum = 0;
+    for ($i = 0; $i < 9; $i++) {
+        $sum += (int)$code[$i] * (10 - $i);
+    }
+    $remainder = $sum % 11;
+    $check_digit = $remainder < 2 ? $remainder : 11 - $remainder;
+
+    return $check_digit === (int)$code[9];
+}
+
+
+
 // Create a per-session CSRF token for the login form.
 if (empty($_SESSION['login_csrf_token']) || !is_string($_SESSION['login_csrf_token'])) {
     $_SESSION['login_csrf_token'] = bin2hex(random_bytes(32));
@@ -26,8 +85,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             http_response_code(400);
             $message = "اطلاعات ارسالی معتبر نیست.";
         } else {
-            $phone = trim($phone_input);
-            $national_id = trim($national_id_input);
+            $phone = normalize_iranian_mobile($phone_input);
+            $national_id = normalize_iranian_national_id($national_id_input);
 
             if ($phone === '' || $national_id === '' || $password === '') {
                 $message = "لطفاً همه فیلدها را پر کنید.";
@@ -323,10 +382,10 @@ a:hover {
     <form method="post" action="">
         <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['login_csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
         <label>شماره همراه:</label>
-        <input type="text" name="phone" placeholder="0912xxxxxxx" required>
+        <input type="text" name="phone" placeholder="09xxxxxxxxx یا +989xxxxxxxxx" inputmode="tel" autocomplete="tel" required>
 
         <label>شماره ملی:</label>
-        <input type="text" name="national_id" placeholder="کد ملی" required>
+        <input type="text" name="national_id" placeholder="کد ملی ۱۰ رقمی" inputmode="numeric" required>
 
         <label>رمز عبور:</label>
         <input type="password" name="password" placeholder="رمز عبور" required>
