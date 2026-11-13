@@ -22,7 +22,7 @@ if (empty($_SESSION['community_duty_csrf'])) { $_SESSION['community_duty_csrf'] 
 $community_duty_csrf = $_SESSION['community_duty_csrf'];
 // رأی‌گیری‌های منقضی فقط توسط maintenance/run_due_tasks.php نهایی می‌شوند.
 $arch_count = 0;
-$arch_count_stmt = $conn->prepare("SELECT COUNT(*) AS total FROM topics t JOIN topic_voting_meta m ON m.topic_id=t.id WHERE t.community_id=? AND m.finalized=1 AND m.finalized_at IS NOT NULL");
+$arch_count_stmt = $conn->prepare("SELECT COUNT(*) AS total FROM topics t JOIN topic_voting_meta m ON m.topic_id=t.id WHERE t.community_id=? AND t.closed=2 AND m.finalized=1 AND m.finalized_at IS NOT NULL");
 if ($arch_count_stmt) { $arch_count_stmt->bind_param("i", $community_id); $arch_count_stmt->execute(); $arch_count = (int)($arch_count_stmt->get_result()->fetch_assoc()['total'] ?? 0); $arch_count_stmt->close(); }
 
 $candidate_tables_ready=false;$election_tables_ready=false;$candidate_plans_ready=false;
@@ -240,7 +240,7 @@ $sql = "
     SELECT t.id, t.title, t.description, t.created_at, t.user_id, m.finalized_at, t.community_id
     FROM topics t
     JOIN topic_voting_meta m ON m.topic_id=t.id
-    WHERE t.community_id=? AND m.finalized=1 AND m.finalized_at IS NOT NULL
+    WHERE t.community_id=? AND t.closed=2 AND m.finalized=1 AND m.finalized_at IS NOT NULL
     ORDER BY m.finalized_at DESC
 ";
 $stmt = $conn->prepare($sql);
