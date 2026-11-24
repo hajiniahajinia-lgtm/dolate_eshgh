@@ -148,7 +148,7 @@ h2{font-size:18px;margin:0 0 12px}
 <?php if ($active_topics): ?>
 <?php foreach ($active_topics as $topic): ?>
 <div class="topic">
-<a href="topic.php?id=<?= (int) $topic['id'] ?>"><?= e($topic['title']) ?></a>
+<a href="community.php?id=<?= $community_id ?>&amp;open_topic=<?= (int) $topic['id'] ?>#topic-<?= (int) $topic['id'] ?>"><?= e($topic['title']) ?></a>
 <div class="muted"><?= (int) $topic['ideas_count'] ?> ایده</div>
 </div>
 <?php endforeach; ?>
