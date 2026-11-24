@@ -722,6 +722,7 @@ document.addEventListener('DOMContentLoaded', function () {
         <a href="community_laws.php?community_id=<?= (int)$community['parent_community_id'] ?>">🏛️ قوانین جامعه بالا دستی</a>
       <?php endif; ?>
       <a href="community_stats.php?community_id=<?= (int)$community['id'] ?>">📊 آمار این جامعه</a>
+      <a href="community_reports.php?community_id=<?= (int)$community['id'] ?>">🧭 گزارش‌های پیگیری و مشارکت</a>
       <a href="community_charter_amendments.php">📜 منشور بنیادین</a>
     </nav>
   </details>
