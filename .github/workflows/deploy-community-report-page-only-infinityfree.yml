@@ -41,7 +41,7 @@ jobs:
           ftp_code=$(curl --show-error --silent --ftp-pasv \
             --user "$FTP_USERNAME:$FTP_PASSWORD" \
             --output /tmp/live-community-reports.php \
-            --write-out "%{ftp_code}" \
+            --write-out "%{response_code}" \
             "${remote_dir}community_reports.php")
           curl_status=$?
           set -e
