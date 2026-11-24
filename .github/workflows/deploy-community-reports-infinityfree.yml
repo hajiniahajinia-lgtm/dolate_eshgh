@@ -1,0 +1,76 @@
+name: Safely deploy no-API community reports to InfinityFree
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy-selected-files:
+    name: Preflight and upload only the reviewed report files
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the selected feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/no-api-community-reports
+          fetch-depth: 0
+
+      - name: Verify FTP settings and compare the live community.php
+        env:
+          FTP_SERVER: ${{ secrets.FTP_SERVER }}
+          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+          FTP_SERVER_DIR: ${{ secrets.FTP_SERVER_DIR }}
+        run: |
+          set -eu
+          for name in FTP_SERVER FTP_USERNAME FTP_PASSWORD FTP_SERVER_DIR; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing GitHub Actions secret: $name"
+              exit 1
+            fi
+          done
+
+          git fetch origin main
+          git show origin/main:community.php > /tmp/repo-main-community.php
+
+          curl --fail --show-error --silent --ftp-pasv \
+            --user "$FTP_USERNAME:$FTP_PASSWORD" \
+            "ftp://$FTP_SERVER${FTP_SERVER_DIR%/}/community.php" \
+            --output /tmp/live-community.php
+
+          if ! cmp -s /tmp/live-community.php /tmp/repo-main-community.php; then
+            echo "::error::Live community.php differs from repository main. No files uploaded; compare live changes first."
+            exit 1
+          fi
+
+      - name: Upload only the new report page and reviewed community menu file
+        env:
+          FTP_SERVER: ${{ secrets.FTP_SERVER }}
+          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+          FTP_SERVER_DIR: ${{ secrets.FTP_SERVER_DIR }}
+        run: |
+          set -eu
+
+          # If the report file already exists, only allow an identical re-run.
+          if curl --fail --show-error --silent --ftp-pasv \
+              --user "$FTP_USERNAME:$FTP_PASSWORD" \
+              "ftp://$FTP_SERVER${FTP_SERVER_DIR%/}/community_reports.php" \
+              --output /tmp/live-community-reports.php; then
+            if ! cmp -s community_reports.php /tmp/live-community-reports.php; then
+              echo "::error::A different community_reports.php already exists on the host. No upload performed."
+              exit 1
+            fi
+            echo "community_reports.php already matches; skipping it."
+          else
+            echo "Uploading new community_reports.php"
+            curl --fail --show-error --silent --ftp-create-dirs --ftp-pasv \
+              --user "$FTP_USERNAME:$FTP_PASSWORD" \
+              --upload-file community_reports.php \
+              "ftp://$FTP_SERVER${FTP_SERVER_DIR%/}/community_reports.php"
+          fi
+
+          echo "Uploading reviewed community.php after successful preflight"
+          curl --fail --show-error --silent --ftp-create-dirs --ftp-pasv \
+            --user "$FTP_USERNAME:$FTP_PASSWORD" \
+            --upload-file community.php \
+            "ftp://$FTP_SERVER${FTP_SERVER_DIR%/}/community.php"
