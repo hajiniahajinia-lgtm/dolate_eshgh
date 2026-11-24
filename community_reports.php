@@ -71,7 +71,11 @@ $finalized_count = report_count(
     $community_id
 );
 
-$pending_count = max(0, $topics_count - $finalized_count);
+$pending_count = report_count(
+    $conn,
+    'SELECT COUNT(*) AS total FROM topics t LEFT JOIN topic_voting_meta m ON m.topic_id = t.id AND m.finalized = 1 WHERE t.community_id = ? AND t.closed = 0 AND m.topic_id IS NULL',
+    $community_id
+);
 
 $active_topics = [];
 $list_stmt = $conn->prepare(
@@ -79,7 +83,7 @@ $list_stmt = $conn->prepare(
      FROM topics t
      LEFT JOIN ideas i ON i.topic_id = t.id
      LEFT JOIN topic_voting_meta m ON m.topic_id = t.id AND m.finalized = 1
-     WHERE t.community_id = ? AND m.topic_id IS NULL
+     WHERE t.community_id = ? AND t.closed = 0 AND m.topic_id IS NULL
      GROUP BY t.id, t.title
      ORDER BY ideas_count DESC, t.id DESC
      LIMIT 10'
@@ -139,12 +143,12 @@ h2{font-size:18px;margin:0 0 12px}
 <div class="stat"><span class="muted">موضوعات</span><strong><?= $topics_count ?></strong></div>
 <div class="stat"><span class="muted">ایده‌ها</span><strong><?= $ideas_count ?></strong></div>
 <div class="stat"><span class="muted">موضوعات دارای رأی نهایی</span><strong><?= $finalized_count ?></strong></div>
-<div class="stat"><span class="muted">موضوعات بدون رأی نهایی ثبت‌شده</span><strong><?= $pending_count ?></strong></div>
+<div class="stat"><span class="muted">موضوعات باز بدون رأی نهایی</span><strong><?= $pending_count ?></strong></div>
 </section>
 
 <section class="panel">
-<h2>موضوعات نیازمند پیگیری</h2>
-<p class="muted">این فهرست موضوعاتی را نشان می‌دهد که در جدول رأی‌گیری هنوز رأی نهایی ثبت‌شده ندارند؛ این به‌تنهایی به معنای تأخیر یا قصور نیست.</p>
+<h2>موضوعات بازِ بدون رأی نهایی</h2>
+<p class="muted">این فهرست فقط موضوعات باز را نشان می‌دهد که در جدول رأی‌گیری هنوز رأی نهایی ثبت‌شده ندارند؛ این به‌تنهایی به معنای تأخیر یا قصور نیست.</p>
 <?php if ($active_topics): ?>
 <?php foreach ($active_topics as $topic): ?>
 <div class="topic">
