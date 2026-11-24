@@ -1,0 +1,79 @@
+name: Safely deploy community report page only to InfinityFree
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy-report-page:
+    name: Verify FTP and upload only community_reports.php
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Verify FTP access and report-file state
+        id: preflight
+        env:
+          FTP_SERVER: ${{ secrets.FTP_SERVER }}
+          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+          FTP_SERVER_DIR: ${{ secrets.FTP_SERVER_DIR }}
+        run: |
+          set -eu
+          for name in FTP_SERVER FTP_USERNAME FTP_PASSWORD FTP_SERVER_DIR; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing GitHub Actions secret: $name"
+              exit 1
+            fi
+          done
+
+          remote_dir="ftp://$FTP_SERVER${FTP_SERVER_DIR%/}/"
+
+          # Confirm authentication and directory access before checking a file.
+          curl --fail --show-error --silent --ftp-pasv --list-only \
+            --user "$FTP_USERNAME:$FTP_PASSWORD" \
+            "$remote_dir" > /tmp/ftp-list.txt
+
+          set +e
+          ftp_code=$(curl --show-error --silent --ftp-pasv \
+            --user "$FTP_USERNAME:$FTP_PASSWORD" \
+            --output /tmp/live-community-reports.php \
+            --write-out "%{ftp_code}" \
+            "${remote_dir}community_reports.php")
+          curl_status=$?
+          set -e
+
+          if [ "$curl_status" -eq 0 ]; then
+            if cmp -s community_reports.php /tmp/live-community-reports.php; then
+              echo "report_exists=identical" >> "$GITHUB_OUTPUT"
+              echo "Remote community_reports.php already matches; upload will be skipped."
+            else
+              echo "::error::A different community_reports.php exists on the host. No upload or overwrite will occur."
+              exit 1
+            fi
+          elif [ "$ftp_code" = "550" ]; then
+            echo "report_exists=missing" >> "$GITHUB_OUTPUT"
+            echo "Remote report file is absent; it is safe to create it."
+          else
+            echo "::error::Could not reliably determine the remote report-file state (FTP code $ftp_code, curl status $curl_status). No upload performed."
+            exit 1
+          fi
+
+      - name: Upload only the new report page
+        if: steps.preflight.outputs.report_exists == 'missing'
+        env:
+          FTP_SERVER: ${{ secrets.FTP_SERVER }}
+          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+          FTP_SERVER_DIR: ${{ secrets.FTP_SERVER_DIR }}
+        run: |
+          set -eu
+          curl --fail --show-error --silent --ftp-create-dirs --ftp-pasv \
+            --user "$FTP_USERNAME:$FTP_PASSWORD" \
+            --upload-file community_reports.php \
+            "ftp://$FTP_SERVER${FTP_SERVER_DIR%/}/community_reports.php"
+
+          echo "Uploaded community_reports.php only. No other host file was changed."
