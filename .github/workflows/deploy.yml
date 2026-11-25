@@ -6,6 +6,8 @@ on:
       - main
     paths:
       - community.php
+      - index.html
+      - introduction.html
   workflow_dispatch:
     inputs:
       deploy_all:
