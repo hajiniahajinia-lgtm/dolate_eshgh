@@ -714,6 +714,7 @@ document.addEventListener('DOMContentLoaded', function () {
     <summary aria-label="باز کردن منوی جامعه" title="منوی جامعه">☰</summary>
     <nav class="community-quick-menu-items" aria-label="دسترسی‌های جامعه">
       <a href="finance.php?community_id=<?= (int)$community_id ?>">🏦 بانک مالی و اموال جامعه</a>
+      <a href="community_charter_amendments.php">📜 منشور بنیادین</a>
       <a href="donations.php?community_id=<?= (int)$community_id ?>" style="background:#16845b;">🤝 کمک مالی به جامعه</a>
       <a href="knowledge_library.php?community_id=<?= (int)$community_id ?>" style="background:#2874a6;">📚 کتابخانه دانش همین جامعه</a>
       <a href="knowledge_library.php?community_id=<?= (int)$community_id ?>" style="background:#2874a6;">📖 کتابخانه دانش این جامعه</a>
@@ -723,7 +724,6 @@ document.addEventListener('DOMContentLoaded', function () {
       <?php endif; ?>
       <a href="community_stats.php?community_id=<?= (int)$community['id'] ?>">📊 آمار این جامعه</a>
       <a href="community_reports.php?community_id=<?= (int)$community['id'] ?>">🧭 گزارش‌های پیگیری و مشارکت</a>
-      <a href="community_charter_amendments.php">📜 منشور بنیادین</a>
     </nav>
   </details>
   <div class="community-header-top" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
