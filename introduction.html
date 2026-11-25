@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="با دولت عشق آشنا شوید؛ بستری برای مشارکت همگانی، طرح موضوع، بررسی ایده‌ها، تصمیم‌گیری جمعی و پیگیری اجرای تصمیم‌ها.">
+<title>دولت عشق چیست؟ | آشنایی و شروع مشارکت</title>
+<style>
+:root{--green:#216b45;--green-dark:#174b32;--mint:#eaf4ec;--ink:#24352b;--muted:#5d7063;--line:#dce8de;--paper:#fff;--bg:#f5f8f4;--gold:#e5b94f}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Tahoma,Arial,sans-serif;line-height:2}
+a{color:var(--green)}
+.wrap{width:min(1120px,calc(100% - 32px));margin:auto}
+.topbar{padding:14px 0;background:#fff;border-bottom:1px solid var(--line)}
+.topbar .wrap{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.brand{font-weight:bold;color:var(--green-dark);text-decoration:none;font-size:19px}
+.toplinks{display:flex;gap:18px;flex-wrap:wrap;font-size:14px}
+.toplinks a{text-decoration:none}
+.hero{background:linear-gradient(135deg,#1c5c3b,#2b8054);color:white;overflow:hidden;position:relative}
+.hero-inner{display:grid;grid-template-columns:1.15fr .85fr;gap:36px;align-items:center;padding:62px 0 66px}
+.eyebrow{display:inline-block;border:1px solid #ffffff55;border-radius:30px;padding:3px 13px;font-size:13px;color:#e6f5e9}
+h1{font-size:clamp(30px,5vw,54px);line-height:1.55;margin:14px 0}
+.hero p{font-size:18px;max-width:650px;color:#edf7ef}
+.hero-art{background:#ffffff12;border:1px solid #ffffff24;border-radius:28px;padding:18px;min-height:260px;display:flex;align-items:center;justify-content:center}
+.hero-art svg{width:100%;max-width:390px;height:auto}
+.actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:24px}
+.btn{display:inline-flex;align-items:center;justify-content:center;padding:10px 22px;border-radius:10px;text-decoration:none;font-weight:bold;border:1px solid transparent}
+.btn-light{background:#fff;color:var(--green-dark)}
+.btn-outline{border-color:#ffffff8a;color:#fff}
+.btn-green{background:var(--green);color:white}
+.section{padding:58px 0}
+.section.white{background:#fff}
+.section-head{text-align:center;max-width:760px;margin:0 auto 30px}
+.section-head h2{font-size:clamp(24px,3.5vw,36px);line-height:1.6;margin:0 0 8px;color:var(--green-dark)}
+.section-head p{margin:0;color:var(--muted)}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.card{background:#fff;border:1px solid var(--line);border-radius:18px;padding:22px;height:100%}
+.card h3{font-size:19px;color:var(--green-dark);margin:10px 0 4px}
+.card p{color:var(--muted);margin:5px 0 0;font-size:15px}
+.iconbox{width:68px;height:68px;border-radius:18px;background:var(--mint);display:flex;align-items:center;justify-content:center}
+.iconbox svg{width:44px;height:44px}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;counter-reset:step}
+.step{background:#fff;border:1px solid var(--line);border-radius:18px;padding:22px;position:relative}
+.step:before{counter-increment:step;content:counter(step);width:34px;height:34px;border-radius:50%;background:var(--green);color:white;display:flex;align-items:center;justify-content:center;font-weight:bold;margin-bottom:12px}
+.step h3{margin:0;color:var(--green-dark);font-size:18px}
+.step p{margin:6px 0 0;color:var(--muted);font-size:15px}
+.flow{background:#edf5ee;border:1px solid #d8e8da;border-radius:20px;padding:22px;display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap}
+.flow span{background:white;border:1px solid #d7e5d8;border-radius:10px;padding:8px 14px;font-weight:bold;color:var(--green-dark)}
+.flow b{color:#77927d;font-size:20px}
+.note{max-width:900px;margin:22px auto 0;text-align:center;color:var(--muted);font-size:14px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:center}
+.panel{background:var(--mint);border-radius:22px;padding:28px}
+.panel h2{color:var(--green-dark);margin:0 0 10px;font-size:25px}
+.panel p{color:#47634f;margin:8px 0}
+.bullets{padding-right:20px;margin:10px 0}
+.bullets li{margin:5px 0}
+.quote{border-right:4px solid var(--gold);padding:12px 18px;background:#fff;border-radius:8px;color:var(--green-dark);font-weight:bold;margin-top:18px}
+.cta{background:var(--green-dark);color:white;text-align:center;padding:52px 0}
+.cta h2{font-size:clamp(25px,4vw,36px);margin:0 0 8px}
+.cta p{color:#e4f0e6;max-width:700px;margin:0 auto}
+.cta .actions{justify-content:center}
+footer{padding:22px 0;text-align:center;color:var(--muted);font-size:13px}
+@media(max-width:800px){.hero-inner{grid-template-columns:1fr;padding:42px 0}.hero-art{min-height:180px}.grid,.steps{grid-template-columns:repeat(2,1fr)}.two{grid-template-columns:1fr}}
+@media(max-width:520px){.wrap{width:calc(100% - 22px)}.topbar .wrap{align-items:flex-start;flex-direction:column}.toplinks{gap:12px}.hero-inner{padding:32px 0}.hero p{font-size:16px}.hero-art{padding:8px}.section{padding:40px 0}.grid,.steps{grid-template-columns:1fr}.card,.step{padding:18px}.flow{gap:7px;padding:14px}.flow span{font-size:13px;padding:6px 9px}.flow b{font-size:16px}.actions{flex-direction:column}.btn{width:100%}}
+@media print{.topbar,.actions{display:none}.hero,.cta{background:white;color:#222}.hero p,.cta p{color:#333}.section{padding:20px 0}}
+</style>
+</head>
+<body>
+<header class="topbar">
+<div class="wrap">
+<a class="brand" href="index.html">دولت عشق</a>
+<nav class="toplinks" aria-label="پیوندهای معرفی">
+<a href="#how">چگونه کار می‌کند؟</a>
+<a href="#principles">اصول</a>
+<a href="about.html">فلسفه دولت عشق</a>
+</nav>
+</div>
+</header>
+<main>
+<section class="hero">
+<div class="wrap hero-inner">
+<div>
+<span class="eyebrow">آشنایی با دولت عشق</span>
+<h1>از یک مسئله مشترک،<br>تا تصمیم و اقدام جمعی</h1>
+<p>دولت عشق بستری برای همکاری انسان‌هاست؛ جایی که می‌توانیم مسائل مشترک را مطرح کنیم، راه‌حل‌ها را با هم بسنجیم، در تصمیم‌گیری مشارکت کنیم و مسیر اجرای تصمیم‌ها را دنبال کنیم.</p>
+<div class="actions">
+<a class="btn btn-light" href="register.php">به دولت عشق بپیوندید</a>
+<a class="btn btn-outline" href="guest_communities.php">دیدن جوامع</a>
+</div>
+</div>
+<div class="hero-art" aria-label="تصویر مفهومی مشارکت جمعی">
+<svg viewBox="0 0 420 300" role="img" aria-label="افراد و ایده‌ها در یک شبکه مشترک">
+<circle cx="210" cy="150" r="105" fill="#ffffff12" stroke="#ffffff55" stroke-width="2" stroke-dasharray="5 8"/>
+<g stroke="#cce8d2" stroke-width="3" opacity=".9"><path d="M210 150L92 80M210 150L330 78M210 150L335 225M210 150L92 225"/></g>
+<g fill="#fff"><circle cx="92" cy="80" r="30"/><circle cx="330" cy="78" r="30"/><circle cx="335" cy="225" r="30"/><circle cx="92" cy="225" r="30"/></g>
+<g fill="#216b45"><circle cx="92" cy="71" r="9"/><path d="M73 96q19-28 38 0" fill="none" stroke="#216b45" stroke-width="8" stroke-linecap="round"/><circle cx="330" cy="69" r="9"/><path d="M311 94q19-28 38 0" fill="none" stroke="#216b45" stroke-width="8" stroke-linecap="round"/><circle cx="335" cy="216" r="9"/><path d="M316 241q19-28 38 0" fill="none" stroke="#216b45" stroke-width="8" stroke-linecap="round"/><circle cx="92" cy="216" r="9"/><path d="M73 241q19-28 38 0" fill="none" stroke="#216b45" stroke-width="8" stroke-linecap="round"/></g>
+<circle cx="210" cy="150" r="54" fill="#f4d875" stroke="#fff" stroke-width="5"/>
+<path d="M185 151l17 17 34-38" fill="none" stroke="#216b45" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+<g fill="#fff"><rect x="173" y="34" width="74" height="30" rx="15"/><rect x="174" y="236" width="72" height="30" rx="15"/></g>
+<g fill="#216b45" font-size="15" font-family="Tahoma" text-anchor="middle"><text x="210" y="54">ایده</text><text x="210" y="256">همکاری</text></g>
+</svg>
+</div>
+</div>
+</section>
+
+<section class="section white" id="what">
+<div class="wrap">
+<div class="section-head">
+<h2>دولت عشق چیست؟</h2>
+<p>یک بستر برای تبدیل تجربه‌ها و دیدگاه‌های پراکنده به شناخت بهتر، تصمیم‌های مشترک و اقدام قابل پیگیری.</p>
+</div>
+<div class="grid">
+<div class="card">
+<div class="iconbox"><svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="13" r="7" fill="none" stroke="#216b45" stroke-width="3"/><path d="M10 39v-5c0-7 6-11 14-11s14 4 14 11v5" fill="none" stroke="#216b45" stroke-width="3" stroke-linecap="round"/><path d="M5 20h7M36 20h7" stroke="#216b45" stroke-width="3" stroke-linecap="round"/></svg></div>
+<h3>مشارکت همگانی</h3><p>افراد می‌توانند در جوامع مرتبط با علاقه‌ها، نیازها و مسائل مشترک خود حضور داشته باشند.</p>
+</div>
+<div class="card">
+<div class="iconbox"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M8 10h32v22H22l-9 7v-7H8z" fill="none" stroke="#216b45" stroke-width="3" stroke-linejoin="round"/><path d="M15 18h18M15 24h12" stroke="#216b45" stroke-width="3" stroke-linecap="round"/></svg></div>
+<h3>گفت‌وگو و بررسی</h3><p>موضوع‌ها و ایده‌ها با شنیدن دیدگاه‌های مختلف، نقد، دلیل و اصلاح بررسی می‌شوند.</p>
+</div>
+<div class="card">
+<div class="iconbox"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M24 5l16 7v11c0 10-7 16-16 20C15 39 8 33 8 23V12z" fill="none" stroke="#216b45" stroke-width="3"/><path d="M16 24l6 6 11-13" fill="none" stroke="#216b45" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+<h3>تصمیم و پاسخ‌گویی</h3><p>هدف، روشن بودن مسیر تصمیم و فراهم شدن امکان پیگیری نتیجه و اجرای آن است.</p>
+</div>
+</div>
+</div>
+</section>
+
+<section class="section" id="how">
+<div class="wrap">
+<div class="section-head">
+<h2>مشارکت چگونه پیش می‌رود؟</h2>
+<p>مسیر اصلی مشارکت در دولت عشق از شناخت مسئله آغاز می‌شود و به تصمیم و پیگیری می‌رسد.</p>
+</div>
+<div class="steps">
+<div class="step"><h3>به یک جامعه بپیوندید</h3><p>جامعه‌ای را پیدا کنید که با مسئله یا علاقه شما ارتباط دارد؛ یا در صورت نیاز جامعه‌ای تازه ایجاد کنید.</p></div>
+<div class="step"><h3>موضوع را مطرح کنید</h3><p>نیاز، پرسش یا مسئله‌ای را روشن و دقیق بیان کنید تا دیگران بتوانند آن را بررسی کنند.</p></div>
+<div class="step"><h3>ایده پیشنهاد دهید</h3><p>برای موضوع راه‌حل ارائه کنید و دلیل، مزایا یا پیامدهای آن را توضیح دهید.</p></div>
+<div class="step"><h3>گفت‌وگو و اصلاح کنید</h3><p>با دیگر اعضا تبادل نظر کنید، نقدها را بسنجید و در صورت نیاز پیشنهاد را بهبود دهید.</p></div>
+<div class="step"><h3>در تصمیم‌گیری مشارکت کنید</h3><p>پس از طی مراحل لازم، در رأی‌گیری یا فرایند تصمیم‌گیری مربوط مشارکت کنید.</p></div>
+<div class="step"><h3>نتیجه را دنبال کنید</h3><p>تصمیم جمعی نقطه پایان نیست؛ اجرای آن و آموختن از نتیجه نیز اهمیت دارد.</p></div>
+</div>
+<div class="flow" aria-label="مسیر موضوع تا اجرا">
+<span>موضوع</span><b>←</b><span>ایده</span><b>←</b><span>گفت‌وگو</span><b>←</b><span>رأی</span><b>←</b><span>اجرا و پیگیری</span>
+</div>
+<p class="note">این مسیر، چارچوب کلی مشارکت را نشان می‌دهد. وضعیت‌ها و امکاناتی که در هر صفحه فعال هستند، بر اساس ساختار همان جامعه و امکانات فعلی سامانه نمایش داده می‌شوند.</p>
+</div>
+</section>
+
+<section class="section white" id="principles">
+<div class="wrap two">
+<div class="panel">
+<h2>چرا «دولت عشق»؟</h2>
+<p>عشق در این نام، یادآور توجه به انسان، همدلی و خیر مشترک است؛ نه جایگزین عقلانیت، قانون، پرسش‌گری یا اختلاف نظر.</p>
+<p>مشارکت از آنجا معنا پیدا می‌کند که انسان‌ها بتوانند آزادانه نظر دهند، دلیل بخواهند، دیدگاه خود را اصلاح کنند و در تصمیم‌های مشترک سهم داشته باشند.</p>
+<div class="quote">مهر، انگیزه توجه است؛ گفت‌وگو و خرد جمعی، راه شناخت بهتر؛ و مسئولیت‌پذیری، پیوند تصمیم با عمل.</div>
+</div>
+<div>
+<h2 style="color:var(--green-dark);font-size:25px;margin-top:0">اصول راهنما</h2>
+<ul class="bullets">
+<li><strong>نه به خودکامگی:</strong> تصمیم‌گیری نباید به اراده مطلق یک فرد یا گروه وابسته باشد.</li>
+<li><strong>مشارکت آگاهانه:</strong> بررسی و گفت‌وگو پیش از تصمیم اهمیت دارد.</li>
+<li><strong>پذیرش تفاوت:</strong> مخالفت و پرسش‌گری بخشی از همکاری سالم است.</li>
+<li><strong>شفافیت و پیگیری:</strong> منشأ تصمیم و مسیر اجرای آن باید تا حد امکان روشن باشد.</li>
+<li><strong>هوش مصنوعی در نقش پشتیبان:</strong> فناوری می‌تواند کمک کند، اما جایگزین اراده جمعی انسان‌ها نیست.</li>
+</ul>
+</div>
+</div>
+</section>
+
+<section class="section" id="law">
+<div class="wrap">
+<div class="section-head">
+<h2>تصمیم جمعی چگونه به قانون تبدیل می‌شود؟</h2>
+<p>در چشم‌انداز دولت عشق، قانون باید منشأ مشارکتی و قابل پیگیری داشته باشد.</p>
+</div>
+<div class="flow">
+<span>طرح موضوع</span><b>←</b><span>پیشنهاد ایده</span><b>←</b><span>بررسی و گفت‌وگو</span><b>←</b><span>رأی‌گیری</span><b>←</b><span>قانون مصوب</span>
+</div>
+<p class="note">اصلاح یا لغو قانون نیز باید از مسیر مشارکتی و با ثبت تغییرات انجام شود. این بخش بیانگر اصل راهنمای پروژه است؛ جزئیات اجرایی باید با امکانات و قوانین فعال سامانه هماهنگ باشد.</p>
+</div>
+</section>
+
+<section class="cta">
+<div class="wrap">
+<h2>از تماشاگر بودن، به مشارکت کردن</h2>
+<p>هر مسئله‌ای می‌تواند آغاز یک گفت‌وگوی سازنده باشد. با شناخت یک جامعه، طرح یک موضوع یا بررسی یک ایده، به ساختن تصمیم‌های مشترک کمک کنید.</p>
+<div class="actions">
+<a class="btn btn-light" href="register.php">شروع مشارکت</a>
+<a class="btn btn-outline" href="about.html">مطالعه فلسفه دولت عشق</a>
+</div>
+</div>
+</section>
+</main>
+<footer><div class="wrap">دولت عشق؛ بستری برای مشارکت، خرد جمعی و همکاری مسئولانه.</div></footer>
+</body>
+</html>
