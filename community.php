@@ -713,8 +713,8 @@ document.addEventListener('DOMContentLoaded', function () {
   <details class="community-quick-menu">
     <summary aria-label="باز کردن منوی جامعه" title="منوی جامعه">☰</summary>
     <nav class="community-quick-menu-items" aria-label="دسترسی‌های جامعه">
-      <a href="finance.php?community_id=<?= (int)$community_id ?>">🏦 بانک مالی و اموال جامعه</a>
       <a href="community_charter_amendments.php">📜 منشور بنیادین</a>
+      <a href="finance.php?community_id=<?= (int)$community_id ?>">🏦 بانک مالی و اموال جامعه</a>
       <a href="donations.php?community_id=<?= (int)$community_id ?>" style="background:#16845b;">🤝 کمک مالی به جامعه</a>
       <a href="knowledge_library.php?community_id=<?= (int)$community_id ?>" style="background:#2874a6;">📚 کتابخانه دانش همین جامعه</a>
       <a href="knowledge_library.php?community_id=<?= (int)$community_id ?>" style="background:#2874a6;">📖 کتابخانه دانش این جامعه</a>
