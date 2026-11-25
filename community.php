@@ -1,4 +1,5 @@
 <?php
+// Safe deployment marker: publish the reviewed community menu update.
 session_start();
 include __DIR__ . "/db.php";
 
